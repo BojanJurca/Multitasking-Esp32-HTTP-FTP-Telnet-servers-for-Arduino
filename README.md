@@ -18,17 +18,17 @@ Here is a list of functionalities that I consider home automation projects shoul
 
 - Network configuration files. A_kind_of_esp32_OS_template uses UNIX, LINUX, Raspbian like network configuration files (although it is a little awkward how network configuration is implemented in these operating systems). The following files are used to store STAtion and AccessPoint configuration parameters:
 
-   /network/interfaces
-   /etc/wpa_supplicant.conf
-   /etc/dhcpcd.conf
-   /etc/hostapd/hostapd.conf  
+   - /network/interfaces
+   - /etc/wpa_supplicant.conf
+   - /etc/dhcpcd.conf
+   - /etc/hostapd/hostapd.conf  
 
 Modify these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
 - User management. A_kind_of_esp32_OS_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization or upload your own files onto ESP32 by using FTP. User management implemented in A_kind_of_esp32_OS_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user information:
 
-   /etc/passwd
-   /etc/shadow
+   - /etc/passwd
+   - /etc/shadow
 
 - FTP server is needed for uploading configuration files, .html files, etc onto ESP32 file system.
 
