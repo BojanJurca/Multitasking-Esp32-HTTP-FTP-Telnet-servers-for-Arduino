@@ -17,7 +17,8 @@ Here is a list of functionalities that I consider home automation projects shoul
 - File system is needed for storing configuration files, .html files used by web server, etc. A SPIFFS flash file system is used in A_kind_of_esp32_OS_template. Documentation on SPIFFS can be found at http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html.
 
 - Network configuration files. A_kind_of_esp32_OS_template uses UNIX, LINUX, Raspbian like network configuration files (although it is a little awkward how network configuration is implemented in these operating systems). The following files are used to store STAtion and AccessPoint configuration parameters:
-   /network/interfaces            
+
+   /network/interfaces
    /etc/wpa_supplicant.conf
    /etc/dhcpcd.conf
    /etc/hostapd/hostapd.conf  
@@ -25,8 +26,9 @@ Here is a list of functionalities that I consider home automation projects shoul
 Modify these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
 - User management. A_kind_of_esp32_OS_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization or upload your own files onto ESP32 by using FTP. User management implemented in A_kind_of_esp32_OS_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user information:
-	 /etc/passwd 
-	 /etc/shadow
+
+   /etc/passwd
+   /etc/shadow
 
 - FTP server is needed for uploading configuration files, .html files, etc onto ESP32 file system.
 
@@ -72,7 +74,7 @@ Now you are almost there. Your ESP32 is already woriking as a server but there a
    - android-192.png,
    - apple-180.png.
    Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
-10. Telnet to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory for telnetserver system account.
+10. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory for telnetserver system account.
 
 ## How to continue from here?
 
