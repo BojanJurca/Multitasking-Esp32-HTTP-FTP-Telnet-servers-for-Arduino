@@ -73,7 +73,8 @@ Now you are almost there. Your ESP32 is already woriking as a server but there a
    - index.html,
    - android-192.png,
    - apple-180.png.
-   Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
+
+Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
 10. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory for telnetserver system account.
 
 ## How to continue from here?
