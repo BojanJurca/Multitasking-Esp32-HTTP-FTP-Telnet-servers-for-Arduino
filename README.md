@@ -20,7 +20,7 @@ Here is a list of functionalities that I consider home automation projects shoul
    /network/interfaces            
    /etc/wpa_supplicant.conf
    /etc/dhcpcd.conf
-	 /etc/hostapd/hostapd.conf  
+   /etc/hostapd/hostapd.conf  
 
 Modify these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
@@ -49,7 +49,7 @@ Doing this the following will happen:
    - network configuration files will be created with the following settings:
       - your ESP32 will be configured to use DHCP in STAtion mode,
       - your ESP32 AccessPoint name will be ESP32_SRV,
-      - yout ESP32 AccessPoint IP will be 10.0.1.4,
+      - your ESP32 AccessPoint IP will be 10.0.1.4,
    - user management files will be created with the following user accounts:
       - root / rootpassword,
       - webadmin / webadminpassword,
@@ -62,7 +62,7 @@ Once all this is done, there is no need of doing it again.
 
 5. Go to File_system.h and change definition FILE_SYSTEM_MOUNT_METHOD to DO_NOT_FORMAT.
 6. Go to Network.h and change definition NETWORK_CONNECTION_METHOD to ONLY_READ_NETWORK_CONFIGURATION.
-7. Go to User.management.h and change definition INITIALIZE_USERS to DONT_INITIALIZE_USERS.
+7. Go to User_management.h and change definition INITIALIZE_USERS to DONT_INITIALIZE_USERS.
 8. Compile sketch and run it on your ESP32 for the second time.
 
 Now you are almost there. Your ESP32 is already woriking as a server but there are a few minor things yet left to do.
