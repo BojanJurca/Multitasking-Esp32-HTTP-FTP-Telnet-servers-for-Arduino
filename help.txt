@@ -1,0 +1,8 @@
+You can use the following commands:
+
+  ls (<directoryName>) or dir (<directoryName>)
+  cat <fileName> or type <fileName>
+  rm <fileName> or del <fileName>
+  passwd
+  help
+  quit
