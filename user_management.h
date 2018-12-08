@@ -46,13 +46,13 @@
   
     #define USER_HOME_DIRECTORY "/"                                                 // (home direcotry for FTP and Telnet user) change according to your needs
     #define WEBSERVER_HOME_DIRECTORY "/var/www/html/"                               // (where .html files are located) change according to your needs
-    #define WEBSERVER_HOME_DIRECTORY "/var/telnet/"                                 // (where telnet help file is located) change according to your needs
+    #define TELNETSERVER_HOME_DIRECTORY "/var/telnet/"                              // (where telnet help file is located) change according to your needs
     
-    void firstUsersInitialization () {;}                                            // don't need to initialize users in this mode, we are not going to use user name and password at all
+    void usersInitialization () {;}                                                 // don't need to initialize users in this mode, we are not going to use user name and password at all
     bool checkUserNameAndPassword (char *userName, char *password) { return true; } // everyone can logg in
     char *getUserHomeDirectory (char *userName) { 
-                                                  if (!strcmp (userName, "webserver"))        return WEB_SERVER_HOME_DIRECTORY;
-                                                  else if (!strcmp (userName, "telneterver")) return TELNET_SERVER_HOME_DIRECTORY;
+                                                  if (!strcmp (userName, "webserver"))        return WEBSERVER_HOME_DIRECTORY;
+                                                  else if (!strcmp (userName, "telneterver")) return TELNETSERVER_HOME_DIRECTORY;
                                                   else                                        return USER_HOME_DIRECTORY;
                                                 }
   #endif  
@@ -63,13 +63,13 @@
     #define PASSWORD "rootpassword"                   // change according to your needs
     #define USER_HOME_DIRECTORY "/"                                                 // (home direcotry for FTP and Telnet user) change according to your needs
     #define WEBSERVER_HOME_DIRECTORY "/var/www/html/"                               // (where .html files are located) change according to your needs
-    #define WEBSERVER_HOME_DIRECTORY "/var/telnet/"                                 // (where telnet help file is located) change according to your needs
+    #define TELNETSERVER_HOME_DIRECTORY "/var/telnet/"                              // (where telnet help file is located) change according to your needs
     
-    void firstUsersInitialization () {;}                                            // don't need to initialize users in this mode, we are not going to use user name and password at all
+    void usersInitialization () {;}                                                 // don't need to initialize users in this mode, we are not going to use user name and password at all
     bool checkUserNameAndPassword (char *userName, char *password) { return (!strcmp (userName, USERNAME) && !strcmp (password, PASSWORD)); }
     char *getUserHomeDirectory (char *userName) { 
-                                                  if (!strcmp (userName, "webserver"))        return WEB_SERVER_HOME_DIRECTORY;
-                                                  else if (!strcmp (userName, "telneterver")) return TELNET_SERVER_HOME_DIRECTORY;
+                                                  if (!strcmp (userName, "webserver"))        return WEBSERVER_HOME_DIRECTORY;
+                                                  else if (!strcmp (userName, "telneterver")) return TELNETSERVER_HOME_DIRECTORY;
                                                   else                                        return USER_HOME_DIRECTORY;
                                                 }
   #endif

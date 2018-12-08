@@ -95,7 +95,6 @@
           char *p = getUserHomeDirectory (""); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p);
           sprintf (buffer, "Hello %s%c%c%c! ", connection->getOtherSideIP (), IAC, DONT, ECHO); // say hello and tell telnet client not to echo, telnet server will do the echoing
           connection->sendData (buffer, strlen (buffer));
-          char *p = getUserHomeDirectory (user); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p);
           if (*homeDir) { 
             loggedIn = LOGGED_IN; 
             sprintf (buffer, "\r\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.%s", homeDir, PROMPT);
