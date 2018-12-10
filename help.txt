@@ -1,8 +1,10 @@
 You can use the following commands:
 
+  passwd
   ls (<directoryName>) or dir (<directoryName>)
   cat <fileName> or type <fileName>
   rm <fileName> or del <fileName>
-  passwd
+  ifconfig or ipconfig
+  arp -a
   help
   quit

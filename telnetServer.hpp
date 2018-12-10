@@ -12,6 +12,7 @@
  * 
  * History:
  *          - first release, November 29, 2018, Bojan Jurca
+ *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
  *  
  */
 
@@ -185,7 +186,7 @@
 
                           } else {                                  // ----- other telnet command -----
 
-                            // ----- ask telnetCommandHandler (if it is proveided by the calling program) if it is going to handle this command -----
+                            // ----- ask telnetCommandHandler (if it is provided by the calling program) if it is going to handle this command -----
 
                             String telnetReply = ""; String cmd = String (cmdLine); cmd.trim (); String param; int l = cmd.indexOf (" "); if (l > 0) {param = cmd.substring (l + 1); cmd = cmd.substring (0, l);} else {param = "";}
                             unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TCP_SERVER_INFINITE_TIMEOUT); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
@@ -214,6 +215,24 @@
                                 __rm__ (connection, String (homeDir) + (param.charAt (0) ==  '/' ? param.substring (1) : param));
                                 connection->sendData (PROMPT, strlen (PROMPT));
 
+                              // ----- ifconfig or ipconfig -----
+
+                              } else if (cmd == "ifconfig" || cmd == "ipconfig") {
+                                String s;
+                                if (param == "")  s = "\r\n\n" + ifconfig ();
+                                else              s = "\r\n\nOptions are not supported.\r\n";
+                                s += String (PROMPT);
+                                connection->sendData ((char *) s.c_str (), s.length ());
+
+                              // ----- arp -a -----
+
+                              } else if (cmd == "arp") {
+                                String s;
+                                if (param == "-a")  s = "\r\n\n" + arp_a ();
+                                else                s = "\r\n\nOnly option -a is supported, please use arp -a\r\n";
+                                s += String (PROMPT);
+                                connection->sendData ((char *) s.c_str (), s.length ());
+
                               // ----- help -----
 
                               } else if (cmd == "help") {
@@ -223,7 +242,7 @@
                                   param = String (cmdLine) + "help.txt";
                                   if (!__cat__ (connection, param)) {
                                     // send special reply
-                                    String s = "\r\nPlease use FTP, loggin as root / rootpassword and upload help.txt file found in a_kind_of_esp32_OS_template package into " + String (cmdLine) + " directory."; 
+                                    String s = "\r\n\nPlease use FTP, loggin as root / rootpassword and upload help.txt file found in a_kind_of_esp32_OS_template package into " + String (cmdLine) + " directory.\r\n"; 
                                      connection->sendData ((char *) s.c_str (), s.length ());
                                   }
                                   connection->sendData (PROMPT, strlen (PROMPT));
