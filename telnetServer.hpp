@@ -13,6 +13,7 @@
  * History:
  *          - first release, November 29, 2018, Bojan Jurca
  *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
+ *          - added iw dev wlan1 station dump, December 11, 2018, Bojan Jurca          
  *  
  */
 
@@ -74,7 +75,9 @@
        
       void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
         dbgprintf63 ("[telnet][Thread %i][Core %i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
-        #define PROMPT "\r\n\ntelnet>"
+        char prompt1 [] = "\r\n\n# "; // root prompt
+        char prompt2 [] = "\r\n\n$ "; // other user prompt
+        char *prompt = prompt1;
         char buffer [256];   // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         char cmdLine [256];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         #define IAC 255
@@ -93,12 +96,12 @@
         char homeDir [33]; *homeDir = 0;    // store home directory of the user that has logged in here
         #if USER_MANAGEMENT == NO_USER_MANAGEMENT
           loggedIn = LOGGED_IN;
-          char *p = getUserHomeDirectory (""); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p);
+          char *p = getUserHomeDirectory ("root"); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p);
           sprintf (buffer, "Hello %s%c%c%c! ", connection->getOtherSideIP (), IAC, DONT, ECHO); // say hello and tell telnet client not to echo, telnet server will do the echoing
           connection->sendData (buffer, strlen (buffer));
           if (*homeDir) { 
             loggedIn = LOGGED_IN; 
-            sprintf (buffer, "\r\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.%s", homeDir, PROMPT);
+            sprintf (buffer, "\r\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.%s", homeDir, prompt);
             connection->sendData (buffer, strlen ( buffer));
           } else { 
             connection->sendData ("\r\n\nUser name or password incorrect\r\n", strlen ("\r\nUser name or password incorrect\r\n"));
@@ -139,7 +142,8 @@
                             if (checkUserNameAndPassword (user, cmdLine)) { char *p = getUserHomeDirectory (user); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p); }
                             if (*homeDir) { 
                               loggedIn = LOGGED_IN; 
-                              sprintf (cmdLine, "\r\n\nWelcome %s,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.%s", user, homeDir, PROMPT);
+                              if (*(homeDir + 1) != 0) prompt = prompt2;
+                              sprintf (cmdLine, "\r\n\nWelcome %s,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.%s", user, homeDir, prompt);
                               connection->sendData (cmdLine, strlen (cmdLine));
                             } else { 
                               connection->sendData ("\r\n\nUser name or password incorrect\r\n", strlen ("\r\nUser name or password incorrect\r\n"));
@@ -153,7 +157,7 @@
                               strcpy (cmdLine, "\r\nenter new password: ");
                               loggedIn = CHANGING_PASSWORD_2;
                             } else {
-                              sprintf (cmdLine, "\r\n\nWrong password.%s", PROMPT);
+                              sprintf (cmdLine, "\r\n\nWrong password.%s", prompt);
                               loggedIn = LOGGED_IN;
                             }
                             connection->sendData (cmdLine, strlen (cmdLine));
@@ -164,7 +168,7 @@
                               strcpy (cmdLine, "\r\nre-enter new password: ");
                               loggedIn = CHANGING_PASSWORD_3;
                             } else {
-                              sprintf (cmdLine, "\r\n\nPassword too long (max %i characters).%s", strlen (password) - 1, PROMPT);
+                              sprintf (cmdLine, "\r\n\nPassword too long (max %i characters).%s", strlen (password) - 1, prompt);
                               loggedIn = LOGGED_IN;
                             }   
                             connection->sendData (cmdLine, strlen (cmdLine));                           
@@ -172,12 +176,12 @@
                           } else if (loggedIn == CHANGING_PASSWORD_3) {  // ----- changing password (new password re-entered) -----
                             if (!strcmp (password, cmdLine)) { 
                               if (changeUserPassword (user, password)) {
-                                sprintf (cmdLine, "\r\n\nPassword changed.%s", PROMPT);
+                                sprintf (cmdLine, "\r\n\nPassword changed.%s", prompt);
                               } else {
-                                sprintf (cmdLine, "\r\n\nError changing password.%s", PROMPT);  
+                                sprintf (cmdLine, "\r\n\nError changing password.%s", prompt);  
                               }
                             } else {
-                              sprintf (cmdLine, "\r\n\nPasswords do not match.%s", PROMPT);
+                              sprintf (cmdLine, "\r\n\nPasswords do not match.%s", prompt);
                             } 
                             connection->sendData (cmdLine, strlen (cmdLine));
                             loggedIn = LOGGED_IN;      
@@ -191,7 +195,7 @@
                             String telnetReply = ""; String cmd = String (cmdLine); cmd.trim (); String param; int l = cmd.indexOf (" "); if (l > 0) {param = cmd.substring (l + 1); cmd = cmd.substring (0, l);} else {param = "";}
                             unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TCP_SERVER_INFINITE_TIMEOUT); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
                             if (telnetCommandHandler && (telnetReply = ((String (*) (String, String, String)) telnetCommandHandler) (cmd, param, String (homeDir))) != "") {
-                              sprintf (cmdLine, "\r\n\n%s%s", telnetReply.substring (0, sizeof (cmdLine) - strlen (PROMPT) - 4).c_str (), PROMPT); 
+                              sprintf (cmdLine, "\r\n\n%s%s", telnetReply.substring (0, sizeof (cmdLine) - strlen (prompt) - 4).c_str (), prompt); 
                               connection->sendData (cmdLine, strlen (cmdLine)); // send everything to the client
                             }
                             connection->setTimeOut (timeOutMillis); // restore time-out checking
@@ -206,14 +210,14 @@
 
                               } else if (cmd == "ls" || cmd == "dir") {
                                 __ls__ (connection, String (homeDir) + (param.charAt (0) ==  '/' ? param.substring (1) : param));
-                                connection->sendData (PROMPT, strlen (PROMPT));
+                                connection->sendData (prompt, strlen (prompt));
 
                               // ----- rm fileName or del fileName -----
 
                               } else if (cmd == "rm" || cmd == "del") {   
 
                                 __rm__ (connection, String (homeDir) + (param.charAt (0) ==  '/' ? param.substring (1) : param));
-                                connection->sendData (PROMPT, strlen (PROMPT));
+                                connection->sendData (prompt, strlen (prompt));
 
                               // ----- ifconfig or ipconfig -----
 
@@ -221,16 +225,25 @@
                                 String s;
                                 if (param == "")  s = "\r\n\n" + ifconfig ();
                                 else              s = "\r\n\nOptions are not supported.\r\n";
-                                s += String (PROMPT);
+                                s += String (prompt);
                                 connection->sendData ((char *) s.c_str (), s.length ());
 
                               // ----- arp -a -----
 
                               } else if (cmd == "arp") {
                                 String s;
-                                if (param == "-a")  s = "\r\n\n" + arp_a ();
-                                else                s = "\r\n\nOnly option -a is supported, please use arp -a\r\n";
-                                s += String (PROMPT);
+                                if (param == "-a" || param == "")  s = "\r\n\n" + arp_a ();
+                                else                               s = "\r\n\nOnly arp -a is supported\r\n";
+                                s += String (prompt);
+                                connection->sendData ((char *) s.c_str (), s.length ());
+
+                              // ----- iw dev wlan1 station dump -----
+
+                              } else if (cmd == "iw") {
+                                String s;
+                                if (param == "dev wlan1 station dump" || param == "")  s = "\r\n\n" + iw_dev_wlan1_station_dump ();
+                                else                                                   s = "\r\n\nOnly iw dev wlan1 station dump is supported\r\n";
+                                s += String (prompt);
                                 connection->sendData ((char *) s.c_str (), s.length ());
 
                               // ----- help -----
@@ -245,14 +258,14 @@
                                     String s = "\r\n\nPlease use FTP, loggin as root / rootpassword and upload help.txt file found in a_kind_of_esp32_OS_template package into " + String (cmdLine) + " directory.\r\n"; 
                                      connection->sendData ((char *) s.c_str (), s.length ());
                                   }
-                                  connection->sendData (PROMPT, strlen (PROMPT));
+                                  connection->sendData (prompt, strlen (prompt));
                                 }
 
                               // ----- cat filename or type filename -----
 
                               } else if (cmd == "cat" || cmd == "type") {
                                 __cat__ (connection, String (homeDir) + (param.charAt (0) ==  '/' ? param.substring (1) : param));
-                                connection->sendData (PROMPT, strlen (PROMPT));
+                                connection->sendData (prompt, strlen (prompt));
 
                               // ----- passwd -----
 
@@ -260,7 +273,7 @@
                             
                               } else if (cmd == "passwd") {
                                 if (param != "") {
-                                  sprintf (cmdLine, "\r\n\nCan't change password for user %s.%s", param.c_str (), PROMPT);
+                                  sprintf (cmdLine, "\r\n\nCan't change password for user %s.%s", param.c_str (), prompt);
                                 } else {
                                   sprintf (cmdLine, "\r\n\nenter current password for user %s: ", user);
                                   loggedIn = CHANGING_PASSWORD_1;
@@ -273,7 +286,7 @@
 
                                 // ----- invalid command -----
                                 
-                                sprintf (cmdLine, "\r\n\nInvalid command, use \"help\" to display available commands.%s", PROMPT);
+                                sprintf (cmdLine, "\r\n\nInvalid command, use \"help\" to display available commands.%s", prompt);
                                 connection->sendData (cmdLine, strlen (cmdLine));
                               }
                             }

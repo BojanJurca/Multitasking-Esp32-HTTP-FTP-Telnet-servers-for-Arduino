@@ -23,6 +23,7 @@
  * History:
  *          - first release, November 16, 2018, Bojan Jurca
  *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
+ *          - added iw dev wlan1 station dump, December 11, 2018, Bojan Jurca
  *  
  */
  
@@ -35,6 +36,7 @@
   #include <lwip/netif.h>
   #include <netif/etharp.h>
   #include <lwip/sockets.h>
+  #include <esp_wifi.h>
 
   
   // change this definitions according to your needs
@@ -43,7 +45,7 @@
                                                                   // change networkConnect function below for initial network setup
   #define ONLY_READ_NETWORK_CONFIGURATION        2                // once the configuration is set, this option is preferable
   // select one of the above network connection methods
-  #define NETWORK_CONNECTION_METHOD  ONLY_READ_NETWORK_CONFIGURATION // OMARA Z VITRINO
+  #define NETWORK_CONNECTION_METHOD  PREPARE_AND_READ_NETWORK_CONFIGURATION
   
   bool networkStationWorking = false;                                         // use this variable to check ESP32 has connected in STAtion mode
   bool networkAccesPointWorking = false;                                      // use this variable to check ESP32 access point is in function
@@ -64,19 +66,20 @@
       // prepare configuration for network interface 1 that will be used latter to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to eisting WiFi)
       if (File file = SPIFFS.open ("/network/interfaces", FILE_WRITE)) {
       
-        String s =  "# only wlan1 can be used to connect to to your WiFi\r\n"
+        String s =  "# only wlan2 can be used to connect to your WiFi\r\n"
                     "\r\n"
                     "# get IP address from DHCP\r\n"
-                    "   iface wlan1 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
+                    "   iface wlan2 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
                     "\r\n"
                     "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
-                    "#   iface wlan1 inet static\r\n"
+                    "#   iface wlan2 inet static\r\n"
                     "#      address 10.0.0.4\r\n"
                     "#      netmask 255.255.255.0\r\n"
                     "#      gateway 10.0.0.1\r\n";
       
         if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
         file.close ();
+        Serial.printf ("/network/interfaces created.\n");
       }
       if (File file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_WRITE)) {
       
@@ -87,35 +90,38 @@
       
         if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
         file.close ();
+        Serial.printf ("/etc/wpa_supplicant.conf created.\n");
       } else {
         Serial.printf ("[network] can't write network configuration to file system");
         return;      
       }
   
-      // prepare configuration for network interface 2 that will be used latter to start WiFi access point (skip this if you don't want ESP32 to be an access point)
+      // prepare configuration for network interface 0 that will be used latter to start WiFi access point (skip this if you don't want ESP32 to be an access point)
       if (File file = SPIFFS.open ("/etc/dhcpcd.conf", FILE_WRITE)) {
       
-        String s =  "# only static IP addresses can be used for acces point and only wlan2 can be used (example below)\r\n"
+        String s =  "# only static IP addresses can be used for acces point and only wlan1 can be used (example below)\r\n"
                     "\r\n"
-                    "interface wlan2\r\n"
+                    "interface wlan1\r\n"
                     "   static ip_address = 10.0.1.4\r\n"           // set your access point IP addresses here
                     "          netmask = 255.255.255.0\r\n"
                     "          gateway = 10.0.1.4\r\n";
       
         if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
         file.close ();
+        Serial.printf ("/etc/dhcpcd.conf created.\n");
       }
       if (File file = SPIFFS.open ("/etc/hostapd/hostapd.conf", FILE_WRITE)) {
       
-        String s =  "# only wlan2 can be used for access point\r\n"
+        String s =  "# only wlan1 can be used for access point\r\n"
                     "\r\n"
-                    "interface = wlan2\r\n"
-                    "   ssid = ESP32_SRV\r\n"                       // set your access point SSID here
+                    "interface = wlan1\r\n"
+                    "   ssid = ESP_SRV\r\n"                     // set your access point SSID here
                     "   # use at least 8 characters for wpa_passphrase\r\n"
-                    "   wpa_passphrase = YOUR-AP-PASSWORD\r\n";     // set your access point password here
+                    "   wpa_passphrase = YOUR-AP-PASSWORD\r\n"; // set your access point password here
       
         if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
         file.close ();
+        Serial.printf ("/etc/hostapd/hostapd.conf created.\n");
       }
     #endif
   
@@ -141,7 +147,7 @@
     // Serial.print ("staPassword "); Serial.println (staPassword);    
   
     s = __compactNetworkConfiguration__ (readEntireTextFile ("/network/interfaces") + "\n"); 
-    i = s.indexOf ("iface wlan1 inet static");
+    i = s.indexOf ("iface wlan2 inet static");
     if (i >= 0) {
       s = s.substring (i);
       staIP         = __insideBrackets__ (s, "address ", "\n");
@@ -153,7 +159,7 @@
     // Serial.print ("staGateway "); Serial.println (staGateway);    
   
     s = __compactNetworkConfiguration__ (readEntireTextFile ("/etc/hostapd/hostapd.conf") + "\n"); 
-    i = s.indexOf ("interface wlan2");
+    i = s.indexOf ("interface wlan1");
     if (i >= 0) {
       s = s.substring (i);
       apSSID        = __insideBrackets__ (s.substring (i + 15), "ssid ", "\n");
@@ -163,7 +169,7 @@
     // Serial.print ("apPassword "); Serial.println (apPassword);    
   
     s = __compactNetworkConfiguration__ (readEntireTextFile ("/etc/dhcpcd.conf") + "\n"); 
-    i = s.indexOf ("interface wlan2");
+    i = s.indexOf ("interface wlan1");
     if (i >= 0) {
       s = s.substring (i);
       apIP          = __insideBrackets__ (s.substring (i + 15), "static ip_address ", "\n");
@@ -279,8 +285,8 @@
       if (i < 5) s += ":";
     }
     return s;
-  }  
-
+  }
+  
   String ifconfig () {
     String s = "";
     struct netif *netif;
@@ -290,7 +296,7 @@
         int i = 0;
         if (netif->name [0] == 'a') i = 1; // ap
         if (netif->name [0] == 's') i = 2; // st
-        s += "wlan" + String (i ++) + "     " + String (netif->name [0]) + String (netif->name [1]) + " hwaddr " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
+        s += "wlan" + String (i) + "     " + String (netif->name [0]) + String (netif->name [1]) + " hwaddr " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
              "          inet addr:" + String (inet_ntoa (netif->ip_addr)) + "\r\n          mtu:" + String (netif->mtu) + "\r\n";
       }
     }
@@ -342,7 +348,7 @@
         int i = 0;
         if (netif->name [0] == 'a') i = 1; // ap
         if (netif->name [0] == 's') i = 2; // st
-        s += "wlan" + String (i ++) + ": " + String (inet_ntoa (netif->ip_addr)) + "\r\n  Internet Address      Physical Address      Type\r\n";
+        s += "wlan" + String (i) + ": " + String (inet_ntoa (netif->ip_addr)) + "\r\n  Internet Address      Physical Address      Type\r\n";
         
         for (i = 0; i < ARP_TABLE_SIZE; i++) {
           if (arp_table->state != ETHARP_STATE_EMPTY) {
@@ -359,5 +365,17 @@
     }
     return s;
   }  
+
+  String iw_dev_wlan1_station_dump () {
+    String s = "";
+    wifi_sta_list_t stationList;
+    esp_wifi_ap_get_sta_list (&stationList);  
+    for (int i = 0; i < stationList.num; i++) {
+      wifi_sta_info_t station = stationList.sta [i];
+      if (i > 0) s += "\r\n";
+      s += "station " + MacAddressAsString ((byte *) station.mac, 6) + " (on wlan1)";
+    }
+    return s;
+  }
     
 #endif

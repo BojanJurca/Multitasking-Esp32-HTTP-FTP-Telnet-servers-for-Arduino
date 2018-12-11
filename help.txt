@@ -5,6 +5,7 @@ You can use the following commands:
   cat <fileName> or type <fileName>
   rm <fileName> or del <fileName>
   ifconfig or ipconfig
-  arp -a
+  arp (synonym for "arp -a" as implemented here)
+  iw (synonym for "iw dev wlan1 station dump" as implemented here)
   help
   quit

@@ -32,7 +32,7 @@
   #define NO_USER_MANAGEMENT                    1   // everyone is allowed to use FTP anf Telnet
   #define HARDCODED_USER_MANAGEMENT             2   // define user name nad password that will be hard coded into program
   #define UNIX_LIKE_USER_MANAGEMENT             3   // user name and password will be checked by user_management.h
-  // select one of the above FTP login methods
+  // select one of the above login methods
   #define USER_MANAGEMENT  UNIX_LIKE_USER_MANAGEMENT
 
   #define DO_INITIALIZE_USERS              1             // this option is normally used ony the first time you run A_kind_of_est32_OS_template on ESP32
@@ -51,9 +51,9 @@
     void usersInitialization () {;}                                                 // don't need to initialize users in this mode, we are not going to use user name and password at all
     bool checkUserNameAndPassword (char *userName, char *password) { return true; } // everyone can logg in
     char *getUserHomeDirectory (char *userName) { 
-                                                  if (!strcmp (userName, "webserver"))        return WEBSERVER_HOME_DIRECTORY;
-                                                  else if (!strcmp (userName, "telneterver")) return TELNETSERVER_HOME_DIRECTORY;
-                                                  else                                        return USER_HOME_DIRECTORY;
+                                                  if (!strcmp (userName, "webserver"))         return WEBSERVER_HOME_DIRECTORY;
+                                                  else if (!strcmp (userName, "telnetserver")) return TELNETSERVER_HOME_DIRECTORY;
+                                                  else                                         return USER_HOME_DIRECTORY;
                                                 }
   #endif  
 
@@ -68,9 +68,9 @@
     void usersInitialization () {;}                                                 // don't need to initialize users in this mode, we are not going to use user name and password at all
     bool checkUserNameAndPassword (char *userName, char *password) { return (!strcmp (userName, USERNAME) && !strcmp (password, PASSWORD)); }
     char *getUserHomeDirectory (char *userName) { 
-                                                  if (!strcmp (userName, "webserver"))        return WEBSERVER_HOME_DIRECTORY;
-                                                  else if (!strcmp (userName, "telneterver")) return TELNETSERVER_HOME_DIRECTORY;
-                                                  else                                        return USER_HOME_DIRECTORY;
+                                                  if (!strcmp (userName, "webserver"))         return WEBSERVER_HOME_DIRECTORY;
+                                                  else if (!strcmp (userName, "telnetserver")) return TELNETSERVER_HOME_DIRECTORY;
+                                                  else                                         return USER_HOME_DIRECTORY;
                                                 }
   #endif
 
@@ -107,14 +107,15 @@
           if (file.printf ("webadmin:x:1000:::/var/www/html/:\r\n") != 35) {file.close (); goto userInitializationError;}; // create "web-admin" user with ID = 1000 and home directory /var/www/html/
           // add entries for each additional user (with ID >= 1000 to comply with UNIX but it doesn't really matter here)
           file.close ();
+          Serial.printf ("[user_management] /etc/passwd created.\n");
           if (File file = SPIFFS.open ("/etc/shadow", FILE_WRITE)) {
             if (file.printf ("root:$5$%s:::::::\r\n", __sha256__ ("rootpassword")) != 81)         {file.close (); goto userInitializationError;}; // create "root" password_ <user>:$5$<sha_256 ("rootpassword")>
             // webserver is a system account that doesn't need password
             if (file.printf ("webadmin:$5$%s:::::::\r\n", __sha256__ ("webadminpassword")) != 85) {file.close (); goto userInitializationError;}; // create "webadmin" password_ <user>:$5$<sha_256 ("webadminpassword")> 
             // TO DO: change "root" and "webadmin" password in the line above, add entries for additional users
             file.close ();
+            Serial.printf ("[user_management] /etc/shadow created.\n");
           }
-          Serial.printf ("[user_management] initial users created\n");
         } else {
     userInitializationError:
           Serial.printf ("[user_management] user initialization failed\n");
@@ -127,6 +128,7 @@
       if ((bool) (file = SPIFFS.open ("/etc/shadow", FILE_READ)) && !file.isDirectory ()) { // read /etc/shadow file: https://www.cyberciti.biz/faq/understanding-etcshadow-file/
         do {
           char line [256]; int i = 0; while (i < sizeof (line) - 1 && file.available () && (line [i] = (char) file.read ()) >= ' ') {if (line [i] == ':') line [i] = ' '; i++;} line [i] = 0;
+          if (*line < ' ') continue;
           char name [33]; char sha256Password [68];
           if (2 != sscanf (line, "%32s %67s", name, &sha256Password)) {Serial.printf ("[user_management] bad format of /etc/shadow file\n"); file.close (); return false;} // failure
           if (!strcmp (userName, name)) { // user name matches
@@ -147,6 +149,7 @@
       if ((bool) (file = SPIFFS.open ("/etc/passwd", FILE_READ)) && !file.isDirectory ()) { // read /etc/passwd file: https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
         do {
           char line [256]; int i = 0; while (i < sizeof (line) - 1 && file.available () && (line [i] = (char) file.read ()) >= ' ') i++; line [i] = 0;
+          if (*line < ' ') continue;
           if (char *q = strchr (line, ':')) {
             *q = 0;
             if (!strcmp (userName, line)) if (char *p = strchr (q + 1, ':')) if (q = strchr (p + 1, ':')) if (p = strchr (q + 1, ':')) if (q = strchr (p + 1, ':')) if (p = strchr (q + 1, ':')) {
@@ -166,12 +169,9 @@
       File file;
       if ((bool) (file = SPIFFS.open ("/etc/shadow", "r+")) && !file.isDirectory ()) {
         while (file.available ()) if ((c = file.read ()) != '\r') s += String (c);
-        
-        Serial.println (s);
-
         int i = s.indexOf (String (userName) + ":$5$");
         if (i >= 0) { 
-          s = s.substring (i, i + strlen (userName) + 4) + String (__sha256__ (newPassword)) + s.substring (i + strlen (userName) + 68);
+          s = s.substring (0, i + strlen (userName) + 4) + String (__sha256__ (newPassword)) + s.substring (i + strlen (userName) + 68);
           file.seek (0, SeekSet);
           if (file.printf (s.c_str ()) != s.length ()) {
             file.close ();
@@ -185,7 +185,7 @@
           return false;
         }
       } else {
-        Serial.printf ("[file system] can't read /etc/shadow\n");
+        Serial.printf ("[user_management] can't read /etc/shadow\n");
         return false;
       }
     }
