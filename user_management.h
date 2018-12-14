@@ -37,7 +37,7 @@
 
   #define DO_INITIALIZE_USERS              1             // this option is normally used ony the first time you run A_kind_of_est32_OS_template on ESP32
                                                          // change firstUserInitialization function below according to your needs
-  #define DONT_INITIALIZE_USERS            2             // once the users are initialized, this option is preferable
+  #define DO_NOT_INITIALIZE_USERS          2             // once the users are initialized, this option is preferable
   // select one of the above user initialization methods
   #define INITIALIZE_USERS  DO_INITIALIZE_USERS
   

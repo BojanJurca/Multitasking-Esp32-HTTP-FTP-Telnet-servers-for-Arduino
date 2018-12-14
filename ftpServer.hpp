@@ -11,12 +11,17 @@
  * 
  * History:
  *          - first release, November 18, 2018, Bojan Jurca
+ *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca          
  *  
  */
 
 
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
+
+  #ifndef MTU
+    #define MTU 1500 // default MTU size
+  #endif
 
  
   // change this definitions according to your needs
@@ -222,12 +227,12 @@
                     if (strlen (homeDir) + strlen (ftpParam) < sizeof (fileName) && sprintf (fileName, "%s%s", homeDir, ftpParam)) {
                       if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
                         if (!file.isDirectory ()) {
-                          byte *buff = (byte *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+                          byte *buff = (byte *) malloc (MTU); // get 1500 B of memory from heap (not from the stack)
                           if (buff) {
                             int i = bytesWritten = 0;
                             while (file.available ()) {
                               *(buff + i++) = file.read ();
-                              if (i == 2048) { bytesRead += 2048; bytesWritten += dataConnection->sendData ((char *) buff, 2048); i = 0; }
+                              if (i == MTU) { bytesRead += MTU; bytesWritten += dataConnection->sendData ((char *) buff, MTU); i = 0; }
                             }
                             if (i) { bytesRead += i; bytesWritten += dataConnection->sendData ((char *) buff, i); }
                             free (buff);
@@ -255,12 +260,12 @@
                   if (dataConnection) {
                     if (strlen (homeDir) + strlen (ftpParam) < sizeof (fileName) && sprintf (fileName, "%s%s", homeDir, ftpParam)) {
                       if ((bool) (file = SPIFFS.open (fileName, FILE_WRITE))) {
-                        byte *buff = (byte *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+                        byte *buff = (byte *) malloc (MTU); // get 1500 B of memory from heap (not from the stack)
                         if (buff) {
                           bytesRead = 0;
                           int received;
                           do {
-                            bytesRead += received = dataConnection->recvData ((char *) buff, 2048);
+                            bytesRead += received = dataConnection->recvData ((char *) buff, MTU);
                             if (received && file.write (buff, received) == received) bytesWritten += received;
                           } while (received);
                           free (buff);

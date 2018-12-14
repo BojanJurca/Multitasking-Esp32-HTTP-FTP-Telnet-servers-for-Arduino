@@ -19,6 +19,7 @@
  * History:
  *          - first release, October 31, 2018, Bojan Jurca
  *          - added user-defined connectionHandler parameter, added TcpConnection::getTimeOut (), November 22, 2018, Bojan Jurca
+ *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca
  *  
  */
 
@@ -35,6 +36,10 @@
   #include "debugmsgs.h"
   
   #include <lwip/sockets.h>
+
+  #ifndef MTU
+    #define MTU 1500 // default MTU size
+  #endif
   
   #define TCP_SERVER_INFINITE_TIMEOUT 0
   
@@ -184,7 +189,7 @@
                                                   #define min(a,b) ((a)<(b)?(a):(b))
                                                   while (bufferSize) {
                                                     if (this->__socket__ == -1) return writtenTotal; 
-                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, 2048), 0)) { // ESP can send packets length of max 2 KB
+                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, MTU), 0)) { // ESP can send packets length of max 2 KB but let's go with MTU (default) size of 1500
                                                       case -1:
                                                                 // Serial.printf ("sendData errno: %i timeout: %i\n", errno, millis () - this->__lastActiveMillis__);
                                                                 #define EAGAIN 11

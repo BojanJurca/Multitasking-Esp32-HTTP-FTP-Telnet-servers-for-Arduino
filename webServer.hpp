@@ -18,6 +18,7 @@
  * 
  * History:
  *          - first release, November 19, 2018, Bojan Jurca
+ *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca          
  *  
  */
 
@@ -47,6 +48,10 @@
     #include "user_management.h"  // webServer.hpp needs user_management.h
   #endif
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp
+
+  #ifndef MTU
+    #define MTU 1500 // default MTU size
+  #endif
 
 
    void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler);
@@ -136,13 +141,13 @@
                 if ((bool) (file = SPIFFS.open (fullHtmlFilePath, FILE_READ))) {
                   if (!file.isDirectory ()) {
                     dbgprintf62 ("[web] GET %s\n", fullHtmlFilePath);  
-                    char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+                    char *buff = (char *) malloc (MTU); // get 2 KB of memory from heap (not from the stack)
                     if (buff) {
                       sprintf (buff, "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nContent-Length:%i\r\n\r\n", file.size ());
                       int i = strlen (buff);
                       while (file.available ()) {
                         *(buff + i++) = file.read ();
-                        if (i == 2048) { connection->sendData ((char *) buff, 2048); i = 0; }
+                        if (i == MTU) { connection->sendData ((char *) buff, MTU); i = 0; }
                       }
                       if (i) { connection->sendData ((char *) buff, i); }
                       free (buff);

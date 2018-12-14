@@ -308,7 +308,7 @@
     return s;
   }
   
-  String arp_a () {
+  String arp_a () { // reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c
     // first make a definition of ARP table and get a pointer to it (not very elegant but I have no other idea)
     enum etharp_state {
       ETHARP_STATE_EMPTY = 0,
@@ -337,10 +337,9 @@
     ip4_addr_t *ipaddr;
     struct netif *netif;
     struct eth_addr *mac;
-    etharp_get_entry (0, &ipaddr, &netif, &mac);
+    while (!etharp_get_entry (0, &ipaddr, &netif, &mac)) delay (1); // wait if first entry is not stable
     arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset);
     // we've got a pointer to ARP table, now scan if for each netif  
-  
     String s = "";
     for (netif = netif_list; netif->next; netif = netif->next) {
       if (netif_is_up (netif)) {
@@ -349,10 +348,10 @@
         if (netif->name [0] == 'a') i = 1; // ap
         if (netif->name [0] == 's') i = 2; // st
         s += "wlan" + String (i) + ": " + String (inet_ntoa (netif->ip_addr)) + "\r\n  Internet Address      Physical Address      Type\r\n";
-        
         for (i = 0; i < ARP_TABLE_SIZE; i++) {
           if (arp_table->state != ETHARP_STATE_EMPTY) {
-            if (arp_table->netif->num == netif->num) { // if ARP entry is for the same that netif we are just displaying
+            struct netif *arp_table_netif = arp_table->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
+            if (arp_table_netif && arp_table_netif->num == netif->num) { // if ARP entry is for the same that netif we are just displaying
               s += "  " + __appendString__ (inet_ntoa (arp_table->ipaddr), 22) +
                    MacAddressAsString ((byte *) &arp_table->ethaddr, 6) +  
                    (arp_table->state > ETHARP_STATE_STABLE_REREQUESTING_2 ? "     static\r\n" : "     dynamic\r\n");
