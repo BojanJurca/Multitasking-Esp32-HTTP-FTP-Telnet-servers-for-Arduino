@@ -7,5 +7,7 @@ You can use the following commands:
   ifconfig or ipconfig
   arp (synonym for "arp -a" as implemented here)
   iw (synonym for "iw dev wlan1 station dump" as implemented here)
+  uptime
+  reboot
   help
   quit

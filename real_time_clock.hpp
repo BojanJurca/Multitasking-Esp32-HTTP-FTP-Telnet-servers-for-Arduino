@@ -69,7 +69,7 @@
                                                       newTime.tv_sec = currentTime;
                                                       settimeofday (&newTime, NULL); // we don't use struct timezone since it is obsolete and useless
   
-                                                      if (oldTime.tv_sec < 1542238838) {
+                                                      if (!this->__startupTime__) {
                                                         this->__startupTime__ = newTime.tv_sec - millis () / 1000;
                                                         char s [30];
                                                         strftime (s, 30, "%a, %d %b %Y %T", gmtime (&newTime.tv_sec));
@@ -232,7 +232,7 @@
       
       bool __gmtTimeSet__ = false; // false until we set it the first time or synchronize with NTP server
       unsigned long __lastNtpSynchronization__ = millis () - NTP_RETRY_TIME; // the time of last NTP synchronization
-      time_t __startupTime__;
+      time_t __startupTime__ = 0;
     
   };
 

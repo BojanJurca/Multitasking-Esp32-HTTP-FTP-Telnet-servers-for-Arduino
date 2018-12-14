@@ -14,6 +14,7 @@
  *          - first release, November 29, 2018, Bojan Jurca
  *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
  *          - added iw dev wlan1 station dump, December 11, 2018, Bojan Jurca          
+ *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca          
  *  
  */
 
@@ -32,6 +33,10 @@
   #include "file_system.h"        // telnetServer.hpp needs file_system.h
   #include "user_management.h"    // telnetServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp
+
+  #ifndef MTU
+    #define MTU 1500 // default MTU size
+  #endif
 
 
     void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler);
@@ -75,8 +80,8 @@
        
       void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
         dbgprintf63 ("[telnet][Thread %i][Core %i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
-        char prompt1 [] = "\r\n\n# "; // root prompt
-        char prompt2 [] = "\r\n\n$ "; // other user prompt
+        char prompt1 [] = "\r\n# "; // root user's prompt
+        char prompt2 [] = "\r\n$ "; // other users' prompt
         char *prompt = prompt1;
         char buffer [256];   // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         char cmdLine [256];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
@@ -101,7 +106,7 @@
           connection->sendData (buffer, strlen (buffer));
           if (*homeDir) { 
             loggedIn = LOGGED_IN; 
-            sprintf (buffer, "\r\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.%s", homeDir, prompt);
+            sprintf (buffer, "\r\n\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.\n%s", homeDir, prompt);
             connection->sendData (buffer, strlen ( buffer));
           } else { 
             connection->sendData ("\r\n\nUser name or password incorrect\r\n", strlen ("\r\nUser name or password incorrect\r\n"));
@@ -233,7 +238,7 @@
                               } else if (cmd == "arp") {
                                 String s;
                                 if (param == "-a" || param == "")  s = "\r\n\n" + arp_a ();
-                                else                               s = "\r\n\nOnly arp -a is supported\r\n";
+                                else                               s = "\r\n\nOnly arp -a is supported.\r\n";
                                 s += String (prompt);
                                 connection->sendData ((char *) s.c_str (), s.length ());
 
@@ -242,9 +247,50 @@
                               } else if (cmd == "iw") {
                                 String s;
                                 if (param == "dev wlan1 station dump" || param == "")  s = "\r\n\n" + iw_dev_wlan1_station_dump ();
-                                else                                                   s = "\r\n\nOnly iw dev wlan1 station dump is supported\r\n";
+                                else                                                   s = "\r\n\nOnly iw dev wlan1 station dump is supported.\r\n";
                                 s += String (prompt);
                                 connection->sendData ((char *) s.c_str (), s.length ());
+
+                              // ----- uptime -----
+
+                              } else if (cmd == "uptime") {
+                                String s;
+                                if (param == "")  { 
+                                                    unsigned long long upTime;
+                                                    char cstr [15];
+                                                    if (rtc.isGmtTimeSet ()) {
+                                                      // get current local time first 
+                                                      time_t rawTime = rtc.getLocalTime ();
+                                                      strftime (cstr, 15, "%H:%M:%S", gmtime (&rawTime));
+                                                      s = "\r\n\n" + String (cstr) + " up ";
+                                                      // now get up time
+                                                      upTime = rtc.getGmtTime () - rtc.getGmtStartupTime ();
+                                                    } else {
+                                                      s = "\r\n\nCurrent time is not known, up time may not be accurate ";
+                                                      upTime = millis () / 1000;
+                                                    }
+                                                    int seconds = upTime % 60; upTime /= 60;
+                                                    int minutes = upTime % 60; upTime /= 60;
+                                                    int hours = upTime % 60;   upTime /= 24; // upTime now holds days
+                                                    if (upTime) s += String ((unsigned long) upTime) + " days, ";
+                                                    sprintf (cstr, "%02i:%02i:%02i\r\n", hours, minutes, seconds);
+                                                    s += String (cstr);
+                                                  }
+                                else              s = "\r\n\nOnly uptime without options is supported.\r\n";
+                                s += String (prompt);
+                                connection->sendData ((char *) s.c_str (), s.length ());                                
+
+                              // ----- reboot -----
+
+                              } else if (cmd == "reboot") {
+                                if (param != "") connection->sendData ("\r\n\nOnly reboot without options is supported.\r\n", strlen ("\r\n\nOnly reboot without options is supported.\r\n"));
+                                else             {
+                                                   connection->sendData ("\r\n\nrebooting ...", strlen ("\r\n\nrebooting ..."));
+                                                   connection->closeConnection ();
+                                                   Serial.printf ("\r\n\nreboot requested via telnet ...\r\n\n");
+                                                   delay (1000);
+                                                   ESP.restart ();
+                                                 }
 
                               // ----- help -----
 
@@ -286,7 +332,7 @@
 
                                 // ----- invalid command -----
                                 
-                                sprintf (cmdLine, "\r\n\nInvalid command, use \"help\" to display available commands.%s", prompt);
+                                sprintf (cmdLine, "\r\n\nInvalid command, use \"help\" to display available commands.\n%s", prompt);
                                 connection->sendData (cmdLine, strlen (cmdLine));
                               }
                             }
@@ -314,7 +360,7 @@
         String s = "\r\n\n";
         File dir = SPIFFS.open (d);
         if (!dir) {
-          connection->sendData ("\r\n\nFailed to open directory.", strlen ("\r\n\nFailed to open directory."));
+          connection->sendData ("\r\n\nFailed to open directory.\r\n", strlen ("\r\n\nFailed to open directory.\r\n"));
           return false;
         }
         if (!dir.isDirectory ()) {
@@ -339,7 +385,7 @@
         File file;
         if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
           if (!file.isDirectory ()) {
-            char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+            char *buff = (char *) malloc (MTU); // get 2 KB of memory from heap (not from the stack)
             if (buff) {
               strcpy (buff, "\r\n\n");
               int i = strlen (buff);
@@ -354,7 +400,7 @@
                   default:
                               i ++;                  
                 }
-                if (i >= 2047) { connection->sendData ((char *) buff, i); i = 0; }
+                if (i >= MTU - 1) { connection->sendData ((char *) buff, i); i = 0; }
               }
               if (i) { connection->sendData ((char *) buff, i); }
               free (buff);
@@ -362,7 +408,7 @@
             } 
             file.close ();
           } else {
-            String s = "\r\n\nFailed to open " + fileName + ".";
+            String s = "\r\n\nFailed to open " + fileName + ".\r\n";
             connection->sendData ((char *) s.c_str (), s.length ()); 
           }
           file.close ();
@@ -372,11 +418,11 @@
 
       bool __rm__ (TcpConnection *connection, String fileName) {
         if (SPIFFS.remove (fileName)) {
-          String s = "\r\n\n" + fileName + " deleted.";
+          String s = "\r\n\n" + fileName + " deleted.\r\n";
           connection->sendData ((char *) s.c_str (), s.length ()); 
           return true;
         } else {
-          String s = "\r\n\nFailed to delete " + fileName + ".";
+          String s = "\r\n\nFailed to delete " + fileName + ".\r\n";
           connection->sendData ((char *) s.c_str (), s.length ()); 
           return false;          
         }
