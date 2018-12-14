@@ -42,6 +42,8 @@ Modify these files according to your needs or upload your own files onto ESP32 b
    - ifconfig or ipconfig
    - arp (synonym for "arp -a" as implemented here)
    - iw (synonym for "iw dev wlan1 station dump" as implemented here)
+   - uptime
+   - reboot
    - help
    - quit
 
@@ -87,7 +89,7 @@ Now you are almost there. Your ESP32 is already woriking as a server but there a
 
 Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
 
-10. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory for telnetserver system account.
+10. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory (put help.txt /var/telnet/help.txt), which is a home directory for telnetserver system account.
 
 ## How to continue from here?
 
