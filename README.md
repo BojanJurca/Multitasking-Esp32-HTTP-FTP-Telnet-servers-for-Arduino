@@ -34,7 +34,18 @@ Modify these files according to your needs or upload your own files onto ESP32 b
 
 - Web server. HTTP seems to offer a convenient user interface with ESP32 projects. Web server included in A_kind_of_esp32_OS_template can handle requests in two different ways. As a programmed response to some requests (typically small REST calls in similar way as, for example, PHP) or by sending .html files that has been previously uploaded to /var/www/html directory.
 
-- Telnet server, similarly to Web server can also handle commands in two different ways. As a programmed response to some commands or it can handle some already built in commands by itself. Only a few commands are implemented so far. More will be implemented in the future. Help command displays help.txt file. Help.txt is included in A_kind_of_esp32_OS_template package. Use FTP to upload it into /var/telnet directory.
+- Telnet server, similarly to Web server can also handle commands in two different ways. As a programmed response to some commands or it can handle some already built in commands by itself. Only a few commands are implemented so far:
+   - passwd
+   - ls (<directoryName>) or dir (<directoryName>)
+   - cat <fileName> or type <fileName>
+   - rm <fileName> or del <fileName>
+   - ifconfig or ipconfig
+   - arp (synonym for "arp -a" as implemented here)
+   - iw (synonym for "iw dev wlan1 station dump" as implemented here)
+   - help
+   - quit
+
+More will be implemented in the future. Help command displays help.txt file. Help.txt is included in A_kind_of_esp32_OS_template package. Use FTP to upload it into /var/telnet directory.
 
 ## Setup Instructions
 
@@ -64,7 +75,7 @@ Once all this is done, there is no need of doing it again.
 
 5. Go to File_system.h and change definition FILE_SYSTEM_MOUNT_METHOD to DO_NOT_FORMAT.
 6. Go to Network.h and change definition NETWORK_CONNECTION_METHOD to ONLY_READ_NETWORK_CONFIGURATION.
-7. Go to User_management.h and change definition INITIALIZE_USERS to DONT_INITIALIZE_USERS.
+7. Go to User_management.h and change definition INITIALIZE_USERS to DO_NOT_INITIALIZE_USERS.
 8. Compile sketch and run it on your ESP32 for the second time.
 
 Now you are almost there. Your ESP32 is already woriking as a server but there are a few minor things yet left to do.
