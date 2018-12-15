@@ -36,9 +36,10 @@ Modify these files according to your needs or upload your own files onto ESP32 b
 
 - Telnet server, similarly to Web server can also handle commands in two different ways. As a programmed response to some commands or it can handle some already built in commands by itself. Only a few commands are implemented so far:
    - passwd
-   - ls (<directoryName>) or dir (<directoryName>)
-   - cat <fileName> or type <fileName>
-   - rm <fileName> or del <fileName>
+   - ls ([directoryName]) or dir ([directoryName])
+   - cat [fileName] or type [fileName]
+   - rm [fileName] or del [fileName]
+   - ping [target]   (ping used here was taken and modified from https://github.com/pbecchi/ESP32_ping)
    - ifconfig or ipconfig
    - arp (synonym for "arp -a" as implemented here)
    - iw (synonym for "iw dev wlan1 station dump" as implemented here)
