@@ -287,6 +287,8 @@
     return s;
   }
   
+  // ----- ifconfig -----
+  
   String ifconfig () {
     String s = "";
     struct netif *netif;
@@ -307,6 +309,8 @@
     while (s.length () < toLenght) s += " ";
     return s;
   }
+
+  // ----- arp -----
   
   String arp_a () { // reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c
     // first make a definition of ARP table and get a pointer to it (not very elegant but I have no other idea)
@@ -332,14 +336,17 @@
       u16_t ctime;
       u8_t state;
     };
-    struct etharp_entry *arp_table;
-    byte offset = (byte *) &arp_table->ipaddr - (byte *) arp_table;
-    ip4_addr_t *ipaddr;
+    static struct etharp_entry *arp_table = NULL;
     struct netif *netif;
-    struct eth_addr *mac;
-    while (!etharp_get_entry (0, &ipaddr, &netif, &mac)) delay (1); // wait if first entry is not stable
-    arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset);
+    ip4_addr_t *ipaddr;
+    if (!arp_table) {
+      byte offset = (byte *) &arp_table->ipaddr - (byte *) arp_table;
+      struct eth_addr *mac;
+      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is no acessible right now.\r\n"; // first entry is not stable
+      arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset);
+    }
     // we've got a pointer to ARP table, now scan if for each netif  
+    struct etharp_entry *pat = arp_table;
     String s = "";
     for (netif = netif_list; netif->next; netif = netif->next) {
       if (netif_is_up (netif)) {
@@ -349,21 +356,23 @@
         if (netif->name [0] == 's') i = 2; // st
         s += "wlan" + String (i) + ": " + String (inet_ntoa (netif->ip_addr)) + "\r\n  Internet Address      Physical Address      Type\r\n";
         for (i = 0; i < ARP_TABLE_SIZE; i++) {
-          if (arp_table->state != ETHARP_STATE_EMPTY) {
-            struct netif *arp_table_netif = arp_table->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
+          if (pat->state != ETHARP_STATE_EMPTY) {
+            struct netif *arp_table_netif = pat->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
             if (arp_table_netif && arp_table_netif->num == netif->num) { // if ARP entry is for the same that netif we are just displaying
-              s += "  " + __appendString__ (inet_ntoa (arp_table->ipaddr), 22) +
-                   MacAddressAsString ((byte *) &arp_table->ethaddr, 6) +  
-                   (arp_table->state > ETHARP_STATE_STABLE_REREQUESTING_2 ? "     static\r\n" : "     dynamic\r\n");
+              s += "  " + __appendString__ (inet_ntoa (pat->ipaddr), 22) +
+                   MacAddressAsString ((byte *) &pat->ethaddr, 6) +  
+                   (pat->state > ETHARP_STATE_STABLE_REREQUESTING_2 ? "     static\r\n" : "     dynamic\r\n");
             } 
           }
-          arp_table ++;
+          pat ++;
         }
-        arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset); // start at the beginning with the next netif
+        pat = arp_table; // start scan of arp_table from the beginning with the next netif
       }
     }
     return s;
   }  
+
+  // ----- iw -----
 
   String iw_dev_wlan1_station_dump () {
     String s = "";
@@ -371,8 +380,7 @@
     esp_wifi_ap_get_sta_list (&stationList);  
     for (int i = 0; i < stationList.num; i++) {
       wifi_sta_info_t station = stationList.sta [i];
-      if (i > 0) s += "\r\n";
-      s += "station " + MacAddressAsString ((byte *) station.mac, 6) + " (on wlan1)";
+      s += "station " + MacAddressAsString ((byte *) station.mac, 6) + " (on wlan1)\r\n";
     }
     return s;
   }

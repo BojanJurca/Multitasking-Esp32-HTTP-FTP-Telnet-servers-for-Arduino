@@ -77,6 +77,8 @@
       bool __ls__ (TcpConnection *connection, String directory);
       bool __cat__ (TcpConnection *connection, String fileName);
       bool __rm__ (TcpConnection *connection, String fileName);
+
+      String ping (TcpConnection *, char *, int, int, int, int);
        
       void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
         dbgprintf63 ("[telnet][Thread %i][Core %i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
@@ -250,6 +252,15 @@
                                 else                                                   s = "\r\n\nOnly iw dev wlan1 station dump is supported.\r\n";
                                 s += String (prompt);
                                 connection->sendData ((char *) s.c_str (), s.length ());
+
+                              // ----- ping -----
+
+                              } else if (cmd == "ping") {
+                                String s;
+                                if (param != "")  s = ping (connection, (char *) param.c_str (), 4, 1, 32, 1);
+                                else              s = "\r\n\nPing target must be specified.\r\n";
+                                s += String (prompt);
+                                connection->sendData ((char *) s.c_str (), s.length ());                                
 
                               // ----- uptime -----
 
@@ -428,4 +439,196 @@
         }
       }
 
+  // ----- ping ----- according to: https://github.com/pbecchi/ESP32_ping
+
+  #include "lwip/inet_chksum.h"
+  #include "lwip/ip.h"
+  #include "lwip/ip4.h"
+  #include "lwip/err.h"
+  #include "lwip/icmp.h"
+  #include "lwip/sockets.h"
+  #include "lwip/sys.h"
+  #include "lwip/netdb.h"
+  #include "lwip/dns.h"
+
+  #define PING_DEFAULT_COUNT     4
+  #define PING_DEFAULT_INTERVAL  1
+  #define PING_DEFAULT_SIZE     32
+  #define PING_DEFAULT_TIMEOUT   1
+
+  struct pingDataStructure {
+    uint16_t ID;
+    uint16_t pingSeqNum;
+    uint8_t stopped = 0;
+    uint32_t transmitted = 0;
+    uint32_t received = 0;
+    float minTime = 0;
+    float maxTime = 0;
+    float meanTime = 0;
+    float lastMeanTime = 0;
+    float varTime = 0;
+  };
+
+  static void pingPrepareEcho (pingDataStructure *pds, struct icmp_echo_hdr *iecho, uint16_t len) {
+    size_t i;
+    size_t data_len = len - sizeof (struct icmp_echo_hdr);
+  
+    ICMPH_TYPE_SET (iecho, ICMP_ECHO);
+    ICMPH_CODE_SET (iecho, 0);
+    iecho->chksum = 0;
+    iecho->id = pds->ID;
+    iecho->seqno = htons (++pds->pingSeqNum);
+  
+    /* fill the additional data buffer with some data */
+    for (i = 0; i < data_len; i++) ((char*) iecho)[sizeof (struct icmp_echo_hdr) + i] = (char) i;
+  
+    iecho->chksum = inet_chksum (iecho, len);
+  }
+
+  static err_t pingSend (pingDataStructure *pds, int s, ip4_addr_t *addr, int pingSize) {
+    struct icmp_echo_hdr *iecho;
+    struct sockaddr_in to;
+    size_t ping_size = sizeof (struct icmp_echo_hdr) + pingSize;
+    int err;
+  
+    if (!(iecho = (struct icmp_echo_hdr *) mem_malloc ((mem_size_t) ping_size))) return ERR_MEM;
+  
+    pingPrepareEcho (pds, iecho, (uint16_t) ping_size);
+  
+    to.sin_len = sizeof (to);
+    to.sin_family = AF_INET;
+    inet_addr_from_ipaddr (&to.sin_addr, addr);
+  
+    if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
+  
+    return (err ? ERR_OK : ERR_VAL);
+  }
+
+  static void pingRecv (pingDataStructure *pds, TcpConnection *telnetConnection, int s) {
+    char buf [64];
+    int fromlen, len;
+    struct sockaddr_in from;
+    struct ip_hdr *iphdr;
+    struct icmp_echo_hdr *iecho = NULL;
+    char ipa[16];
+    struct timeval begin;
+    struct timeval end;
+    uint64_t microsBegin;
+    uint64_t microsEnd;
+    float elapsed;
+
+    char cstr [255];    
+  
+    // Register begin time
+    gettimeofday (&begin, NULL);
+  
+    // Send
+    while ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr *) &from, (socklen_t *) &fromlen)) > 0) {
+      if (len >= (int)(sizeof(struct ip_hdr) + sizeof(struct icmp_echo_hdr))) {
+        // Register end time
+        gettimeofday (&end, NULL);
+  
+        /// Get from IP address
+        ip4_addr_t fromaddr;
+        inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
+  
+        strcpy (ipa, inet_ntoa (fromaddr));
+  
+        // Get echo
+        iphdr = (struct ip_hdr *) buf;
+        iecho = (struct icmp_echo_hdr *) (buf + (IPH_HL(iphdr) * 4));
+  
+        // Print ....
+        if ((iecho->id == pds->ID) && (iecho->seqno == htons (pds->pingSeqNum))) {
+          pds->received ++;
+  
+          // Get elapsed time in milliseconds
+          microsBegin = begin.tv_sec * 1000000;
+          microsBegin += begin.tv_usec;
+  
+          microsEnd = end.tv_sec * 1000000;
+          microsEnd += end.tv_usec;
+  
+          elapsed = (float) (microsEnd - microsBegin) / (float) 1000.0;
+  
+          // Update statistics
+          // Mean and variance are computed in an incremental way
+          if (elapsed < pds->minTime) pds->minTime = elapsed;
+          if (elapsed > pds->maxTime) pds->maxTime = elapsed;
+  
+          pds->lastMeanTime = pds->meanTime;
+          pds->meanTime = (((pds->received - 1) * pds->meanTime) + elapsed) / pds->received;
+  
+          if (pds->received > 1) pds->varTime = pds->varTime + ((elapsed - pds->lastMeanTime) * (elapsed - pds->meanTime));
+  
+          // Print ...
+          sprintf (cstr, "%d bytes from %s: icmp_seq=%d time=%.3f ms\r\n", len, ipa, ntohs (iecho->seqno), elapsed);
+          telnetConnection->sendData (cstr, strlen (cstr));
+          
+            return;
+        }
+        else {
+          // TODO
+        }
+      }
+    }
+  
+    if (len < 0) {
+      sprintf (cstr, "Request timeout for icmp_seq %d\r\n", pds->pingSeqNum);
+      telnetConnection->sendData (cstr, strlen (cstr));
+    }
+  }  
+
+  String ping (TcpConnection *telnetConnection, char *targetIP, int pingCount = PING_DEFAULT_COUNT, int pingInterval = PING_DEFAULT_INTERVAL, int pingSize = PING_DEFAULT_SIZE, int timeOut = PING_DEFAULT_TIMEOUT) {
+    struct sockaddr_in address;
+    ip4_addr_t pingTarget;
+    int s;
+    char cstr [256];
+  
+    // Create socket
+    if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
+      return "Error creating socket.\r\n";
+    }
+  
+    pingTarget.addr = inet_addr (targetIP); 
+  
+    // Setup socket
+    struct timeval tOut;
+  
+    // Timeout
+    tOut.tv_sec = timeOut;
+    tOut.tv_usec = 0;
+  
+    if (setsockopt (s, SOL_SOCKET, SO_RCVTIMEO, &tOut, sizeof (tOut)) < 0) {
+      closesocket (s);
+      return "Error setting socket options.\r\n";
+    }
+
+    pingDataStructure pds = {};
+    pds.ID = random (0, 0xFFFF); // each consequently running ping commanf should have its own unique ID otherwise we won't be able to distinguish packets 
+    pds.minTime = 1.E+9; // FLT_MAX;
+  
+    // Begin ping ...
+  
+    sprintf (cstr, "\r\n\nping %s: %d data bytes\r\n",  targetIP, pingSize);
+    telnetConnection->sendData (cstr, strlen (cstr));
+    
+    while ((pds.pingSeqNum < pingCount) && (!pds.stopped)) {
+      if (pingSend (&pds, s, &pingTarget, pingSize) == ERR_OK) pingRecv (&pds, telnetConnection, s);
+      delay (pingInterval * 1000L);
+    }
+  
+    closesocket (s);
+  
+    sprintf (cstr, "%d packets transmitted, %d packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
+    telnetConnection->sendData (cstr, strlen (cstr));
+  
+    if (pds.received) {
+      sprintf (cstr, "round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms\r\n", pds.minTime, pds.meanTime, pds.maxTime, sqrt (pds.varTime / pds.received));
+      telnetConnection->sendData (cstr, strlen (cstr));
+      return ""; // true
+    }
+    return ""; // false
+  }
+  
 #endif
