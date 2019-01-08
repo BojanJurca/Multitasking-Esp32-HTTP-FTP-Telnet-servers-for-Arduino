@@ -1,4 +1,4 @@
-# A_kind_of_esp32_OS_template
+# Esp32_web_ftp_telnet_server_template
 
 While working on my ESP32 / Arduino home automation project I was often missing functionalities that are available on bigger computers. This template is an attempt of providing some functionalities of operating system to an ESP32 programmer. Rather then making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. In order to achieve this goal the code should be:
 
@@ -12,9 +12,9 @@ While working on my ESP32 / Arduino home automation project I was often missing 
 
 Here is a list of functionalities that I consider home automation projects should have.
 
-- Real time clock. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In A_kind_of_esp32_OS_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT and I cannot prepare all the possible options myself. You may have to modify getLocalTime () function to match your country and location.
+- Real time clock. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT and I cannot prepare all the possible options myself. You may have to modify getLocalTime () function to match your country and location.
 
-- File system is needed for storing configuration files, .html files used by web server, etc. A SPIFFS flash file system is used in A_kind_of_esp32_OS_template. Documentation on SPIFFS can be found at http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html.
+- File system is needed for storing configuration files, .html files used by web server, etc. A SPIFFS flash file system is used in Esp32_web_ftp_telnet_server_template. Documentation on SPIFFS can be found at http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html.
 
 - Network configuration files. A_kind_of_esp32_OS_template uses UNIX, LINUX, Raspbian like network configuration files (although it is a little awkward how network configuration is implemented in these operating systems). The following files are used to store STAtion and AccessPoint configuration parameters:
 
@@ -25,14 +25,14 @@ Here is a list of functionalities that I consider home automation projects shoul
 
 Modify these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
-- User management. A_kind_of_esp32_OS_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization or upload your own files onto ESP32 by using FTP. User management implemented in A_kind_of_esp32_OS_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user information:
+- User management. Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization or upload your own files onto ESP32 by using FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user information:
 
    - /etc/passwd
    - /etc/shadow
 
 - FTP server is needed for uploading configuration files, .html files, etc onto ESP32 file system.
 
-- Web server. HTTP seems to offer a convenient user interface with ESP32 projects. Web server included in A_kind_of_esp32_OS_template can handle requests in two different ways. As a programmed response to some requests (typically small REST calls in similar way as, for example, PHP) or by sending .html files that has been previously uploaded to /var/www/html directory.
+- Web server. HTTP seems to offer a convenient user interface with ESP32 projects. Web server included in Esp32_web_ftp_telnet_server_template can handle requests in two different ways. As a programmed response to some requests (typically small REST calls in similar way as, for example, PHP) or by sending .html files that has been previously uploaded to /var/www/html directory.
 
 - Telnet server, similarly to Web server can also handle commands in two different ways. As a programmed response to some commands or it can handle some already built in commands by itself. Only a few commands are implemented so far:
    - passwd
@@ -48,12 +48,12 @@ Modify these files according to your needs or upload your own files onto ESP32 b
    - help
    - quit
 
-More will be implemented in the future. Help command displays help.txt file. Help.txt is included in A_kind_of_esp32_OS_template package. Use FTP to upload it into /var/telnet directory.
+More will be implemented in the future. Help command displays help.txt file. Help.txt is included in Esp32_web_ftp_telnet_server_template package. Use FTP to upload it into /var/telnet directory.
 
 ## Setup Instructions
 
-1. Copy all files in this package into A_kind_of_esp32_OS_template directory.
-2. Open A_kind_of_esp32_OS_template.ino with Arduino IDE.
+1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
+2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
 3. Go to Network.h and do the following changes:
    - find and change YOUR-STA-SSID to your WiFi SSID,
    - find and change YOUR-STA-PASSWORD to your WiFi password,
@@ -65,7 +65,7 @@ Doing this the following will happen:
    - network configuration files will be created with the following settings:
       - your ESP32 will be configured to use DHCP in STAtion mode,
       - your ESP32 AccessPoint name will be ESP32_SRV,
-      - your ESP32 AccessPoint IP will be 10.0.1.4,
+      - your ESP32 AccessPoint IP will be 10.0.1.3,
    - user management files will be created with the following user accounts:
       - root / rootpassword,
       - webadmin / webadminpassword,
