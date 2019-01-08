@@ -2,7 +2,7 @@
  * 
  * WebServer.hpp 
  * 
- *  This file is part of A_kind_of_esp32_OS_template.ino project: https://github.com/BojanJurca/A_kind_of_esp32_OS_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  WebServer is a TcpServer with connectionHandler that handles TcpConnection according to HTTP protocol.
  * 
@@ -18,7 +18,6 @@
  * 
  * History:
  *          - first release, November 19, 2018, Bojan Jurca
- *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca          
  *  
  */
 
@@ -49,11 +48,6 @@
   #endif
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp
 
-  #ifndef MTU
-    #define MTU 1500 // default MTU size
-  #endif
-
-
    void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler);
   
   class webServer {                                             
@@ -81,7 +75,7 @@
                                                     this->__tcpServer__ = new TcpServer ( __webConnectionHandler__, // worker function
                                                                                           (void *) httpRequestHandler,       // tell TcpServer to pass reference callback function to __webConnectionHandler__
                                                                                           stackSize,                // usually 4 KB will do for webConnectionHandler
-                                                                                          1500,                     // close connection if inactive for more than 1,5 seconds
+                                                                                          5000,                     // close connection if inactive for more than 5 seconds (fitst calls can be slow)
                                                                                           serverIP,                 // accept incomming connections on on specified addresses
                                                                                           serverPort,               // web port
                                                                                           firewallCallback);        // firewall callback function
@@ -141,13 +135,13 @@
                 if ((bool) (file = SPIFFS.open (fullHtmlFilePath, FILE_READ))) {
                   if (!file.isDirectory ()) {
                     dbgprintf62 ("[web] GET %s\n", fullHtmlFilePath);  
-                    char *buff = (char *) malloc (MTU); // get 2 KB of memory from heap (not from the stack)
+                    char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
                     if (buff) {
                       sprintf (buff, "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nContent-Length:%i\r\n\r\n", file.size ());
                       int i = strlen (buff);
                       while (file.available ()) {
                         *(buff + i++) = file.read ();
-                        if (i == MTU) { connection->sendData ((char *) buff, MTU); i = 0; }
+                        if (i == 2048) { connection->sendData ((char *) buff, 2048); i = 0; }
                       }
                       if (i) { connection->sendData ((char *) buff, i); }
                       free (buff);
@@ -163,7 +157,7 @@
             // ----- if request was GET / and index.html couldn't be found then send special reply -----
             
             if (!strcmp (htmlFile, "index.html")) {
-              sprintf (buffer + 200, "Please use FTP, loggin as webadmin / webadminpassword and upload *.html and *.png files found in a_kind_of_esp32_OS_template package into webserver home directory.");
+              sprintf (buffer + 200, "Please use FTP, loggin as webadmin / webadminpassword and upload *.html and *.png files found in Esp32_web_ftp_telnet_server_template package into webserver home directory.");
               sprintf (buffer, "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:%i\r\n\r\n%s", strlen (buffer + 200), buffer + 200);
               connection->sendData (buffer, strlen (buffer));
               goto closeWebConnection;

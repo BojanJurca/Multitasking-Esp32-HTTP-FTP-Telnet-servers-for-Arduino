@@ -2,7 +2,7 @@
  * 
  * Debugmsg.h 
  * 
- *  This file is part of TcpServer project: https://github.com/BojanJurca/esp32_threaded_TCP_server
+ *  This file is part of TcpServer project (no longer available by itself)
  *
  *  Debugmsg.h contains definitions that help debug the code.
  * 

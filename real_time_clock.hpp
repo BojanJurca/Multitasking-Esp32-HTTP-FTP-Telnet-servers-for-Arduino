@@ -2,7 +2,7 @@
  * 
  * Real_time_clock.hpp
  * 
- *  This file is part of A_kind_of_esp32_OS_template.ino project: https://github.com/BojanJurca/A_kind_of_esp32_OS_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  Real_time_clock synchronizes its time with NTP server accessible from internet once a day.
  *  Internet connection is necessary for real_time_clock to work.

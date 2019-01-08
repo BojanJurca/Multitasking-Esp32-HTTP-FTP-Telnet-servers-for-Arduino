@@ -2,7 +2,7 @@
  * 
  * User_management.h 
  * 
- *  This file is part of A_kind_of_esp32_OS_template.ino project: https://github.com/BojanJurca/A_kind_of_esp32_OS_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  User_management initially creates user management files:
  * 
@@ -11,7 +11,7 @@
  * 
  * INSTRUCTIONS
  * 
- *  Run A_kind_of_esp32_OS_template the first time with INITIALIZE_USERS == DO_INITIALIZE_USERS 
+ *  Run Esp32_web_ftp_telnet_server_template the first time with INITIALIZE_USERS == DO_INITIALIZE_USERS 
  *  to generate user management files. Once user management files are generated there's no need 
  *  of generating them again, you can switch INITIALIZE_USERS to DONT_INITIALIZE_USERS
  * 
@@ -35,7 +35,7 @@
   // select one of the above login methods
   #define USER_MANAGEMENT  UNIX_LIKE_USER_MANAGEMENT
 
-  #define DO_INITIALIZE_USERS              1             // this option is normally used ony the first time you run A_kind_of_est32_OS_template on ESP32
+  #define DO_INITIALIZE_USERS              1             // this option is normally used ony the first time you run Esp32_web_ftp_telnet_server_template on ESP32
                                                          // change firstUserInitialization function below according to your needs
   #define DO_NOT_INITIALIZE_USERS          2             // once the users are initialized, this option is preferable
   // select one of the above user initialization methods

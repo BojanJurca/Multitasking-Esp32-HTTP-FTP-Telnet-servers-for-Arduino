@@ -2,7 +2,7 @@
  * 
  * TelnetServer.hpp
  * 
- *  This file is part of A_kind_of_esp32_OS_template.ino project: https://github.com/BojanJurca/A_kind_of_esp32_OS_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  TelnetServer is built upon TcpServer with connectionHandler that handles TcpConnection according to telnet protocol.
  * 
@@ -14,7 +14,6 @@
  *          - first release, November 29, 2018, Bojan Jurca
  *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
  *          - added iw dev wlan1 station dump, December 11, 2018, Bojan Jurca          
- *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca          
  *  
  */
 
@@ -33,11 +32,6 @@
   #include "file_system.h"        // telnetServer.hpp needs file_system.h
   #include "user_management.h"    // telnetServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp
-
-  #ifndef MTU
-    #define MTU 1500 // default MTU size
-  #endif
-
 
     void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler);
   
@@ -312,7 +306,7 @@
                                   param = String (cmdLine) + "help.txt";
                                   if (!__cat__ (connection, param)) {
                                     // send special reply
-                                    String s = "\r\n\nPlease use FTP, loggin as root / rootpassword and upload help.txt file found in a_kind_of_esp32_OS_template package into " + String (cmdLine) + " directory.\r\n"; 
+                                    String s = "\r\n\nPlease use FTP, loggin as root / rootpassword and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + String (cmdLine) + " directory.\r\n"; 
                                      connection->sendData ((char *) s.c_str (), s.length ());
                                   }
                                   connection->sendData (prompt, strlen (prompt));
@@ -396,7 +390,7 @@
         File file;
         if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
           if (!file.isDirectory ()) {
-            char *buff = (char *) malloc (MTU); // get 2 KB of memory from heap (not from the stack)
+            char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
             if (buff) {
               strcpy (buff, "\r\n\n");
               int i = strlen (buff);
@@ -404,14 +398,14 @@
                 switch (*(buff + i) = file.read ()) {
                   case '\r':  // ignore
                               break;
-                  case '\n':  // crlf conversion
+                  case '\n':  // cr-lf conversion
                               *(buff + i ++) = '\r'; 
                               *(buff + i ++) = '\n';
                               break;
                   default:
                               i ++;                  
                 }
-                if (i >= MTU - 1) { connection->sendData ((char *) buff, i); i = 0; }
+                if (i >= 2048 - 1) { connection->sendData ((char *) buff, i); i = 0; }
               }
               if (i) { connection->sendData ((char *) buff, i); }
               free (buff);

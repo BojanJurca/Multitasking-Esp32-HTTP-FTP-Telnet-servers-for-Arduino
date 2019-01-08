@@ -2,13 +2,13 @@
  * 
  * Network.h
  * 
- *  This file is part of A_kind_of_esp32_OS_template.ino project: https://github.com/BojanJurca/A_kind_of_esp32_OS_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  Network.h reads network configuration from file system and sets both ESP32 network interfaces accordingly
  * 
  * INSTRUCTIONS
  * 
- *  Run A_kind_of_esp32_OS_template the first time with NETWORK_CONNECTION_METHOD == PREPARE_AND_READ_NETWORK_CONFIGURATION 
+ *  Run Esp32_web_ftp_telnet_server_template the first time with NETWORK_CONNECTION_METHOD == PREPARE_AND_READ_NETWORK_CONFIGURATION 
  *  to generate network configuration files (it is a little awkward why UNIX, LINUX, Raspbian are using so many network 
  *  configuration files and how they are used):
  * 
@@ -41,7 +41,7 @@
   
   // change this definitions according to your needs
   
-  #define PREPARE_AND_READ_NETWORK_CONFIGURATION 1                // this option is normally used ony the first time you run A_kind_of_est32_OS_template on ESP32
+  #define PREPARE_AND_READ_NETWORK_CONFIGURATION 1                // this option is normally used ony the first time you run Esp32_web_ftp_telnet_server_template on ESP32
                                                                   // change networkConnect function below for initial network setup
   #define ONLY_READ_NETWORK_CONFIGURATION        2                // once the configuration is set, this option is preferable
   // select one of the above network connection methods
@@ -73,7 +73,7 @@
                     "\r\n"
                     "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
                     "#   iface wlan2 inet static\r\n"
-                    "#      address 10.0.0.4\r\n"
+                    "#      address 10.0.0.3\r\n"
                     "#      netmask 255.255.255.0\r\n"
                     "#      gateway 10.0.0.1\r\n";
       
@@ -102,9 +102,9 @@
         String s =  "# only static IP addresses can be used for acces point and only wlan1 can be used (example below)\r\n"
                     "\r\n"
                     "interface wlan1\r\n"
-                    "   static ip_address = 10.0.1.4\r\n"           // set your access point IP addresses here
+                    "   static ip_address = 10.0.1.3\r\n"           // set your access point IP addresses here
                     "          netmask = 255.255.255.0\r\n"
-                    "          gateway = 10.0.1.4\r\n";
+                    "          gateway = 10.0.1.3\r\n";
       
         if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
         file.close ();

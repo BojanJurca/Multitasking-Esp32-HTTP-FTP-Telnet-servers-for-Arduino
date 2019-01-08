@@ -2,7 +2,7 @@
  *
  * TcpServer.hpp
  *
- *  This file is part of TcpServer project: https://github.com/BojanJurca/esp32_threaded_TCP_server
+ *  This file is part of TcpServer project (no longer available by itself)
  *
  *  TcpServer.hpp contains a minimalistic IPv4 threaded TCP server for ESP32 / Arduino environment with:
  *    - time-out functionality,
@@ -19,7 +19,6 @@
  * History:
  *          - first release, October 31, 2018, Bojan Jurca
  *          - added user-defined connectionHandler parameter, added TcpConnection::getTimeOut (), November 22, 2018, Bojan Jurca
- *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca
  *  
  */
 
@@ -36,10 +35,6 @@
   #include "debugmsgs.h"
   
   #include <lwip/sockets.h>
-
-  #ifndef MTU
-    #define MTU 1500 // default MTU size
-  #endif
   
   #define TCP_SERVER_INFINITE_TIMEOUT 0
   
@@ -189,7 +184,7 @@
                                                   #define min(a,b) ((a)<(b)?(a):(b))
                                                   while (bufferSize) {
                                                     if (this->__socket__ == -1) return writtenTotal; 
-                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, MTU), 0)) { // ESP can send packets length of max 2 KB but let's go with MTU (default) size of 1500
+                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, 2048), 0)) { // ESP can send packets length of max 2 KB
                                                       case -1:
                                                                 // Serial.printf ("sendData errno: %i timeout: %i\n", errno, millis () - this->__lastActiveMillis__);
                                                                 #define EAGAIN 11

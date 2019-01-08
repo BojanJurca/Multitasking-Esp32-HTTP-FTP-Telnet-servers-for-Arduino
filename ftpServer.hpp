@@ -2,7 +2,7 @@
  * 
  * FtpServer.hpp 
  * 
- *  This file is part of A_kind_of_esp32_OS_template.ino project: https://github.com/BojanJurca/A_kind_of_esp32_OS_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  FtpServer is built upon TcpServer with connectionHandler that handles TcpConnection according to FTP protocol.
  *  This goes for control connection at least. FTP is a little more complicated since it uses another TCP connection
@@ -11,18 +11,12 @@
  * 
  * History:
  *          - first release, November 18, 2018, Bojan Jurca
- *          - adjusted buffer size to default MTU size (1500), December 12, 2018, Bojan Jurca          
  *  
  */
 
 
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
-
-  #ifndef MTU
-    #define MTU 1500 // default MTU size
-  #endif
-
  
   // change this definitions according to your needs
 
@@ -172,7 +166,7 @@
                   p2 = pasiveDataPort % 256;
                   p1 = pasiveDataPort / 256;
                           sprintf (reply, "227 entering passive mode (%i,%i,%i,%i,%i,%i)\r\n", ip1, ip2, ip3, ip4, p1, p2);
-                  pasiveDataServer = new TcpServer (3000, connection->getThisSideIP (), pasiveDataPort, NULL); // open a new TCP server to accept pasive data connection
+                  pasiveDataServer = new TcpServer (5000, connection->getThisSideIP (), pasiveDataPort, NULL); // open a new TCP server to accept pasive data connection
                   connection->sendData (reply, strlen (reply)); // send reply
                 } else {
                     connection->sendData ("425 can't open data connection\r\n", strlen ("425 can't open data connection\r\n"));
@@ -187,7 +181,7 @@
                   int activeDataPort;
                   sprintf (activeDataIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4); 
                   activeDataPort = 256 * p1 + p2;
-                  activeDataClient = new TcpClient (activeDataIP, activeDataPort, 3000); // open a new TCP client for active data connection
+                  activeDataClient = new TcpClient (activeDataIP, activeDataPort, 5000); // open a new TCP client for active data connection
                 } 
                 connection->sendData ("200 port ok\r\n", strlen ("200 port ok\r\n")); 
           
@@ -227,12 +221,12 @@
                     if (strlen (homeDir) + strlen (ftpParam) < sizeof (fileName) && sprintf (fileName, "%s%s", homeDir, ftpParam)) {
                       if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
                         if (!file.isDirectory ()) {
-                          byte *buff = (byte *) malloc (MTU); // get 1500 B of memory from heap (not from the stack)
+                          byte *buff = (byte *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
                           if (buff) {
                             int i = bytesWritten = 0;
                             while (file.available ()) {
                               *(buff + i++) = file.read ();
-                              if (i == MTU) { bytesRead += MTU; bytesWritten += dataConnection->sendData ((char *) buff, MTU); i = 0; }
+                              if (i == 2048) { bytesRead += 2048; bytesWritten += dataConnection->sendData ((char *) buff, 2048); i = 0; }
                             }
                             if (i) { bytesRead += i; bytesWritten += dataConnection->sendData ((char *) buff, i); }
                             free (buff);
@@ -260,12 +254,12 @@
                   if (dataConnection) {
                     if (strlen (homeDir) + strlen (ftpParam) < sizeof (fileName) && sprintf (fileName, "%s%s", homeDir, ftpParam)) {
                       if ((bool) (file = SPIFFS.open (fileName, FILE_WRITE))) {
-                        byte *buff = (byte *) malloc (MTU); // get 1500 B of memory from heap (not from the stack)
+                        byte *buff = (byte *) malloc (2048); // get 2KB of memory from heap (not from the stack)
                         if (buff) {
                           bytesRead = 0;
                           int received;
                           do {
-                            bytesRead += received = dataConnection->recvData ((char *) buff, MTU);
+                            bytesRead += received = dataConnection->recvData ((char *) buff, 2048);
                             if (received && file.write (buff, received) == received) bytesWritten += received;
                           } while (received);
                           free (buff);
