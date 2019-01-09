@@ -94,4 +94,4 @@ Files will be placed into webadmin home directory, which is configured to be /va
 
 ## How to continue from here?
 
-A_kind_of_esp32_OS_template is what its name says, just a working template. A programmer is highly encouraged to add or change each piece of code as he or she sees appropriate for his or her projects.
+Esp32_web_ftp_telnet_server_template is what its name says, just a working template. A programmer is highly encouraged to add or change each piece of code as he or she sees appropriate for his or her projects. Esp32_web_ftp_telnet_server_template.ino is pretty comprehansive, small and easy to modify so it may be a good starting point.
