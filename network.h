@@ -342,7 +342,7 @@
     if (!arp_table) {
       byte offset = (byte *) &arp_table->ipaddr - (byte *) arp_table;
       struct eth_addr *mac;
-      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is no acessible right now.\r\n"; // first entry is not stable
+      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is not accessible right now.\r\n"; // first entry is not stable
       arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset);
     }
     // we've got a pointer to ARP table, now scan if for each netif  
