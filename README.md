@@ -1,6 +1,6 @@
 # Esp32_web_ftp_telnet_server_template
 
-While working on my ESP32 / Arduino home automation project I was often missing functionalities that are available on bigger computers. This template is an attempt of providing some functionalities of operating system such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather then making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface to turn LED built into Esp32 on and off using REST calls and basically the same through the use of Telnet interface. It creates Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
+While working on my ESP32 / Arduino home automation project I was often missing functionalities that are available on bigger computers. This template is an attempt of providing some functionalities of operating system such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather then making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface to turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. It creates Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
 
 ## Features
 
@@ -102,7 +102,7 @@ for (int i = 0; i < 3; i++) {
     Serial.printf ("[example 01] can't read file /ID\n");
   }
   
-  xSemaphoreGive (SPIFFSsemaphore); // alwys give SPIFFSsemaphore when SPIFSS operation completes
+  xSemaphoreGive (SPIFFSsemaphore); // always give SPIFFSsemaphore when SPIFSS operation completes
   
   SPIFFSsafeDelay (1000); // always use SPIFFSsafeDelay() instead of delay()
 }
@@ -161,7 +161,7 @@ if (strstr (buffer, "}\r\n")) {
 ```
 
 
-Example 04 shows how we can handle incoming HTTP requests. If the reply is static then the easiest way is to upload (FTP) file with a name corresponding to a request into /var/www/html directory. If it is not then you can modify httpRequestHandler function (already existing in Esp32_web_ftp_telnet_server_template) accordingly. . Make sure httpRequestHandler is re-entrant for it can run in many threads simultaneously. For example:
+Example 04 shows how we can handle incoming HTTP requests. If the reply is static then the easiest way is to upload (FTP) file with a name corresponding to a request into /var/www/html directory. If it is not then you can modify httpRequestHandler function (already existing in Esp32_web_ftp_telnet_server_template) accordingly. Make sure httpRequestHandler is re-entrant for it can run in many threads simultaneously. For example:
 
 ```C++
 String httpRequestHandler (String httpRequest) {  
