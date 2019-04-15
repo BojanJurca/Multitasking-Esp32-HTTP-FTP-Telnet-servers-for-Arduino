@@ -2,7 +2,7 @@
  * 
  * Real_time_clock.hpp
  * 
- *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  Real_time_clock synchronizes its time with NTP server accessible from internet once a day.
  *  Internet connection is necessary for real_time_clock to work.
@@ -10,32 +10,26 @@
  *  Real_time_clock preserves accurate time even when ESP32 goes into deep sleep.
  * 
  * History:
- *          - first release, November 14, 2018, Bojan Jurca
+ *          - first release, 
+ *            November 14, 2018, Bojan Jurca
+ *          - changed delay () do SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *            April 13, 2019, Bojan Jurca          
  *  
  */
 
 
+// change this definitions according to your needs
+#define INTERNAL_NTP_PORT 2390  // internal UDP port number used for NTP - you can choose a different port number if you wish
+#define NTP_TIME_OUT 100        // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
+#define NTP_RETRY_TIME 15000    // number of milliseconds between NTP request retries before it succeds, 15000 = 15 s
+#define NTP_SYNC_TIME 86400000  // number of milliseconds between NTP synchronizations, 86400000 = 1 day
+
+  
 #ifndef __REAL_TIME_CLOCK__
   #define __REAL_TIME_CLOCK__
-  #include "debugmsgs.h" // real_time_clock.h needs debugmsgs.h
-  
-  
-  // change this definitions according to your needs
-  
-  #define INTERNAL_NTP_PORT 2390  // internal UDP port number used for NTP - you can choose a different port number if you wish
-  #define NTP_TIME_OUT 100        // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
-  #define NTP_RETRY_TIME 15000    // number of milliseconds between NTP request retries before it succeds, 15000 = 15 s
-  #define NTP_SYNC_TIME 86400000  // number of milliseconds between NTP synchronizations, 86400000 = 1 day
-  
-  // #define DEBUG_LEVEL 5 // error messges
-  // #define DEBUG_LEVEL 6 // main real_time_clock events
-  #ifndef DEBUG_LEVEL
-    #define DEBUG_LEVEL 5
-  #endif  
-  #include "debugmsgs.h"
-  
-  
+ 
   #include <WiFi.h>
+  #include "TcpServer.hpp"
   
   
   class real_time_clock {                                             
@@ -78,7 +72,7 @@
                                                         strftime (s, 30, "%d.%m.%y %H:%M:%S", gmtime (&newTime.tv_sec));
                                                         Serial.printf ("[real_time_clock] if (your local time != %s) modify getLocalTime () function for your country and location;\n", s);
                                                       } else {
-                                                        dbgprintf62 ("[real_time_clock] time corrected for %li seconds\n", newTime.tv_sec - oldTime.tv_sec);
+                                                        Serial.printf ("[real_time_clock] time corrected for %li seconds\n", newTime.tv_sec - oldTime.tv_sec);
                                                       }
   
                                                       this->__gmtTimeSet__ = true;
@@ -116,40 +110,40 @@
                                                       if (!WiFi.hostByName (this->__ntpServer1__, ntpServerIp))
                                                         if (!WiFi.hostByName (this->__ntpServer1__, ntpServerIp))
                                                           if (!WiFi.hostByName (this->__ntpServer1__, ntpServerIp)) {
-                                                            dbgprintf51 ("[real_time_clock] could not connect to NTP server(s)\n");
+                                                            log_e ("could not connect to NTP server(s)\n");
                                                             goto exit1;
                                                           }
                                                       // open internal port
                                                       if (!udp.begin (INTERNAL_NTP_PORT)) { 
-                                                        dbgprintf52 ("[real_time_clock] internal port %i is not available\n", INTERNAL_NTP_PORT);
+                                                        log_e ("internal port %i is not available\n", INTERNAL_NTP_PORT);
                                                         goto exit1;
                                                       }
                                                       // start UDP over port 123                                                      
                                                       if (!udp.beginPacket (ntpServerIp, 123)) { 
-                                                        dbgprintf51 ("[real_time_clock] NTP server(s) are not available on port 123\n");
+                                                        log_e ("NTP server(s) are not available on port 123\n");
                                                         goto exit2;
                                                       }
                                                       // send UDP request
                                                       if (udp.write (ntpPacket, sizeof (ntpPacket)) != sizeof (ntpPacket)) { // sizeof (ntpPacket) = 48
-                                                        dbgprintf51 ("[real_time_clock] could not send NTP packet\n");
+                                                        log_e ("could not send NTP packet\n");
                                                         goto exit2;
                                                       }
                                                       // check if UDP request has been sent
                                                       if (!udp.endPacket ()) {
-                                                        dbgprintf51 ("[real_time_clock] NTP packet not sent\n");
+                                                        log_e ("NTP packet not sent\n");
                                                         goto exit2;
                                                       }
   
                                                       // wait for NTP reply or time-out
-                                                      for (i = 0; i < NTP_TIME_OUT && udp.parsePacket () != sizeof (ntpPacket); i++) delay (1);
+                                                      for (i = 0; i < NTP_TIME_OUT && udp.parsePacket () != sizeof (ntpPacket); i++) SPIFFSsafeDelay (1);
                                                       if (i == NTP_TIME_OUT) {
-                                                        dbgprintf51 ("[real_time_clock] time-out while waiting for NTP response\n");
+                                                        log_e ("time-out while waiting for NTP response\n");
                                                         goto exit2;
                                                       }
                                                       // read NTP response back into the same packet we used for NTP request (different bytes are used for request and reply)
                                                       udp.read (ntpPacket, sizeof (ntpPacket));
                                                       if (!ntpPacket [40] && !ntpPacket [41] && !ntpPacket [42] && !ntpPacket [43]) { // sometimes we get empty response which is invalid
-                                                        dbgprintf51 ("[real_time_clock] invalid NTP response\n");
+                                                        log_e ("invalid NTP response\n");
                                                         goto exit2;
                                                       }
   
@@ -160,14 +154,12 @@
                                                       currentTime = secsSince1900 - SEVENTY_YEARS;
                                                       // right now currentTime is 1542238838 (14.11.18 23:40:38), every valid time should be grater then 1542238838
                                                       if (currentTime < 1542238838) { 
-                                                        dbgprintf51 ("[real_time_clock] wrong NTP response\n");
+                                                        log_e ("wrong NTP response\n");
                                                         goto exit2;
                                                       }
-                                                      #if DEBUG_LEVEL >= 6
-                                                        char str [30];
-                                                        strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&currentTime));
-                                                        dbgprintf62 ("[real_time_clock] current GMT = %s\n", str);
-                                                       #endif
+                                                      char str [30];
+                                                      strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&currentTime));
+                                                      log_i ("current GMT = %s\n", str);
   
                                                        this->setGmtTime (currentTime);
                                                        success = true;
@@ -186,11 +178,15 @@
                                                     }
   
       time_t getLocalTime ()                        { // returns current local time - calling program should check isGmtTimeSet () first
+                                                      return localTime (getGmtTime ());     
+                                                    }
+
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
                                                       // TO DO: modify this function according to your location - it is difficult to
                                                       //        write a generic function since different countries use different time rules
                                                       // the following example is for Slovenia (EU), GMT + 1 (+ DST)
      
-                                                      time_t now = getGmtTime () + 3600; // time in GMT + 1
+                                                      time_t now = gmtTime + 3600; // time in GMT + 1
   
                                                       struct tm *nowStr = gmtime (&now); 
                                                       bool insideDst = false;

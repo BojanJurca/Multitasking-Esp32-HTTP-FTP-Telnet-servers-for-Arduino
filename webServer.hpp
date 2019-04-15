@@ -2,7 +2,7 @@
  * 
  * WebServer.hpp 
  * 
- *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  WebServer is a TcpServer with connectionHandler that handles TcpConnection according to HTTP protocol.
  * 
@@ -17,10 +17,12 @@
  *  manner, meaning it closes the connection as soon as a reply is sent, ingnoring keep-alive directive.
  * 
  * History:
- *          - first release, November 19, 2018, Bojan Jurca
+ *          - first release, 
+ *            November 19, 2018, Bojan Jurca
+ *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *            April 13, 2019, Bojan Jurca 
  *  
  */
-
 
 #ifndef __WEB_SERVER__
   #define __WEB_SERVER__
@@ -31,22 +33,20 @@
   #define WEB_USE_BUILTIN_HOME_DIRECTORY     2     // define home directory that will be hard coded into program
   #define WEB_USE_USER_MANAGEMENT            3     // home directory of webserver system account will be obtained through user_management.h
   // select one of the above methods to obtain web home directory
-  #define WEB_HOME_DIRECTORY  WEB_USE_USER_MANAGEMENT   
+  #define WEB_HOME_DIRECTORY                 WEB_USE_USER_MANAGEMENT   
+
 
   #if WEB_HOME_DIRECTORY == WEB_USE_BUILTIN_HOME_DIRECTORY
-    #define WEB_HOME_DIRECTORY "/var/www/html/"    // change according to your needs
+    #define WEB_HOME_DIRECTORY_NAME         "/var/www/html/"    // change according to your needs
   #endif
   
 
-  // DEBUG_LEVEL 5 // error messges
-  // DEBUG_LEVEL 6 // main WebServer activities
-  #define DEBUG_LEVEL 5
-  #include "debugmsgs.h"          // webServer.hpp needs debugmsgs.h
   #include "file_system.h"        // webServer.hpp needs file_system.h
   #if WEB_HOME_DIRECTORY == WEB_USE_USER_MANAGEMENT
     #include "user_management.h"  // webServer.hpp needs user_management.h
   #endif
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp
+  
 
    void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler);
   
@@ -63,7 +63,7 @@
                                                   #if   WEB_HOME_DIRECTORY == WEB_WITHOUT_FILE_SYSTEM
                                                     strcpy (this->__webHomeDirectory__, "not available");
                                                   #elif WEB_HOME_DIRECTORY == WEB_USE_BUILTIN_HOME_DIRECTORY
-                                                    strcpy (this->__webHomeDirectory__, WEB_HOME_DIRECTORY);
+                                                    strcpy (this->__webHomeDirectory__, WEB_HOME_DIRECTORY_NAME);
                                                   #elif WEB_HOME_DIRECTORY == WEB_USE_USER_MANAGEMENT
                                                     char *p = getUserHomeDirectory ("webserver"); 
                                                     if (p && strlen (p) < sizeof (this->__webHomeDirectory__)) strcpy (this->__webHomeDirectory__, p);
@@ -75,7 +75,7 @@
                                                     this->__tcpServer__ = new TcpServer ( __webConnectionHandler__, // worker function
                                                                                           (void *) httpRequestHandler,       // tell TcpServer to pass reference callback function to __webConnectionHandler__
                                                                                           stackSize,                // usually 4 KB will do for webConnectionHandler
-                                                                                          5000,                     // close connection if inactive for more than 5 seconds (fitst calls can be slow)
+                                                                                          5000,                     // close connection if inactive for more than 1,5 seconds
                                                                                           serverIP,                 // accept incomming connections on on specified addresses
                                                                                           serverPort,               // web port
                                                                                           firewallCallback);        // firewall callback function
@@ -102,16 +102,17 @@
 
        
       void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler) {  // connectionHandler callback function
-        dbgprintf63 ("[web][Thread %i][Core %i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
+        log_v ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
         char buffer [512];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         int receivedTotal = buffer [0] = 0;
         while (int received = connection->recvData (buffer + receivedTotal, sizeof (buffer) - receivedTotal - 1)) { // this loop may not seem necessary but TCP protocol does not guarantee that a whole request arrives in a single data block althought it usually does
           buffer [receivedTotal += received] = 0; // mark the end of received request
           if (strstr (buffer, "\r\n\r\n")) { // is the end of HTTP request is reached?
-            dbgprintf64 ("[web][Thread %i][Core %i] new request:\n%s", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
+            log_v ("[Thread:%i][Core:%i] new request:\n%s", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
 
-            // ----- first ask httpRequestHandler (if it is proveided by the calling program) if it is going to handle this HTTP request -----
-            
+            // ----- first ask httpRequestHandler (if it is provided by the calling program) if it is going to handle this HTTP request -----
+
+            log_v ("[Thread:%i][Core:%i] trying to get a reply from calling program\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
             String httpReply;
             unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TCP_SERVER_INFINITE_TIMEOUT); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
             if (httpRequestHandler && (httpReply = ((String (*) (String)) httpRequestHandler) (String (buffer))) != "") {
@@ -123,7 +124,9 @@
             connection->setTimeOut (timeOutMillis); // restore time-out checking
 
             // ----- check if request is of type GET filename - if yes then repy with filename content -----
-            
+
+#if WEB_HOME_DIRECTORY > WEB_WITHOUT_FILE_SYSTEM
+
             char htmlFile [33] = {};
             char fullHtmlFilePath [33];
             if (buffer == strstr (buffer, "GET ")) {
@@ -131,10 +134,14 @@
               if (*htmlFile == '/') strcpy (htmlFile, htmlFile + 1); if (!*htmlFile) strcpy (htmlFile, "index.html");
               if (p = getUserHomeDirectory ("webserver")) {
                 if (strlen (p) + strlen (htmlFile) < sizeof (fullHtmlFilePath)) strcat (strcpy (fullHtmlFilePath, p), htmlFile);
-                File file;
+                
+                xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+                
+                log_v ("[Thread:%i][Core:%i] trying to find file %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), fullHtmlFilePath);
+                File file;                
                 if ((bool) (file = SPIFFS.open (fullHtmlFilePath, FILE_READ))) {
                   if (!file.isDirectory ()) {
-                    dbgprintf62 ("[web] GET %s\n", fullHtmlFilePath);  
+                    log_v ("GET %s\n", fullHtmlFilePath);  
                     char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
                     if (buff) {
                       sprintf (buff, "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nContent-Length:%i\r\n\r\n", file.size ());
@@ -145,12 +152,20 @@
                       }
                       if (i) { connection->sendData ((char *) buff, i); }
                       free (buff);
-                    } 
-                    file.close ();
+                    } else {
+                      log_e ("[Thread:%i][Core:%i] malloc error\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                    }
+                    file.close ();                    
+                    
+                    xSemaphoreGive (SPIFFSsemaphore);
+                    
                     goto closeWebConnection;
                   }
                   file.close ();
-                } 
+                }
+                
+                xSemaphoreGive (SPIFFSsemaphore);
+                
               }
             }
     
@@ -162,18 +177,22 @@
               connection->sendData (buffer, strlen (buffer));
               goto closeWebConnection;
             } 
-           
+
+#endif            
+
+reply404:
+          
             // ----- 404 page not found reply -----
             
             #define response404 "HTTP/1.0 404 Not found\r\nContent-Type:text/html;\r\nContent-Length:20\r\n\r\nPage does not exist." // HTTP header and content
             connection->sendData (response404, strlen (response404)); // send response
-            dbgprintf62 ("[web] response:\n%s\n", response404);   
+            log_v ("response:\n%s\n", response404);   
             
           } // is the end of HTTP request is reached?
         }
       
       closeWebConnection:
-        dbgprintf63 ("[web][Thread %i][Core %i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());    
+        log_v ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());    
       }
 
 #endif

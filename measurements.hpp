@@ -2,12 +2,13 @@
  * 
  * Measurements.hpp 
  * 
- *  This file is part of TcpServer project: https://github.com/BojanJurca/esp32_threaded_TCP_server
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  Measurements.hpp include circular queue for storing measurements data set.
  * 
  * History:
- *          - first release, October 31, 2018, Bojan Jurca
+ *          - first release, 
+ *            October 31, 2018, Bojan Jurca
  *  
  */
 

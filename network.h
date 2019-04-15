@@ -2,28 +2,27 @@
  * 
  * Network.h
  * 
- *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  Network.h reads network configuration from file system and sets both ESP32 network interfaces accordingly
- * 
- * INSTRUCTIONS
- * 
- *  Run Esp32_web_ftp_telnet_server_template the first time with NETWORK_CONNECTION_METHOD == PREPARE_AND_READ_NETWORK_CONFIGURATION 
- *  to generate network configuration files (it is a little awkward why UNIX, LINUX, Raspbian are using so many network 
- *  configuration files and how they are used):
+ *
+ *  It is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used):
  * 
  *    /network/interfaces             - modify the code below with your IP addresses
  *    /etc/wpa_supplicant.conf        - modify the code below with your WiFi SSID and password (this file is used instead of /etc/wpa_supplicant/wpa_supplicant.conf, the latter name is too long to fit into SPIFFS)
  *    /etc/dhcpcd.conf                - modify the code below with your access point IP addresses 
  *    /etc/hostapd/hostapd.conf       - modify the code below with your access point SSID and password
  * 
- *  Once network configuration files are generated there's no need of generating them again, you can switch
- *  NETWORK_CONNECTION_METHOD to ONLY_READ_NETWORK_CONFIGURATION
- * 
  * History:
- *          - first release, November 16, 2018, Bojan Jurca
- *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
- *          - added iw dev wlan1 station dump, December 11, 2018, Bojan Jurca
+ *          - first release, 
+ *            November 16, 2018, Bojan Jurca
+ *          - added ifconfig, arp -a, 
+ *            December 9, 2018, Bojan Jurca
+ *          - added iw dev wlan1 station dump, 
+ *            December 11, 2018, Bojan Jurca
+  *          - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *            simplified installation,
+ *            April 13, 2019, Bojan Jurca
  *  
  */
  
@@ -38,15 +37,7 @@
   #include <lwip/sockets.h>
   #include <esp_wifi.h>
 
-  
-  // change this definitions according to your needs
-  
-  #define PREPARE_AND_READ_NETWORK_CONFIGURATION 1                // this option is normally used ony the first time you run Esp32_web_ftp_telnet_server_template on ESP32
-                                                                  // change networkConnect function below for initial network setup
-  #define ONLY_READ_NETWORK_CONFIGURATION        2                // once the configuration is set, this option is preferable
-  // select one of the above network connection methods
-  #define NETWORK_CONNECTION_METHOD  PREPARE_AND_READ_NETWORK_CONFIGURATION
-  
+ 
   bool networkStationWorking = false;                                         // use this variable to check ESP32 has connected in STAtion mode
   bool networkAccesPointWorking = false;                                      // use this variable to check ESP32 access point is in function
   #define networkWorking (networkStationWorking || networkAccesPointWorking)  // use this definition to check in there is some kond of network connection
@@ -60,10 +51,21 @@
   void connectNetwork () {                                        // connect to the network by calling this function
     if (!SPIFFSmounted) { Serial.printf ("[network] can't read or write network configuration from/to file system since file system is not mounted"); return; }
   
-    #if NETWORK_CONNECTION_METHOD == PREPARE_AND_READ_NETWORK_CONFIGURATION
-      // it is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used
-  
-      // prepare configuration for network interface 1 that will be used latter to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to eisting WiFi)
+    // it is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used
+
+    // prepare configuration for network interface 2 that will be used latter to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to eisting WiFi)
+
+    File file;
+    bool fileExists;
+        
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+
+    // create /network/interfaces if it doesn't exist
+
+    fileExists = (bool) (file = SPIFFS.open ("/network/interfaces", FILE_READ)) && !file.isDirectory ();
+    file.close (); 
+    if (!fileExists) {      
+      Serial.printf ("[network] /network/interfaces does noes exist, creating new one ... ");
       if (File file = SPIFFS.open ("/network/interfaces", FILE_WRITE)) {
       
         String s =  "# only wlan2 can be used to connect to your WiFi\r\n"
@@ -73,58 +75,109 @@
                     "\r\n"
                     "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
                     "#   iface wlan2 inet static\r\n"
-                    "#      address 10.0.0.3\r\n"
-                    "#      netmask 255.255.255.0\r\n"
-                    "#      gateway 10.0.0.1\r\n";
+                    "#      address 10.0.0.3\r\n"                   // change 10.0.0.3 to the IP you want to assigne to your ESP32 in static mode
+                    "#      netmask 255.255.255.0\r\n"              // change 255.255.255.0 to subnet mask you want to assigne to your ESP32 in static mode
+                    "#      gateway 10.0.0.1\r\n";                  // change 10.0.0.1 to your router's IP
       
-        if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
+        if (file.print (s) != s.length ()) { 
+          file.close ();
+          
+          xSemaphoreGive (SPIFFSsemaphore);
+          
+          Serial.printf ("error.\n"); 
+          return; 
+        }
         file.close ();
-        Serial.printf ("/network/interfaces created.\n");
+        Serial.printf ("created.\n");
       }
+    }
+
+    // create /etc/wpa_supplicant.conf if it doesn't exist
+
+    fileExists = (bool) (file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_READ)) && !file.isDirectory ();
+    file.close (); 
+    if (!fileExists) {      
+      Serial.printf ("[network] /etc/wpa_supplicant.conf does noes exist, creating new one ... ");
       if (File file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_WRITE)) {
       
         String s =  "network = {\r\n"
-                    "   ssid = \"YOUR-STA-SSID\"\r\n"               // use your WiFI SSID here
-                    "   psk  = \"YOUR-STA-PASSWORD\"\r\n"           // use your WiFi password here
+                    "   ssid = \"YOUR-STA-SSID\"\r\n"               // change YOUR-STA-SSID to your WiFi SSID here
+                    "   psk  = \"YOUR-STA-PASSWORD\"\r\n"           // change YOUR-STA-PASSWORD to your WiFi password here
                     "}\r\n";
       
-        if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
+        if (file.print (s) != s.length ()) { 
+          file.close ();
+          
+          xSemaphoreGive (SPIFFSsemaphore);
+          
+          Serial.printf ("error.\n"); 
+          return; 
+        }
         file.close ();
-        Serial.printf ("/etc/wpa_supplicant.conf created.\n");
-      } else {
-        Serial.printf ("[network] can't write network configuration to file system");
-        return;      
+        Serial.printf ("created.\n");
       }
-  
-      // prepare configuration for network interface 0 that will be used latter to start WiFi access point (skip this if you don't want ESP32 to be an access point)
+    }
+
+    // prepare configuration for network interface 1 that will be used latter to start WiFi access point (skip this if you don't want ESP32 to be an access point)
+
+    // create /etc/wpa_supplicant.conf if it doesn't exist
+
+    fileExists = (bool) (file = SPIFFS.open ("/etc/dhcpcd.conf", FILE_READ)) && !file.isDirectory ();
+    file.close (); 
+    if (!fileExists) {      
+      Serial.printf ("[network] /etc/dhcpcd.conf does noes exist, creating new one ... ");
       if (File file = SPIFFS.open ("/etc/dhcpcd.conf", FILE_WRITE)) {
       
         String s =  "# only static IP addresses can be used for acces point and only wlan1 can be used (example below)\r\n"
                     "\r\n"
                     "interface wlan1\r\n"
-                    "   static ip_address = 10.0.1.3\r\n"           // set your access point IP addresses here
-                    "          netmask = 255.255.255.0\r\n"
-                    "          gateway = 10.0.1.3\r\n";
+                    "   static ip_address = 10.0.1.3\r\n"           // change 10.0.1.3 to the access point IP your ESP32 will have here
+                    "          netmask = 255.255.255.0\r\n"         // change 255.255.255.0 to the access point subnet mask your ESP32 will have here
+                    "          gateway = 10.0.1.3\r\n";             // change 10.0.1.3 to the access point IP your ESP32 will have here
       
-        if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
+        if (file.print (s) != s.length ()) { 
+          file.close ();
+          
+          xSemaphoreGive (SPIFFSsemaphore);
+          
+          Serial.printf ("error.\n"); 
+          return; 
+        }
         file.close ();
-        Serial.printf ("/etc/dhcpcd.conf created.\n");
+        Serial.printf ("created.\n");
       }
+    }
+
+    // create /etc/hostapd/hostapd.conf if it doesn't exist
+
+    fileExists = (bool) (file = SPIFFS.open ("/etc/hostapd/hostapd.conf", FILE_READ)) && !file.isDirectory ();
+    file.close (); 
+    if (!fileExists) {      
+      Serial.printf ("[network] /etc/hostapd/hostapd.conf does noes exist, creating new one ... ");      
       if (File file = SPIFFS.open ("/etc/hostapd/hostapd.conf", FILE_WRITE)) {
       
         String s =  "# only wlan1 can be used for access point\r\n"
                     "\r\n"
                     "interface = wlan1\r\n"
-                    "   ssid = ESP_SRV\r\n"                     // set your access point SSID here
+                    "   ssid = ESP32_SRV\r\n"                      // change ESP32_SRV to your access point SSID here
                     "   # use at least 8 characters for wpa_passphrase\r\n"
-                    "   wpa_passphrase = YOUR-AP-PASSWORD\r\n"; // set your access point password here
+                    "   wpa_passphrase = YOUR-AP-PASSWORD\r\n";    // change YOUR-AP-PASSWORD to your access point password here
       
-        if (file.print (s) != s.length ()) { file.close (); Serial.printf ("[network] can't write network configuration to file system"); return; }
+        if (file.print (s) != s.length ()) { 
+          file.close ();
+          
+          xSemaphoreGive (SPIFFSsemaphore);
+          
+          Serial.printf ("error.\n"); 
+          return; 
+        }
         file.close ();
-        Serial.printf ("/etc/hostapd/hostapd.conf created.\n");
+        Serial.printf ("created.\n");
       }
-    #endif
-  
+    }
+      
+    xSemaphoreGive (SPIFFSsemaphore);
+      
     // read network configuration from configuration files and set it accordingly
     String staSSID = "";
     String staPassword = "";
@@ -216,7 +269,7 @@
       } // else go with DHCP
       WiFi.begin (staSSID.c_str (), staPassword.c_str ());
       Serial.printf ("[network][STA] connecting ...\n");
-      for (unsigned long i = 0; i < 240000; i++) if (WiFi.status () == WL_CONNECTED) break; else {if (!(i % 1000)) Serial.printf ("[network][STA] connecting ...\n"); delay (1);}
+      for (unsigned long i = 0; i < 240000; i++) if (WiFi.status () == WL_CONNECTED) break; else {if (!(i % 1000)) Serial.printf ("[network][STA] connecting ...\n"); SPIFFSsafeDelay (1);}
       if (WiFi.status () != WL_CONNECTED) {
         // ESP.restart ();
         Serial.printf ("[network][STA] failed to connect to %s in station mode\n", staSSID.c_str ());
@@ -286,7 +339,7 @@
     }
     return s;
   }
-  
+
   // ----- ifconfig -----
   
   String ifconfig () {
@@ -342,7 +395,7 @@
     if (!arp_table) {
       byte offset = (byte *) &arp_table->ipaddr - (byte *) arp_table;
       struct eth_addr *mac;
-      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is not accessible right now.\r\n"; // first entry is not stable
+      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is no acessible right now.\r\n"; // first entry is not stable
       arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset);
     }
     // we've got a pointer to ARP table, now scan if for each netif  

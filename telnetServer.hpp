@@ -2,7 +2,7 @@
  * 
  * TelnetServer.hpp
  * 
- *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  *  TelnetServer is built upon TcpServer with connectionHandler that handles TcpConnection according to telnet protocol.
  * 
@@ -11,9 +11,14 @@
  *  request. If not, the connectionHandler will try to process it.
  * 
  * History:
- *          - first release, November 29, 2018, Bojan Jurca
- *          - added ifconfig, arp -a, December 9, 2018, Bojan Jurca
- *          - added iw dev wlan1 station dump, December 11, 2018, Bojan Jurca          
+ *          - first release, 
+ *            November 29, 2018, Bojan Jurca
+ *          - added ifconfig, arp -a, 
+ *            December 9, 2018, Bojan Jurca
+ *          - added iw dev wlan1 station dump, 
+ *            December 11, 2018, Bojan Jurca          
+ *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *            April 13, 2019, Bojan Jurca
  *  
  */
 
@@ -25,13 +30,10 @@
 
   #define TELNET_HELP_FILE    "help.txt" // content of this file (licated in telnetserver home directory, /var/telnet by default) will be displayed when user types "help" command
   
-  // DEBUG_LEVEL 5 // error messges
-  // DEBUG_LEVEL 6 // main telnetServer activities
-  #define DEBUG_LEVEL 5
-  #include "debugmsgs.h"          // telnetServer.hpp needs debugmsgs.h
   #include "file_system.h"        // telnetServer.hpp needs file_system.h
   #include "user_management.h"    // telnetServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp
+
 
     void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler);
   
@@ -75,7 +77,7 @@
       String ping (TcpConnection *, char *, int, int, int, int);
        
       void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
-        dbgprintf63 ("[telnet][Thread %i][Core %i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
+        log_i ("[Thread:%i][Core:%i] connection started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
         char prompt1 [] = "\r\n# "; // root user's prompt
         char prompt2 [] = "\r\n$ "; // other users' prompt
         char *prompt = prompt1;
@@ -128,7 +130,7 @@
                         if (k) {
                           cmdLine [k] = 0;
                           char *p; while (p = strstr (cmdLine, "  ")) strcpy (p, p + 1); // compact cmdLine
-                          dbgprintf64 ("[telnet][Thread %lu][Core %i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), cmdLine);
+                          log_v ("[Thread:%lu][Core:%i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), cmdLine);
 
                           // ----- if the user has not logged in yet then the first command that arrives holds user name -----
 
@@ -293,7 +295,7 @@
                                                    connection->sendData ("\r\n\nrebooting ...", strlen ("\r\n\nrebooting ..."));
                                                    connection->closeConnection ();
                                                    Serial.printf ("\r\n\nreboot requested via telnet ...\r\n\n");
-                                                   delay (1000);
+                                                   SPIFFSsafeDelay (1000);
                                                    ESP.restart ();
                                                  }
 
@@ -357,18 +359,27 @@
           if (buffer [j] && loggedIn < READING_PASSWORD) connection->sendData (buffer + j, strlen (buffer + j)); // echo back to client characters from j further
         } // read and process incomming data in a loop
       closeTelnetConnection:
-          dbgprintf63 ("[telnet][Thread %i][Core %i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
+          log_i ("[Thread:%i][Core:%i] connection ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
       }
 
       bool __ls__ (TcpConnection *connection, String directory) {
         char d [33]; *d = 0; if (directory.length () < sizeof (d)) strcpy (d, directory.c_str ()); if (strlen (d) > 1 && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
         String s = "\r\n\n";
+
+        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+        
         File dir = SPIFFS.open (d);
         if (!dir) {
+          
+          xSemaphoreGive (SPIFFSsemaphore);
+          
           connection->sendData ("\r\n\nFailed to open directory.\r\n", strlen ("\r\n\nFailed to open directory.\r\n"));
           return false;
         }
         if (!dir.isDirectory ()) {
+
+          xSemaphoreGive (SPIFFSsemaphore);
+          
           connection->sendData ("\r\n\nInvalid directory.", strlen ("\r\n\nInvalid directory.")); 
           return false;
         }
@@ -381,6 +392,9 @@
           }
           file = dir.openNextFile ();
         }
+
+        xSemaphoreGive (SPIFFSsemaphore);
+        
         connection->sendData ((char *) s.c_str (), s.length ());
         return true;
       }
@@ -388,6 +402,9 @@
       bool __cat__ (TcpConnection *connection, String fileName) {
         bool retVal = false;
         File file;
+
+        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+        
         if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
           if (!file.isDirectory ()) {
             char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
@@ -398,7 +415,7 @@
                 switch (*(buff + i) = file.read ()) {
                   case '\r':  // ignore
                               break;
-                  case '\n':  // cr-lf conversion
+                  case '\n':  // crlf conversion
                               *(buff + i ++) = '\r'; 
                               *(buff + i ++) = '\n';
                               break;
@@ -418,15 +435,27 @@
           }
           file.close ();
         } 
+
+        xSemaphoreGive (SPIFFSsemaphore);
+        
         return retVal;
       }
 
       bool __rm__ (TcpConnection *connection, String fileName) {
+        
+        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+        
         if (SPIFFS.remove (fileName)) {
+
+          xSemaphoreGive (SPIFFSsemaphore);
+          
           String s = "\r\n\n" + fileName + " deleted.\r\n";
           connection->sendData ((char *) s.c_str (), s.length ()); 
           return true;
         } else {
+
+          xSemaphoreGive (SPIFFSsemaphore);
+          
           String s = "\r\n\nFailed to delete " + fileName + ".\r\n";
           connection->sendData ((char *) s.c_str (), s.length ()); 
           return false;          
@@ -609,7 +638,7 @@
     
     while ((pds.pingSeqNum < pingCount) && (!pds.stopped)) {
       if (pingSend (&pds, s, &pingTarget, pingSize) == ERR_OK) pingRecv (&pds, telnetConnection, s);
-      delay (pingInterval * 1000L);
+      SPIFFSsafeDelay (pingInterval * 1000L);
     }
   
     closesocket (s);
@@ -624,5 +653,5 @@
     }
     return ""; // false
   }
-  
+
 #endif

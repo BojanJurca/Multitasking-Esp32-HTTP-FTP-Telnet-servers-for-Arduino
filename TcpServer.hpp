@@ -2,7 +2,7 @@
  *
  * TcpServer.hpp
  *
- *  This file is part of TcpServer project (no longer available by itself)
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  *
  *  TcpServer.hpp contains a minimalistic IPv4 threaded TCP server for ESP32 / Arduino environment with:
  *    - time-out functionality,
@@ -14,30 +14,23 @@
  *    - non-threaded TcpServer (with time-out functionality while waiting for a connection, firewall functionality),
  *    - TcpConnection (with time-out functionality while handling a connection),
  *    - non-threaded TcpClient (with time-out functionality while handling the connection).
- *  The use of all four types of objects is demonstrated in Web_Telnet_Ftp_demo.ino example: https://github.com/BojanJurca/esp32_threaded_TCP_server
  *   
  * History:
- *          - first release, October 31, 2018, Bojan Jurca
- *          - added user-defined connectionHandler parameter, added TcpConnection::getTimeOut (), November 22, 2018, Bojan Jurca
+ *          - first release, 
+ *            October 31, 2018, Bojan Jurca
+ *          - added user-defined connectionHandler parameter, added TcpConnection::getTimeOut (), 
+ *            November 22, 2018, Bojan Jurca
+ *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *            April 13, 2019, Bojan Jurca
  *  
  */
 
 #ifndef __TCP_SERVER__
   #define __TCP_SERVER__
   
-  
-  // #define DEBUG_LEVEL 5 // error messges
-  // #define DEBUG_LEVEL 6 // main TcpServer activities
-  // #define DEBUG_LEVEL 7 // execution sequence of functions (at least some of them)
-  #ifndef DEBUG_LEVEL
-    #define DEBUG_LEVEL 5
-  #endif  
-  #include "debugmsgs.h"
-  
   #include <lwip/sockets.h>
-  
+
   #define TCP_SERVER_INFINITE_TIMEOUT 0
-  
   
   // TcpConnection can be used in two different modes:
   // - threaded TcpConnection creates a new thread and runs connectionHandlerCallback function through it
@@ -47,9 +40,28 @@
   //    TO DO: make constructor return NULL in unsuccessful
   // - non-threaded TcpConnection can be controlled from calling program
   //    you must delete () instance yourself when no longer needed
-  
+
+      // controll TcpServer critical sections
       portMUX_TYPE csTcpConnectionInternalStructure = portMUX_INITIALIZER_UNLOCKED;
-  
+
+      // controll vTaskDelay - vTaskSuspendAll multi-threading problem while accessing SPIFFS file system (see https://www.esp32.com/viewtopic.php?t=7876)
+      SemaphoreHandle_t __createSPIFSSsemaphore__ () {
+        SemaphoreHandle_t s;
+        vSemaphoreCreateBinary (s);  
+        return s;
+      }
+      SemaphoreHandle_t SPIFFSsemaphore = __createSPIFSSsemaphore__ (); // create sempahore during initialization while ESP32 still runs in a single thread
+
+      void SPIFFSsafeDelay (unsigned int ms) { // use this function instead of delay ()
+        unsigned int msStart = millis ();
+        while (millis () - msStart < ms) {
+          if (xSemaphoreTake (SPIFFSsemaphore, (TickType_t) (ms - (millis () - msStart) / portTICK_PERIOD_MS)) != pdTRUE) return; // nothing to do, we have already waited ms milliseconds
+          delay (1); // it is safe now to go into vTaskDelay since vTaskSuspendAll will not be called from spi_flash functions
+          xSemaphoreGive (SPIFFSsemaphore);
+        }
+      }
+
+
       void __connectionHandler__ (void *threadParameters);
   
   class TcpConnection {                                             
@@ -64,7 +76,7 @@
                       char *otherSideIP,                            // IP address of the other side of connection - 15 characters at most!
                       unsigned long timeOutMillis)                  // connection time-out in milli seconds
                                                 {             
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                   // copy constructor parameters to local structure
                                                   this->__connectionHandlerCallback__ = connectionHandlerCallback;
                                                   this->__connectionHandlerCallbackParamater__ = connectionHandlerCallbackParamater;
@@ -82,11 +94,11 @@
                                                                                 tskNORMAL_PRIORITY,
                                                                                 NULL)) {
                                                       this->__threadStarted__ = false;
-                                                      dbgprintf54 ("[TcpConnection][Thread %lu][Core %i][Socket %i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                       // TO DO: make constructor return NULL
                                                     } 
                                                   } 
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                 }
   
       // non-threaded mode constructor
@@ -94,38 +106,38 @@
                       char *otherSideIP,                            // IP address of the other side of connection - 15 characters at most!
                       unsigned long timeOutMillis)                  // connection time-out in milli seconds
                                                 {             
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                   // copy constructor parameters to local structure
                                                   this->__socket__ = socket;
                                                   strcpy (this->__otherSideIP__, otherSideIP);
                                                   this->__timeOutMillis__ = timeOutMillis; 
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                 }
                                               
       ~TcpConnection ()                         {
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                   // close connection socket if it is still opened - this will, in consequence, cause __connectionHandlerCallback__ to finish - 
                                                   // we may not use vTaskDelete here since __connectionHandlerCallback__ variables would still remain in memory which would cause memory leaks - 
                                                   // __connectionHandlerCallback__ must finish regulary by itself and clean up ist memory before returning
                                                   this->closeConnection (); 
                                                   // wait for __connectionHandler__ to finish before releasing the memory occupied by this instance
-                                                  if (this->__threadStarted__) while (!this->__threadEnded__) delay (1);
+                                                  if (this->__threadStarted__) while (!this->__threadEnded__) SPIFFSsafeDelay (1);
                                                   // __connectionHandler__ thread will terminate itself
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                 }
   
       void closeConnection ()                   {
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] closeConnection {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] closeConnection {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                   int connectionSocket;
                                                   portENTER_CRITICAL (&csTcpConnectionInternalStructure);
                                                     connectionSocket = this->__socket__;
                                                     this->__socket__ = -1;
                                                   portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
                                                   if (connectionSocket != -1) { // can not close socket inside of critical section
-                                                    if (shutdown (connectionSocket, SHUT_RDWR) == -1) dbgprintf55 ("[TcpConnection][Thread %i][Core %i][Socket %i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
-                                                    if (close (connectionSocket) == -1)               dbgprintf55 ("[TcpConnection][Thread %i][Core %i][Socket %i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno); 
+                                                    if (shutdown (connectionSocket, SHUT_RDWR) == -1) log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
+                                                    if (close (connectionSocket) == -1)               log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno); 
                                                   }  
-                                                  dbgprintf74 ("[TcpConnection][Thread %lu][Core %i][Socket %i] } closeConnection\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);  
+                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } closeConnection\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);  
                                                 }
   
       char *getThisSideIP ()                    {
@@ -134,7 +146,7 @@
                                                   struct sockaddr_in thisAddress = {};
                                                   socklen_t len = sizeof (thisAddress);
                                                   if (getsockname (this->__socket__, (struct sockaddr *) &thisAddress, &len) == -1) {
-                                                    dbgprintf55 ("[TcpConnection][Thread %lu][Core %i][Socket %i] getThisSideIP: getsockname () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
+                                                    log_e ("[Thread:%lu][Core:%i][Socket:%i] getThisSideIP: getsockname () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
                                                     *this->__thisSideIP__ = 0; // return empty string rather than NULL (error handling is easier - you can sscanf () from "" but not from NULL)
                                                   } else {
                                                     portENTER_CRITICAL (&csTcpConnectionInternalStructure);
@@ -159,19 +171,19 @@
                                                                 #define ENAVAIL 119
                                                                 if (errno == EAGAIN || errno == ENAVAIL) {
                                                                   if ((this->__timeOutMillis__ == TCP_SERVER_INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ < this->__timeOutMillis__)) { // non-blocking -----
-                                                                    delay (1);
+                                                                    SPIFFSsafeDelay (1);
                                                                     break;
                                                                   }
                                                                 }
                                                                 // else close and continue to case 0
                                                                 this->__timeOut__ = true;
                                                                 this->closeConnection ();
-                                                                dbgprintf54 ("[TcpConnection][Thread %lu][Core %i][Socket %i] recvData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                                log_e ("[Thread:%lu][Core:%i][Socket:%i] recvData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                       case 0:   // connection is already closed
                                                                 return 0;
                                                       default:  
                                                                 this->__lastActiveMillis__ = millis ();
-                                                                dbgprintf65 ("[TcpConnection][Thread %lu][Core %i][Socket %i] recvData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, recvTotal);
+                                                                log_i ("[Thread:%lu][Core:%i][Socket:%i] recvData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, recvTotal);
                                                                 return recvTotal;
                                                     }
                                                   }
@@ -184,21 +196,21 @@
                                                   #define min(a,b) ((a)<(b)?(a):(b))
                                                   while (bufferSize) {
                                                     if (this->__socket__ == -1) return writtenTotal; 
-                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, 2048), 0)) { // ESP can send packets length of max 2 KB
+                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, 2048), 0)) { // ESP can send packets length of max 2 KB but let's go with MTU (default) size of 1500
                                                       case -1:
                                                                 // Serial.printf ("sendData errno: %i timeout: %i\n", errno, millis () - this->__lastActiveMillis__);
                                                                 #define EAGAIN 11
                                                                 #define ENAVAIL 119
                                                                 if (errno == EAGAIN || errno == ENAVAIL) {
                                                                   if ((this->__timeOutMillis__ == TCP_SERVER_INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ < this->__timeOutMillis__)) { 
-                                                                    delay (1);
+                                                                    SPIFFSsafeDelay (1);
                                                                     break;
                                                                   }
                                                                 }
                                                                 // else close and continue to case 0
                                                                 this->__timeOut__ = true;
                                                                 this->closeConnection ();
-                                                                dbgprintf54 ("[TcpConnection][Thread %lu][Core %i][Socket %i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                                log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                       case 0:   // socket is already closed
                                                                 return writtenTotal;
                                                       default:
@@ -209,7 +221,7 @@
                                                                 break;
                                                     }
                                                   }  
-                                                  dbgprintf65 ("[TcpConnection][Thread %lu][Core %i][Socket %i] sendData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, writtenTotal);
+                                                  log_i ("[Thread:%lu][Core:%i][Socket:%i] sendData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, writtenTotal);
                                                   return writtenTotal;
                                                 }
   
@@ -226,9 +238,9 @@
       unsigned long getTimeOut ()               { return this->__timeOutMillis__; } // returns time-out milliseconds
   
       void __callConnectionHandlerCallback__ () {                                       // calls connection handler function (just one time from another thread)
-                                                  dbgprintf64 ("[TcpConnection][Thread %lu][Core %i][Socket %i] connection has started\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  log_i ("[Thread:%lu][Core:%i][Socket:%i] connection started\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                   if (this->__connectionHandlerCallback__) this->__connectionHandlerCallback__ (this, this->__connectionHandlerCallbackParamater__);
-                                                  dbgprintf64 ("[TcpConnection][Thread %lu][Core %i][Socket %i] connection has ended\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  log_i ("[Thread:%lu][Core:%i][Socket:%i] connection ended\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                 }
   
       void __ended__ ()                         { this->__threadEnded__ = true; } // sets "ended" flag - only used by connection thread to signal its state for proper instance unload
@@ -254,11 +266,11 @@
       void __connectionHandler__ (void *threadParameters)               // envelope for connection handler callback function
                                                 {                
                                                   TcpConnection *ths = (TcpConnection *) threadParameters; // get "this" pointer
-                                                  dbgprintf73("[TcpConnection][Thread %lu][Core %i] __connectionHandler__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] __connectionHandler__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   ths->__callConnectionHandlerCallback__ ();
                                                   ths->__ended__ (); // tell destructor it is OK to unload - from this point further we may no longer access instance memory (variables, functions, ...)
                                                   delete (ths);
-                                                  dbgprintf73 ("[TcpConnection][Thread %lu][Core %i] } __connectionHandler__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] } __connectionHandler__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   vTaskDelete (NULL);
                                                 }
   
@@ -289,7 +301,7 @@
                       int serverPort,                                       // server port
                       bool (* firewallCallback) (char *)                    // a reference to callback function that will be celled when new connection arrives 
                      )                          {
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   // copy constructor parameters to local structure
                                                   this->__connectionHandlerCallback__ = connectionHandlerCallback;
                                                   this->__connectionHandlerCallbackParameter__ = connectionHandlerCallbackParameter;
@@ -309,10 +321,10 @@
                                                                              tskNORMAL__PRIORITY,
                                                                              NULL)) {
                                                     this->__threadStarted__ = false;
-                                                    dbgprintf53 ("[TcpServer][Thread %lu][Core %i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+                                                    log_e ("[Thread:%lu][Core:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
                                                     // TO DO: make constructor return NULL
                                                   } 
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
                                                 
       // constructor of a non-threaded TCP server
@@ -321,7 +333,7 @@
                       int serverPort,                               // server port
                       bool (* firewallCallback) (char *)            // a reference to callback function that will be celled when new connection arrives 
                      )                          {
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   // copy constructor parameters to local structure
                                                   this->__timeOutMillis__ = timeOutMillis;
                                                   strcpy (this->__serverIP__, serverIP);  
@@ -337,18 +349,18 @@
                                                                              tskNORMAL__PRIORITY,
                                                                              NULL)) {
                                                     this->__threadStarted__ = false;
-                                                    dbgprintf53 ("[TcpServer][Thread %lu][Core %i] non-threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
                                                     // TO DO: make constructor return NULL
                                                   } 
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
       ~TcpServer ()                             {
-                                                  dbgprintf73 ("[TcpServer][Thread %lu] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   if (this->__connection__) delete (this->__connection__); // close non-threaded mode connection if it has been established
                                                   this->__instanceUnloading__ = true; // signal __listener__ to stop
-                                                  if (this->__threadStarted__) while (!this->__threadEnded__) delay (1); // wait for __listener__ to finish before releasing the memory occupied by this instance
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  if (this->__threadStarted__) while (!this->__threadEnded__) SPIFFSsafeDelay (1); // wait for __listener__ to finish before releasing the memory occupied by this instance
+                                                  log_v ("[Thread:%lu][Core:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
       char *getServerIP ()                      { return this->__serverIP__; } // information from constructor
@@ -361,7 +373,7 @@
                                                   if (this->__threadedMode__ ()) return false; // time-out makes no sense for threaded TcpServer
                                                   if (this->__timeOutMillis__ == TCP_SERVER_INFINITE_TIMEOUT) return false;
                                                   else if (millis () - this->__lastActiveMillis__ > this->__timeOutMillis__) {
-                                                    dbgprintf53 ("[TcpServer][Thread %lu][Core %i] time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                    log_e ("[Thread:%lu][Core:%i] time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                     return true;
                                                   } else return false;
                                                 }      
@@ -387,7 +399,7 @@
                                                     if (newConnection) {
                                                       if (!newConnection->started ()) {delete (newConnection);} // also closes the connection
                                                     } else {
-                                                      dbgprintf54 ("[TcpServer][Thread %lu][Core %i][Socket %i] new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket);
+                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket);
                                                       close (connectionSocket); // close the connection 
                                                     }
                                                   } else { // in non-threaded mode create non-threaded TcpConnection instance
@@ -419,15 +431,15 @@
       // memory leaks appeard at full load - putting function outside of class somehow fixes it
       void __listener__ (void *taskParameters)  {                   // listener running in its own thread
                                                   TcpServer *ths = (TcpServer *) taskParameters; // "this" pointer
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] __listener__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] __listener__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   while (!ths->__unloading__ ()) { // prepare listener socket - repeat this in a loop in case something goes wrong 
                                                     int listenerSocket;
                                                     // make listener TCP socket (SOCK__STREAM) for Internet Protocol Family (PF__INET)
                                                     // Protocol Family and Address Family are connected (PF__INET protokol and AF__INET)
                                                     listenerSocket = socket (PF_INET, SOCK_STREAM, 0);
                                                     if (listenerSocket == -1) {
-                                                      dbgprintf54 ("[TcpServer][Thread %lu][Core %i] __listener__: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
-                                                      delay (1000); // try again after 1 s
+                                                      log_e ("[Thread:%lu][Core:%i] __listener__: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                      SPIFFSsafeDelay (1000); // try again after 1 s
                                                       continue;
                                                     }
                                                     // bind listenr socket to IP address and port
@@ -437,30 +449,30 @@
                                                     serverAddress.sin_addr.s_addr = inet_addr (ths->getServerIP ());
                                                     serverAddress.sin_port = htons (ths->getServerPort ());
                                                     if (bind (listenerSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                                                      dbgprintf55 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: bind () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
+                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: bind () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                       close (listenerSocket);
-                                                      delay (1000); // try again after 1 s
+                                                      SPIFFSsafeDelay (1000); // try again after 1 s
                                                       continue;
                                                     }
                                                     // mark socket as listening socket
                                                     #define BACKLOG 5 // queue lengthe of (simultaneously) arrived connections - actual active connection number might me larger 
                                                     if (listen (listenerSocket, BACKLOG) == -1) {
-                                                      dbgprintf55 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: listen () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
+                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listen () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                       close (listenerSocket);
-                                                      delay (1000); // try again after 1 s
+                                                      SPIFFSsafeDelay (1000); // try again after 1 s
                                                       continue;
                                                     }
                                                     // make socket non-blocking
                                                     if (fcntl (listenerSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                      dbgprintf55 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: listener socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
+                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listener socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                       close (listenerSocket);
-                                                      delay (1000); // try again after 1 s
+                                                      SPIFFSsafeDelay (1000); // try again after 1 s
                                                       continue;
                                                     }
-                                                    dbgprintf65 ("[TcpServer][Thread %lu][Core %i] __listener__: started accepting connections on %s : %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), ths->getServerIP (), ths->getServerPort ());
+                                                    log_i ("[Thread:%lu][Core:%i] __listener__: started accepting connections on %s : %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), ths->getServerIP (), ths->getServerPort ());
   
                                                     while (!ths->__unloading__ ()) { // handle incomming connections
-                                                      delay (1);
+                                                      SPIFFSsafeDelay (1);
                                                       if (!ths->__threadedMode__ ()) { // checing time-out makes sense only when working as non-threaded TCP server
                                                         if (ths->timeOut ()) goto terminateListener;
                                                       }
@@ -470,16 +482,16 @@
                                                       socklen_t connectingAddressSize = sizeof (connectingAddress);
                                                       connectionSocket = accept (listenerSocket, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                                                       if (connectionSocket != -1) { // non-blocking socket keeps returning -1 until new connection arrives
-                                                        dbgprintf65 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: new connection from %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                        log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: new connection from %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
                                                         if (!ths->__callFirewallCallback__ (inet_ntoa (connectingAddress.sin_addr))) {
                                                           close (connectionSocket);
-                                                          dbgprintf55 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: %s was rejected by firewall\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                          log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: %s was rejected by firewall\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
                                                           continue;
                                                         } else {
-                                                          dbgprintf65 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: firewall let %s through\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                          log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: firewall let %s through\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
                                                         }
                                                         if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                          dbgprintf55 ("[TcpServer][Thread %lu][Core %i][Socket %i] __listener__: connection socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, errno);
+                                                          log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: connection socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, errno);
                                                           close (connectionSocket);
                                                           continue;
                                                         }
@@ -490,7 +502,7 @@
                                                   } // prepare listener socket
   terminateListener:
                                                   ths->__ended__ (); // tell destructor it is OK to unload - from this point further we may no longer access instance memory (variables, functions, ...)
-                                                  dbgprintf73 ("[TcpServer][Thread %lu][Core %i] } __listener__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] } __listener__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   vTaskDelete (NULL); // terminate this thread                    
                                                 }
   
@@ -509,18 +521,18 @@
                       int serverPort,                               // server port
                       unsigned long timeOutMillis                   // connection time-out in milli seconds
                      )                          {
-                                                  dbgprintf73 ("[TcpClient][Thread %lu][Core %i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
-                                                  // make TCP socket (SOCK__STREAM) for Internet Protocol Family (PF__INET)
+                                                  log_v ("[Thread:%lu][Core:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // make TCP socket (SOCK_STREAM) for Internet Protocol Family (PF_INET)
                                                   // Protocol Family and Address Family are connected (PF__INET protokol and AF__INET)
                                                   int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
                                                   if (connectionSocket == -1) {
-                                                    dbgprintf54 ("[TcpClient][Thread %lu][Core %i] non-threaded constructor: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                     return;
                                                   }
                                                   // make the socket non-blocking - needed for time-out detection
                                                   if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
                                                     close (connectionSocket);
-                                                    dbgprintf54 ("[TcpClient][Thread %lu][Core %i] non-threaded constructor: fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                     return;
                                                   }
                                                   // connect to server
@@ -533,7 +545,7 @@
                                                     #define EINPROGRESS 119
                                                     if (errno != EINPROGRESS) {
                                                       close (connectionSocket);
-                                                      dbgprintf54 ("[TcpClient][Thread %lu][Core %i] non-threaded constructor: connect () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                      log_e ("[Thread:%lu][Core:%i] non-threaded constructor: connect () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                       return;
                                                     }
                                                   } // it is likely that socket is not opened yet at this point
@@ -541,16 +553,16 @@
                                                   this->__connection__ = new TcpConnection (connectionSocket, serverIP, timeOutMillis);
                                                   if (!this->__connection__) {
                                                     close (connectionSocket);
-                                                    dbgprintf53 ("[TcpClient][Thread %lu][Core %i] non-threaded constructor: new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                     return;                                                  
                                                   }
-                                                  dbgprintf73 ("[TcpClient][Thread %lu][Core %i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
       ~TcpClient ()                             {
-                                                  dbgprintf73 ("[TcpClient][Thread %lu][Core %i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  log_v ("[Thread:%lu][Core:%i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   delete (this->__connection__);
-                                                  dbgprintf73 ("[TcpClient][Thread %lu][Core %i] } destructor \n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());      
+                                                  log_v ("[Thread:%lu][Core:%i] } destructor \n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());      
                                                 }
   
       TcpConnection *connection ()              { return this->__connection__; } // calling program will handle the connection through this reference - connection is set, before constructor returns but TCP connection may not be established (yet) at this time or possibly even not at all
