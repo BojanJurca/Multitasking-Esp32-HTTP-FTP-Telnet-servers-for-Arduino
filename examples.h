@@ -36,7 +36,7 @@ void example01_filesAndDelays () {
       Serial.printf ("[example 01] can't read file /ID\n");
     }
     
-    xSemaphoreGive (SPIFFSsemaphore); // alwys give SPIFFSsemaphore when SPIFSS operation completes
+    xSemaphoreGive (SPIFFSsemaphore); // always give SPIFFSsemaphore when SPIFSS operation completes
     
     SPIFFSsafeDelay (1000); // always use SPIFFSsafeDelay() instead of delay()
   }
@@ -96,10 +96,139 @@ void example03_makeRestCall () {
 }
 
 
+// Example 06 - a simple echo server except that it echos Morse code back to the client
+    
+void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameter); // connection handler callback function
+
+void example06_morseEchoServer () {
+  // start new TCP server
+  TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler, // function that is going to handle the connections
+                                       NULL,      // no additional parameter will be passed to morseEchoServerConnectionHandler function
+                                       4096,      // 4 KB stack for morseEchoServerConnectionHandler is usually enough
+                                       180000,    // time-out - close connection if it is inactive for more than 3 minutes
+                                       "0.0.0.0", // serverIP, 0.0.0.0 means that the server will accept connections on all available IP addresses
+                                       24,        // server port number, 
+                                       NULL);     // don't use firewall in this example
+  // check success
+  if (myServer->started ()) {
+    Serial.printf ("[example 06] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
+  
+    // let the server run for 30 seconds - this much time you have to connect to it to test how it works
+    SPIFFSsafeDelay (30000);
+  
+    // shut down the server - is any connection is still active it will continue to run anyway
+    delete (myServer);
+    Serial.printf ("[example 06] Morse echo server stopped, already active connections will continue to run anyway\n");
+  } else {
+    Serial.printf ("[example 06] unable to start Morse echo server\n");
+  }
+}
+
+void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
+  Serial.printf ("[example 06] new connection arrived from %s\n", connection->getOtherSideIP ());
+  
+  char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
+  char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
+  int bytesToSend;
+  // construct Morse table. Mate it static so it won't use the stack
+  static char *morse [38] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
+                             "..... ", "-.... ", "--... ", "---.. ", "----- ", // 5, 6, 7, 8, 9
+                             "", "   ", 
+                             ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
+                             "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
+                             "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
+                             ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
+                             "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
+                             "--.. "};                                         // Z
+  char finiteState = ' '; // finite state machine to detect quit, valid states are ' ', 'q', 'u', 'i', 't'
+  char c;
+  int index;  
+  
+  // send welcome reply first as soon as new connection arrives - in a readable form
+  #define IAC 255
+  #define DONT 254
+  #define ECHO 1
+  sprintf (outputBuffer, "Type anything except quit. Quit will end the connection.%c%c%c\r\n", IAC, DONT, ECHO); 
+  // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
+  // to test this example it is a good idea to communicate with it in the way it understands
+  bytesToSend = strlen (outputBuffer);
+  if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
+    *outputBuffer = 0; // mark outputBuffer as empty
+    Serial.printf ("[example 06] error while sending response\n");
+    goto endThisConnection;
+  }
+  *outputBuffer = 0; // mark outputBuffer as empty
+  
+  // Read and process input stream in endless loop, detect "quit" substring. 
+  // If "quit" substring is present then end this connection.
+  // If 0 bytes arrive then the client has ended the connection or there are problems in communication.
+  while (int received = connection->recvData (inputBuffer, sizeof (inputBuffer))) {
+    for (int i = 0; i < received; i ++) {
+      // calculate index of morse table entry
+      c = inputBuffer [i];
+      if (c == ' ') index = 11;           // space in morse table
+      else if (c < '0') index = 10;       // no character in morse table
+      else if (c <= 'Z') index = c - '0'; // letter in morse table
+      else index = c - 'a' + 12;          // letter converted to upper case in morse table
+      if (index >= 38) index = 10;        // no character in morse table
+      
+      // fill outputBuffer it there is still some space left otherwise empty it
+      if (strlen (outputBuffer) + 7 > sizeof (outputBuffer)) {
+        bytesToSend = strlen (outputBuffer);
+        if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
+          *outputBuffer = 0; // mark outputBuffer as empty
+          Serial.printf ("[example 06] error while sending response\n");
+          goto endThisConnection;
+        }
+        strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
+      } else {
+        strcat (outputBuffer, morse [index]); // append morse letter to outputBuffer
+      }
+
+      // calculat finite machine state to detect if "quit" has been entered
+      switch (c /* inputBuffer [i] */) {
+        case 'Q':
+        case 'q': finiteState = 'q';
+                  break;
+        case 'U':
+        case 'u': if (finiteState == 'q') finiteState = 'u'; else finiteState = ' ';
+                  break;
+        case 'I':
+        case 'i': if (finiteState == 'u') finiteState = 'i'; else finiteState = ' ';
+                  break;
+        case 'T':
+        case 't': if (finiteState == 'i') goto endThisConnection; // quit has been entered
+                  else finiteState = ' ';
+                  break; 
+        default:  finiteState = ' ';
+                  break;
+      }
+    } // for loop
+    bytesToSend = strlen (outputBuffer);
+    if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
+      *outputBuffer = 0; // mark outputBuffer as empty
+      Serial.printf ("[example 06] error while sending response\n");
+      goto endThisConnection;
+    }    
+    *outputBuffer = 0; // mark outputBuffer as empty
+  } // while loop
+
+endThisConnection: // first check if ther is still some data in outputBuffer and then just let the function return 
+  if (*outputBuffer) {
+    bytesToSend = strlen (outputBuffer);
+    if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
+      Serial.printf ("[example 06] error while sending response\n");
+  }
+  Serial.printf ("[example 06] connection has just ended\n");
+}
+
+
 void examples (void *notUsed) {
   example01_filesAndDelays ();
   example02_realTimeClock ();
   example03_makeRestCall ();
+  
+  example06_morseEchoServer ();
 
   vTaskDelete (NULL); // end this thread
 }
