@@ -6,7 +6,7 @@ While working on my ESP32 / Arduino home automation project I was often missing 
 
 Here is a list of functionalities that I consider home automation projects should have.
 
-- Real time clock. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT and I cannot prepare all the possible options myself. You may have to modify getLocalTime () function to match your country and location.
+- Real time clock. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT.Five European time zones are supported (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you: WET, ISLAND, CET, EET or FET). You may have to modify getLocalTime () function yourself to match your country and location.
 
 - File system is needed for storing configuration files, .html files used by web server, etc. A SPIFFS flash file system is used in Esp32_web_ftp_telnet_server_template. Documentation on SPIFFS can be found at http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html.
 
@@ -222,10 +222,10 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
   int bytesToSend;
-  // construct Morse table. Mate it static so it won't use the stack
-  static char *morse [38] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
-                             "..... ", "-.... ", "--... ", "---.. ", "----- ", // 5, 6, 7, 8, 9
-                             "", "   ", 
+  // construct Morse table. Make it static so it won't use the stack
+  static char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
+                             "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
+                             "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
                              ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
                              "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
                              "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
@@ -233,7 +233,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
                              "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
                              "--.. "};                                         // Z
   char finiteState = ' '; // finite state machine to detect quit, valid states are ' ', 'q', 'u', 'i', 't'
-  char c;
+  unsigned char c;
   int index;  
   
   // send welcome reply first as soon as new connection arrives - in a readable form
@@ -258,12 +258,12 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     for (int i = 0; i < received; i ++) {
       // calculate index of morse table entry
       c = inputBuffer [i];
-      if (c == ' ') index = 11;           // space in morse table
-      else if (c < '0') index = 10;       // no character in morse table
-      else if (c <= 'Z') index = c - '0'; // letter in morse table
-      else index = c - 'a' + 12;          // letter converted to upper case in morse table
-      if (index >= 38) index = 10;        // no character in morse table
-      
+
+      index = 11;                                     // no character in morse table
+      if (c == ' ') index = 10;                       // space in morse table
+      else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
+      else if (c >= 'a' && c <= 'z') index = c - 80;  // letter converted to upper case in morse table
+
       // fill outputBuffer if there is still some space left otherwise empty it
       if (strlen (outputBuffer) + 7 > sizeof (outputBuffer)) {
         bytesToSend = strlen (outputBuffer);

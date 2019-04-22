@@ -20,10 +20,12 @@
  *            December 9, 2018, Bojan Jurca
  *          - added iw dev wlan1 station dump, 
  *            December 11, 2018, Bojan Jurca
-  *          - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+  *         - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            simplified installation,
  *            April 13, 2019, Bojan Jurca
- *  
+ *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be sucessful
+ *            April 21, 2019, Bojan Jurca
+ *            
  */
  
 
@@ -363,42 +365,55 @@
     return s;
   }
 
-  // ----- arp -----
+  // ----- arp reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c -----
+
+  // first (re)make a definition of ARP table and get a pointer to it (not very elegant but I have no other idea how to get reference to arp table)
+  enum etharp_state {
+    ETHARP_STATE_EMPTY = 0,
+    ETHARP_STATE_PENDING,
+    ETHARP_STATE_STABLE,
+    ETHARP_STATE_STABLE_REREQUESTING_1,
+    ETHARP_STATE_STABLE_REREQUESTING_2
+  #if ETHARP_SUPPORT_STATIC_ENTRIES
+    ,ETHARP_STATE_STATIC
+  #endif
+  };
   
-  String arp_a () { // reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c
-    // first make a definition of ARP table and get a pointer to it (not very elegant but I have no other idea)
-    enum etharp_state {
-      ETHARP_STATE_EMPTY = 0,
-      ETHARP_STATE_PENDING,
-      ETHARP_STATE_STABLE,
-      ETHARP_STATE_STABLE_REREQUESTING_1,
-      ETHARP_STATE_STABLE_REREQUESTING_2
-    #if ETHARP_SUPPORT_STATIC_ENTRIES
-      ,ETHARP_STATE_STATIC
-    #endif
-    };
-    struct etharp_entry {
-    #if ARP_QUEUEING
-      struct etharp_q_entry *q;
-    #else
-      struct pbuf *q;
-    #endif
-      ip4_addr_t ipaddr;
-      struct netif *netif;
-      struct eth_addr ethaddr;
-      u16_t ctime;
-      u8_t state;
-    };
-    static struct etharp_entry *arp_table = NULL;
+  struct etharp_entry {
+  #if ARP_QUEUEING
+    struct etharp_q_entry *q;
+  #else
+    struct pbuf *q;
+  #endif
+    ip4_addr_t ipaddr;
+    struct netif *netif;
+    struct eth_addr ethaddr;
+    u16_t ctime;
+    u8_t state;
+  };
+
+  // initialize pointer to arp table during ESP32 initialization - later request could be unsuccessful if the first entry is not stable
+  struct etharp_entry* getArpTablePointer () { 
+    struct etharp_entry *arp_table = NULL;
     struct netif *netif;
     ip4_addr_t *ipaddr;
-    if (!arp_table) {
+    byte offset = (byte *) &arp_table->ipaddr - (byte *) arp_table;
+    struct eth_addr *mac;
+    if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return NULL; // ARP table is not accessible right now - the first entry is not stable
+    return                                            (struct etharp_entry *) ((byte *) ipaddr - offset);
+  }  
+  struct etharp_entry *arp_table = getArpTablePointer ();
+
+  String arp_a () {
+    struct netif *netif;
+    ip4_addr_t *ipaddr;
+    if (!arp_table) { // if unsuccessful during initialization try again now
       byte offset = (byte *) &arp_table->ipaddr - (byte *) arp_table;
       struct eth_addr *mac;
-      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is no acessible right now.\r\n"; // first entry is not stable
+      if (!etharp_get_entry (0, &ipaddr, &netif, &mac)) return "ARP table is not accessible right now.\r\n"; // first entry is not stable
       arp_table = (struct etharp_entry *) ((byte *) ipaddr - offset);
     }
-    // we've got a pointer to ARP table, now scan if for each netif  
+    // we've got a pointer to ARP table, now scan it for each netif  
     struct etharp_entry *pat = arp_table;
     String s = "";
     for (netif = netif_list; netif->next; netif = netif->next) {

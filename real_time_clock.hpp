@@ -14,11 +14,22 @@
  *            November 14, 2018, Bojan Jurca
  *          - changed delay () do SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca          
+ *          - added support for all European time zones (according to https://www.timeanddate.com/time/europe/)
+ *            April 22, 2019, Bojan Jurca
  *  
  */
 
 
 // change this definitions according to your needs
+
+#define WET_TIMEZONE      0     // Western European Time (GMT + DST)
+#define ICELAND_TIMEZONE  100   // same as WET_TIMEZONE but without DST (GMT, no DST)
+#define CET_TIMEZONE      1     // Central European Time (GMT + 1 + DST)
+#define EET_TIMEZONE      2     // Eastern European Time (GMT + 2 + DST)
+#define FET_TIMEZONE      3     // Further-Eastern European Time (GMT + 3, no DST)
+// ... add more time zones
+#define TIMEZONE          CET_TIMEZONE // one of the above
+
 #define INTERNAL_NTP_PORT 2390  // internal UDP port number used for NTP - you can choose a different port number if you wish
 #define NTP_TIME_OUT 100        // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
 #define NTP_RETRY_TIME 15000    // number of milliseconds between NTP request retries before it succeds, 15000 = 15 s
@@ -70,7 +81,7 @@
                                                         Serial.printf ("[real_time_clock] got GMT: %s\n", s);
                                                         newTime.tv_sec = this->getLocalTime ();
                                                         strftime (s, 30, "%d.%m.%y %H:%M:%S", gmtime (&newTime.tv_sec));
-                                                        Serial.printf ("[real_time_clock] if (your local time != %s) modify getLocalTime () function for your country and location;\n", s);
+                                                        Serial.printf ("[real_time_clock] if (your local time != %s) change TIMEZONE definition or modify getLocalTime () function for your country and location;\n", s);
                                                       } else {
                                                         Serial.printf ("[real_time_clock] time corrected for %li seconds\n", newTime.tv_sec - oldTime.tv_sec);
                                                       }
@@ -180,11 +191,44 @@
       time_t getLocalTime ()                        { // returns current local time - calling program should check isGmtTimeSet () first
                                                       return localTime (getGmtTime ());     
                                                     }
-
+#if TIMEZONE == WET_TIMEZONE 
       time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
                                                       // TO DO: modify this function according to your location - it is difficult to
                                                       //        write a generic function since different countries use different time rules
-                                                      // the following example is for Slovenia (EU), GMT + 1 (+ DST)
+                                                      // the following example is for Westeren European time zone
+     
+                                                      time_t now = gmtTime; // time in GMT
+  
+                                                      struct tm *nowStr = gmtime (&now); 
+                                                      bool insideDst = false;
+                                                      if (nowStr->tm_mon + 1 == 3) // if it is March ...
+                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
+                                                          insideDst = (nowStr->tm_wday > 0 || nowStr->tm_hour >= 1); // if it is a latter day or it is Sunday past 1:00
+                                                      if (nowStr->tm_mon + 1 > 3 && nowStr->tm_mon + 1 <= 10) insideDst = true; // let's do similar check for October
+                                                      if (nowStr->tm_mon + 1 == 10) // if it is October ...
+                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
+                                                          insideDst = !(nowStr->tm_wday > 0 || nowStr->tm_hour >= 1); // if it is a latter day or it is Sunday past 1:00
+                                                          
+                                                      if (insideDst) now += 3600; // time in GMT + 1
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == ICELAND_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
+                                                      // TO DO: modify this function according to your location - it is difficult to
+                                                      //        write a generic function since different countries use different time rules
+                                                      // the following example is for Westeren European time zone
+     
+                                                      time_t now = gmtTime; // time in GMT
+  
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == CET_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
+                                                      // TO DO: modify this function according to your location - it is difficult to
+                                                      //        write a generic function since different countries use different time rules
+                                                      // the following example is for Central European time zone
      
                                                       time_t now = gmtTime + 3600; // time in GMT + 1
   
@@ -201,6 +245,40 @@
                                                       if (insideDst) now += 3600; // time in GMT + 2
                                                       return now;
                                                     }
+#endif
+#if TIMEZONE == EET_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
+                                                      // TO DO: modify this function according to your location - it is difficult to
+                                                      //        write a generic function since different countries use different time rules
+                                                      // the following example is for Eastern European time zone
+     
+                                                      time_t now = gmtTime + 2 * 3600; // time in GMT + 2
+  
+                                                      struct tm *nowStr = gmtime (&now); 
+                                                      bool insideDst = false;
+                                                      if (nowStr->tm_mon + 1 == 3) // if it is March ...
+                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
+                                                          insideDst = (nowStr->tm_wday > 0 || nowStr->tm_hour >= 3); // if it is a latter day or it is Sunday past 3:00
+                                                      if (nowStr->tm_mon + 1 > 3 && nowStr->tm_mon + 1 <= 10) insideDst = true; // let's do similar check for October
+                                                      if (nowStr->tm_mon + 1 == 10) // if it is October ...
+                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
+                                                          insideDst = !(nowStr->tm_wday > 0 || nowStr->tm_hour >= 3); // if it is a latter day or it is Sunday past 3:00
+                                                          
+                                                      if (insideDst) now += 3600; // time in GMT + 3
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == FET_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
+                                                      // TO DO: modify this function according to your location - it is difficult to
+                                                      //        write a generic function since different countries use different time rules
+                                                      // the following example is for Further Eastern European time zone
+     
+                                                      time_t now = gmtTime + 3 * 3600; // time in GMT + 3
+  
+                                                      return now;
+                                                    }
+#endif
 
       time_t getGmtStartupTime ()                   { return this->__startupTime__; } // returns the time ESP32 started
   

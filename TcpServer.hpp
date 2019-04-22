@@ -432,8 +432,8 @@
       void __listener__ (void *taskParameters)  {                   // listener running in its own thread
                                                   TcpServer *ths = (TcpServer *) taskParameters; // "this" pointer
                                                   log_v ("[Thread:%lu][Core:%i] __listener__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  int listenerSocket = -1;
                                                   while (!ths->__unloading__ ()) { // prepare listener socket - repeat this in a loop in case something goes wrong 
-                                                    int listenerSocket;
                                                     // make listener TCP socket (SOCK__STREAM) for Internet Protocol Family (PF__INET)
                                                     // Protocol Family and Address Family are connected (PF__INET protokol and AF__INET)
                                                     listenerSocket = socket (PF_INET, SOCK_STREAM, 0);
@@ -442,7 +442,7 @@
                                                       SPIFFSsafeDelay (1000); // try again after 1 s
                                                       continue;
                                                     }
-                                                    // bind listenr socket to IP address and port
+                                                    // bind listener socket to IP address and port
                                                     struct sockaddr_in serverAddress;
                                                     memset (&serverAddress, 0, sizeof (struct sockaddr_in));
                                                     serverAddress.sin_family = AF_INET;
@@ -501,6 +501,7 @@
                                                     } // handle incomming connections
                                                   } // prepare listener socket
   terminateListener:
+                                                  close (listenerSocket);
                                                   ths->__ended__ (); // tell destructor it is OK to unload - from this point further we may no longer access instance memory (variables, functions, ...)
                                                   log_v ("[Thread:%lu][Core:%i] } __listener__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   vTaskDelete (NULL); // terminate this thread                    

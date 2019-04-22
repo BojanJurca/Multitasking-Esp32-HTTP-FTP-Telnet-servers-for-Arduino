@@ -130,10 +130,10 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
   int bytesToSend;
-  // construct Morse table. Mate it static so it won't use the stack
-  static char *morse [38] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
-                             "..... ", "-.... ", "--... ", "---.. ", "----- ", // 5, 6, 7, 8, 9
-                             "", "   ", 
+  // construct Morse table. Make it static so it won't use the stack
+  static char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
+                             "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
+                             "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
                              ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
                              "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
                              "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
@@ -141,7 +141,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
                              "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
                              "--.. "};                                         // Z
   char finiteState = ' '; // finite state machine to detect quit, valid states are ' ', 'q', 'u', 'i', 't'
-  char c;
+  unsigned char c;
   int index;  
   
   // send welcome reply first as soon as new connection arrives - in a readable form
@@ -166,12 +166,12 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     for (int i = 0; i < received; i ++) {
       // calculate index of morse table entry
       c = inputBuffer [i];
-      if (c == ' ') index = 11;           // space in morse table
-      else if (c < '0') index = 10;       // no character in morse table
-      else if (c <= 'Z') index = c - '0'; // letter in morse table
-      else index = c - 'a' + 12;          // letter converted to upper case in morse table
-      if (index >= 38) index = 10;        // no character in morse table
-      
+
+      index = 11;                                     // no character in morse table
+      if (c == ' ') index = 10;                       // space in morse table
+      else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
+      else if (c >= 'a' && c <= 'z') index = c - 80;  // letter converted to upper case in morse table
+
       // fill outputBuffer if there is still some space left otherwise empty it
       if (strlen (outputBuffer) + 7 > sizeof (outputBuffer)) {
         bytesToSend = strlen (outputBuffer);
