@@ -71,8 +71,7 @@ At this point, you can already test if everything goes on as planned by www, FTP
 5. FTP to your ESP32 as webadmin / webadminpassword and upload the following files:
    - index.html,
    - android-192.png,
-   - apple-180.png,
-   - examlpe02.html.
+   - apple-180.png.
 
 Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
 
@@ -81,81 +80,6 @@ Files will be placed into webadmin home directory, which is configured to be /va
 ## How to continue from here?
 
 Esp32_web_ftp_telnet_server_template is what its name says, just a working template. A programmer is highly encouraged to add or change each piece of code as he or she sees appropriate for his or her projects. Esp32_web_ftp_telnet_server_template.ino is pretty comprehansive, small and easy to modify so it may be a good starting point.
-
-## Building a HTML user interface for your ESP32 project
-
-A series of examples will demonstrate how to create a neatly HTML user interface for your ESP32 project.
-
-**Example 01 - dynamic HTML pages**
-
-You can always use static HTML that can be uploaded (via FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each occasion. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template accordingly. For example:
-
-```C++
-String httpRequestHandler (String httpRequest) {
-  if (httpRequest.substring (0, 20) == "GET /example01.html ") 
-    return digitalRead (2) ? "<HTML>Led is on.</HTML>" : "<HTML>Led is off.</HTML>";
-                                                                   
-  else                                                              
-    return ""; 
-}```
-
-**Example 02 - static HTML pages calling REST functions**
-
-Once HTML pages get large enough dynamic generation becomes impractical. The preferred way is building a large static HTML page that will be accessed by web browser and would call smaller server side functions. In this case, we have two sides where programming code is located at run time. The server side code is still in ESP32 whereas client side code is in your web browser. They communicate with each other in standardised way - through REST functions. Although REST functions could respond in HTML manner they usually use JSON format.
-
-Let us look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template:
-
-```C++
-String httpRequestHandler (String httpRequest) {
-  if (httpRequest.substring (0, 16) == "GET /builtInLed ")
-    return "{\"id\":\"ESP32_SRV\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
-
-  else                                                              
-    return ""; 
-}
-```
-
-In a browser, we do not have C++ compiler available but Javascript will do the job as well:
-
-```HTML
-<html>
-  Example02<br><br>
-
-  Led is <div id='ledState'>...</div>.
-
-  <script type='text/javascript'>
-
-    // mechanism that makes REST calls
-    var httpClient = function () { 
-      this.request = function (url, method, callback) {
-        var httpRequest = new XMLHttpRequest ();
-        httpRequest.onreadystatechange = function () {
-          if (httpRequest.readyState == 4 && httpRequest.status == 200) callback (httpRequest.responseText);
-        }
-        httpRequest.open (method, url, true);
-        httpRequest.send (null);
-      }
-    }
-
-    // make a REST call and initialize/populate this page
-    var client = new httpClient ();
-    client.request ('/builtInLed', 'GET', function (json) {
-                                                            // json reply will be in a form: {"id":"ESP32_SRV","builtInLed":"on"}
-                                                            document.getElementById('ledState').innerText = (JSON.parse (json).builtInLed);
-                                                          });
-
-  </script>
-</html>
-```
-
-
-
-
-
-
-
-
-
 
 ## Programming code tips
 
@@ -390,5 +314,4 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   Serial.printf ("[example 06] connection has just ended\n");
 }
 ```
-
 
