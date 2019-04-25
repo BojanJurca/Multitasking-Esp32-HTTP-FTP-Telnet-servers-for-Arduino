@@ -219,9 +219,7 @@
                                                       //        write a generic function since different countries use different time rules
                                                       // the following example is for Westeren European time zone
      
-                                                      time_t now = gmtTime; // time in GMT
-  
-                                                      return now;
+                                                      return gmtTime; // time in GMT
                                                     }
 #endif
 #if TIMEZONE == CET_TIMEZONE 
@@ -274,9 +272,7 @@
                                                       //        write a generic function since different countries use different time rules
                                                       // the following example is for Further Eastern European time zone
      
-                                                      time_t now = gmtTime + 3 * 3600; // time in GMT + 3
-  
-                                                      return now;
+                                                      return gmtTime + 3 * 3600; // time in GMT + 3
                                                     }
 #endif
 

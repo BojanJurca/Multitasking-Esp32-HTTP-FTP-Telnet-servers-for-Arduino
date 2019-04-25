@@ -23,7 +23,7 @@
   *         - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            simplified installation,
  *            April 13, 2019, Bojan Jurca
- *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be sucessful
+ *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
  *            April 21, 2019, Bojan Jurca
  *            
  */

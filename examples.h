@@ -11,7 +11,7 @@
  */
 
 
-// Example 01 shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. 
+// Example 06 shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. 
 // Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: 
 // "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() 
 // and vTaskResumeAll()). The assertion failure you see is vTaskDelay() checking if it was called whilst the scheduler 
@@ -21,7 +21,7 @@
 // functions simultaneously from different threads. Calling a delay() function is not thread (when used together with 
 // SPIFFS) safe and would crash ESP32 occasionally. Use SPIFFSsafeDelay() instead.
 
-void example01_filesAndDelays () {
+void example06_filesAndDelays () {
   for (int i = 0; i < 3; i++) {
     String s = "";
     File file;
@@ -31,9 +31,9 @@ void example01_filesAndDelays () {
     if ((bool) (file = SPIFFS.open ("/ID", FILE_READ)) && !file.isDirectory ()) {
       while (file.available ()) s += String ((char) file.read ());
       file.close (); 
-      Serial.printf ("[example 01] %s\n", s.c_str ());
+      Serial.printf ("[example 06] %s\n", s.c_str ());
     } else {
-      Serial.printf ("[example 01] can't read file /ID\n");
+      Serial.printf ("[example 06] can't read file /ID\n");
     }
     
     xSemaphoreGive (SPIFFSsemaphore); // always give SPIFFSsemaphore when SPIFSS operation completes
@@ -43,27 +43,27 @@ void example01_filesAndDelays () {
 }
 
 
-// Example 02 demonstrates the use of rtc instance (real time clock) built into Esp32_web_ftp_telnet_server_template
+// Example 07 demonstrates the use of rtc instance (real time clock) built into Esp32_web_ftp_telnet_server_template
 
-void example02_realTimeClock () {
+void example07_realTimeClock () {
   if (rtc.isGmtTimeSet ()) {
     time_t now;
     now = rtc.getGmtTime ();
-    Serial.printf ("[example 02] current UNIX time is %lu\n", (unsigned long) now);
+    Serial.printf ("[example 07] current UNIX time is %lu\n", (unsigned long) now);
   
     char str [30];
     now = rtc.getLocalTime ();
     strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&now));
-    Serial.printf ("[example 02] current local time is %s\n", str);
+    Serial.printf ("[example 07] current local time is %s\n", str);
   } else {
-    Serial.printf ("[example 02] rtc has not obtained time from NTP server yet\n");
+    Serial.printf ("[example 07] rtc has not obtained time from NTP server yet\n");
   }
 }
 
 
-// Example 03 shows how we can use TcpServer objects to make HTTP requests
+// Example 08 shows how we can use TcpServer objects to make HTTP requests
 
-void example03_makeRestCall () {
+void example08_makeRestCall () {
   char buffer [256]; *buffer = 0; // reserve some space to hold the response
   // create non-threaded TCP client instance
   TcpClient myNonThreadedClient ("127.0.0.1", // server's IP address (local loopback in this example)
@@ -75,7 +75,7 @@ void example03_makeRestCall () {
   
   if (myConnection) { // test if connection is established
     int sendTotal = myConnection->sendData ("GET /upTime \r\n\r\n", strlen ("GET /upTime \r\n\r\n")); // send REST request
-    // Serial.printf ("[example 03] a request of %i bytes sent to the server\n", sendTotal);
+    // Serial.printf ("[example 08] a request of %i bytes sent to the server\n", sendTotal);
     int receivedTotal = 0;
     // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
     // if the response is short enough it will normally arrive in one data block although
@@ -89,18 +89,18 @@ void example03_makeRestCall () {
   // check if the reply is correct - the best way is to parse the response but here we'll just check if 
   // the whole reply arrived - our JSON reponse ends with "}\r\n"
   if (strstr (buffer, "}\r\n")) {
-    Serial.printf ("[example 03] %s\n", buffer);
+    Serial.printf ("[example 08] %s\n", buffer);
   } else {
-    Serial.printf ("[example 03] %s ... the reply didn't arrive (in time) or it is corrupt or too long\n", buffer);
+    Serial.printf ("[example 08] %s ... the reply didn't arrive (in time) or it is corrupt or too long\n", buffer);
   }
 }
 
 
-// Example 06 - a simple echo server except that it echos Morse code back to the client
+// Example 09 - a simple echo server except that it echos Morse code back to the client
     
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameter); // connection handler callback function
 
-void example06_morseEchoServer () {
+void example09_morseEchoServer () {
   // start new TCP server
   TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler, // function that is going to handle the connections
                                        NULL,      // no additional parameter will be passed to morseEchoServerConnectionHandler function
@@ -111,21 +111,21 @@ void example06_morseEchoServer () {
                                        NULL);     // don't use firewall in this example
   // check success
   if (myServer->started ()) {
-    Serial.printf ("[example 06] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
+    Serial.printf ("[example 09] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
   
     // let the server run for 30 seconds - this much time you have to connect to it to test how it works
     SPIFFSsafeDelay (30000);
   
     // shut down the server - is any connection is still active it will continue to run anyway
     delete (myServer);
-    Serial.printf ("[example 06] Morse echo server stopped, already active connections will continue to run anyway\n");
+    Serial.printf ("[example 09] Morse echo server stopped, already active connections will continue to run anyway\n");
   } else {
-    Serial.printf ("[example 06] unable to start Morse echo server\n");
+    Serial.printf ("[example 09] unable to start Morse echo server\n");
   }
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[example 06] new connection arrived from %s\n", connection->getOtherSideIP ());
+  Serial.printf ("[example 09] new connection arrived from %s\n", connection->getOtherSideIP ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
@@ -154,7 +154,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   bytesToSend = strlen (outputBuffer);
   if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
     *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[example 06] error while sending response\n");
+    Serial.printf ("[example 09] error while sending response\n");
     goto endThisConnection;
   }
   *outputBuffer = 0; // mark outputBuffer as empty
@@ -177,7 +177,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         bytesToSend = strlen (outputBuffer);
         if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
           *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[example 06] error while sending response\n");
+          Serial.printf ("[example 09] error while sending response\n");
           goto endThisConnection;
         }
         strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
@@ -207,7 +207,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
       *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[example 06] error while sending response\n");
+      Serial.printf ("[example 09] error while sending response\n");
       goto endThisConnection;
     }    
     *outputBuffer = 0; // mark outputBuffer as empty
@@ -217,18 +217,17 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   if (*outputBuffer) {
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[example 06] error while sending response\n");
+      Serial.printf ("[example 09] error while sending response\n");
   }
-  Serial.printf ("[example 06] connection has just ended\n");
+  Serial.printf ("[example 09] connection has just ended\n");
 }
 
 
 void examples (void *notUsed) {
-  example01_filesAndDelays ();
-  example02_realTimeClock ();
-  example03_makeRestCall ();
-  
-  example06_morseEchoServer ();
+  example06_filesAndDelays ();
+  example07_realTimeClock ();
+  example08_makeRestCall ();
+  example09_morseEchoServer ();
 
   vTaskDelete (NULL); // end this thread
 }

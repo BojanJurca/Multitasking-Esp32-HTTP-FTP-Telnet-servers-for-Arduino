@@ -32,7 +32,7 @@ measurements connectionCount (60);          // measure how many web connections 
 #include "real_time_clock.hpp"
 real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
                       "3.si.pool.ntp.org",  // second NTP server if the first one is not accessible
-                      "3.si.pool.ntp.org"); // third NTP server if the first two are not acessible
+                      "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
 
 #include "file_system.h"
 // make sure FILE_SYSTEM_MOUNT_METHOD is defined in file_system.h according to what you want to do
@@ -52,46 +52,49 @@ String httpRequestHandler (String httpRequest) {  // httpRequest is HTTP request
                                                   // - has to be reentrant!
        connectionCount.increaseCounter ();        // gether some statistics
 
-       if (httpRequest.substring (0, 12) == "GET /upTime ")           {
-                                                                        if (rtc.isGmtTimeSet ()) {
-                                                                          unsigned long long l = rtc.getGmtTime () - rtc.getGmtStartupTime ();
-                                                                          // int s = l % 60;
-                                                                          // l /= 60;
-                                                                          // int m = l % 60;
-                                                                          // l /= 60;
-                                                                          // int h = l % 60;
-                                                                          // l /= 24;
-                                                                          // return "{\"id\":\"esp32\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
-                                                                          return "{\"id\":\"esp32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
-                                                                        } else {
-                                                                          return "{\"id\":\"esp32\",\"upTime\":\"unknown\"}\r\n";
-                                                                        }
+       if (httpRequest.substring (0, 20) == "GET /example01.html ") {
+                                                                      return digitalRead (2) ? "<HTML>Led is on.</HTML>" : "<HTML>Led is off.</HTML>";
                                                                     }
   else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  {
-                                                                        digitalWrite (2, HIGH);
-                                                                        goto getBuiltInLed;
-                                                                      }
-  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ")   {
-                                                                        digitalWrite (2, LOW);
-                                                                        goto getBuiltInLed;
-                                                                      }
+                                                                      digitalWrite (2, HIGH);
+                                                                      goto getBuiltInLed;
+                                                                    }
+  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") {
+                                                                      digitalWrite (2, LOW);
+                                                                      goto getBuiltInLed;
+                                                                    }
   else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") {
                                                                         digitalWrite (2, HIGH);
                                                                         SPIFFSsafeDelay (10000);
                                                                         digitalWrite (2, LOW);
                                                                         goto getBuiltInLed;
                                                                       }
-  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")       {
-                                                                      getBuiltInLed:
-                                                                        return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     {
+                                                                    getBuiltInLed:
+                                                                      return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+                                                                    }
+  else if (httpRequest.substring (0, 12) == "GET /upTime ")         {
+                                                                      if (rtc.isGmtTimeSet ()) {
+                                                                        unsigned long long l = rtc.getGmtTime () - rtc.getGmtStartupTime ();
+                                                                        // int s = l % 60;
+                                                                        // l /= 60;
+                                                                        // int m = l % 60;
+                                                                        // l /= 60;
+                                                                        // int h = l % 60;
+                                                                        // l /= 24;
+                                                                        // return "{\"id\":\"esp32\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
+                                                                        return "{\"id\":\"esp32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
+                                                                      } else {
+                                                                        return "{\"id\":\"esp32\",\"upTime\":\"unknown\"}\r\n";
                                                                       }
-  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")         {
-                                                                        return freeHeap.measurements2json (5);
-                                                                      }
-  else if (httpRequest.substring (0, 21) == "GET /connectionCount ")  {
-                                                                        return connectionCount.measurements2json (5);
-                                                                      }
-  else                                                                return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
+                                                                    }                                                                    
+  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       {
+                                                                      return freeHeap.measurements2json (5);
+                                                                    }
+  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){
+                                                                      return connectionCount.measurements2json (5);
+                                                                    }
+  else                                                              return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
 }
 
 
@@ -108,22 +111,19 @@ bool ftpAndTelnetFirewall (char *IP) {          // firewall callback function, r
 #include "telnetServer.hpp"
 telnetServer *telnetSrv;
 
-String telnetCommandHandler (String command, String parameter, String homeDirectory) {  // reply with response text if telnetCommand has been handled, "" if not
-                                                                                        // - has to be reentrant!
-                                                      
-       if (command + " " + parameter == "turn led on")  {
-                                                          digitalWrite (2, HIGH);
-                                                          goto getBuiltInLed;
-                                                        }
-  else if (command + " " + parameter  == "turn led off") {
-                                                           digitalWrite (2, LOW);
-                                                           goto getBuiltInLed;
-                                                         }
-  else if (command + " " + parameter  == "led state")    {
-                                                         getBuiltInLed:
-                                                           return "Led is " + (digitalRead (2) ? String ("on.") : String ("off."));
-                                                         }
-  else                                                   return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
+String telnetCommandHandler (String command, String parameter, String homeDirectory) {
+  if (command + " " + parameter  == "led state") {
+getBuiltInLed:
+    return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
+  } else if (command + " " + parameter == "turn led on") {
+    digitalWrite (2, HIGH);
+    goto getBuiltInLed;
+  } else if (command + " " + parameter  == "turn led off") {
+    digitalWrite (2, LOW);
+    goto getBuiltInLed;
+  }
+  
+  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
 }
 
 #include "examples.h"
