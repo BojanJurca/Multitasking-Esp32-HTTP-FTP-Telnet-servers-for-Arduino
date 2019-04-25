@@ -55,7 +55,7 @@ More will be implemented in the future. Help command displays help.txt file. Hel
 4. Compile sketch and run it on your ESP32 for the first time.
 
 Doing this the following will happen:
-   - ESP32 flash memory will be formatted with SPIFFS file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
+   - ESP32 flash memory will be formatted with SPIFFS file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
    - network configuration files will be created with the following settings:
       - your ESP32 will be configured to use DHCP in STAtion mode,
       - your ESP32 AccessPoint name will be ESP32_SRV,
@@ -151,7 +151,7 @@ We do not have C++ compiler available in a browser, but Javascript will do the j
 
 **Example 03 - HTML page interacting with ESP32**
 
-We had only one-way client – server (HTML - ESP32) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of use PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
+We had only one-way client â€“ server (HTML - ESP32) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional â€“ client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of the use of PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
 
 Server will have to handle two additional cases:
 
@@ -205,7 +205,7 @@ In HTML we use input tag of checkbox type:
 
   function turnLed (switchIsOn) { // send desired led state to ESP32 and refresh ledSwitch state
     client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off' , 'PUT', function (json) {
-                                                            var obj=document.getElementById ('ledSwitch'); 
+                                                            var obj = document.getElementById ('ledSwitch'); 
                                                             obj.checked = (JSON.parse (json).builtInLed == 'on');                                                           
                                                           });
   }
@@ -390,7 +390,7 @@ void example08_makeRestCall () {
 
 **Example 09 - write your own server**
 
-In example 09 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
+In example 09 weâ€™ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
 Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
 While starting and stopping the server is quite straightforward, more attention has to be put to routine that handles the connection. Make sure it is re-entrant for it can run in many threads simultaneously.
 
