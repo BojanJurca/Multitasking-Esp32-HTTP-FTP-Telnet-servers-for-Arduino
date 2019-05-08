@@ -76,9 +76,46 @@ At this point, you can already test if everything goes on as planned by www, FTP
    - example03.html,
    - example04.html.
 
+```
+C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
+Connected to 10.0.0.3.
+220-ESP32 FTP server - please login
+User (10.0.0.3:(none)): webadmin
+331 enter password
+Password:
+230 logged on, use "/" to refer to your home directory "/var/www/html/"
+ftp> put index.html
+226 /var/www/html/index.html transfer complete
+ftp> put android-192.png
+226 /var/www/html/android-192.png transfer complete
+ftp> put apple-180.png
+226 /var/www/html/apple-180.png transfer complete
+ftp> put example02.html
+226 /var/www/html/example02.html transfer complete
+ftp> put example03.html
+226 /var/www/html/example03.html transfer complete
+ftp> put example04.html
+226 /var/www/html/example04.html transfer complete
+ftp>
+```
+
 Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
 
 6. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory (put help.txt /var/telnet/help.txt), which is a home directory for telnetserver system account.
+
+```
+C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
+Connected to 10.0.0.3.
+220-ESP32 FTP server - please login
+User (10.0.0.3:(none)): root
+331 enter password
+Password:
+230 logged on, use "/" to refer to your home directory "/"
+ftp> put help.txt /var/telnet/help.txt
+200 port ok
+226 /var/telnet/help.txt transfer complete
+ftp>
+```
 
 ## How to continue from here?
 
