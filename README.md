@@ -82,7 +82,7 @@ Connected to 10.0.0.3.
 220-ESP32 FTP server - please login
 User (10.0.0.3:(none)): webadmin
 331 enter password
-Password:
+Password: webadminpassword
 230 logged on, use "/" to refer to your home directory "/var/www/html/"
 ftp> put index.html
 226 /var/www/html/index.html transfer complete
@@ -109,7 +109,7 @@ Connected to 10.0.0.3.
 220-ESP32 FTP server - please login
 User (10.0.0.3:(none)): root
 331 enter password
-Password:
+Password: rootpassword
 230 logged on, use "/" to refer to your home directory "/"
 ftp> put help.txt /var/telnet/help.txt
 200 port ok
