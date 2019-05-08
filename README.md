@@ -1,5 +1,15 @@
 # ESP 32 with file system, FTP server, Telnet server and Web server
 
+Esp32_web_ftp_telnet_server_templat makes developing Web and Telnet user interface for ESP32 almost as easy as possible. 
+
+In case of Web user interface all you need to do is upload (via FTP) static .html (.png, .jpg, …) files into /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
+
+In case of Telnet all you need to do is modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
+
+![Screenshot](screenshot.png)
+
+You can go directly to Setup instructions and examples now or continue reading the rest of this text.
+
 While working on my ESP32 / Arduino home automation project I was often missing functionalities that are available on bigger computers. This template is an attempt of providing some functionalities of operating system such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather then making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface to turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. It creates Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
 
 ## Features
@@ -44,7 +54,7 @@ Modify these files according to your needs or upload your own files onto ESP32 b
 
 More will be implemented in the future. Help command displays help.txt file. Help.txt is included in Esp32_web_ftp_telnet_server_template package. Use FTP to upload it into /var/telnet directory.
 
-## Setup Instructions
+## Setup instructions
 
 1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
 2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
@@ -112,7 +122,6 @@ User (10.0.0.3:(none)): root
 Password: rootpassword
 230 logged on, use "/" to refer to your home directory "/"
 ftp> put help.txt /var/telnet/help.txt
-200 port ok
 226 /var/telnet/help.txt transfer complete
 ftp>
 ```
@@ -127,7 +136,7 @@ A series of examples will demonstrate how to create a neatly HTML user interface
 
 **Example 01 - dynamic HTML pages**
 
-You can always use static HTML that can be uploaded (via FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each occasion. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template according to your needs. For example:
+You can always use static HTML that can be uploaded (via FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each occasion. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
 String httpRequestHandler (String httpRequest) {
@@ -142,7 +151,7 @@ String httpRequestHandler (String httpRequest) {
 
 Once HTML pages get large enough dynamic generation becomes impractical. The preferred way is building a large static HTML page that will be accessed by web browser and would call smaller server side functions. In this case, we have two sides where programming code is located at run time. The server side code is still in ESP32 whereas client side code is in your web browser. They communicate with each other in standardised way - through REST functions. Although REST functions could respond in HTML manner they usually use JSON format.
 
-Let us look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template:
+Let us look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino:
 
 ```C++
 String httpRequestHandler (String httpRequest) {  
@@ -318,7 +327,7 @@ Style user interface with CSS:
 
 **Example 05 - processing Telnet command line**
 
-Compared to HTML user interface Telnet user interface is a piece of cake. Modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template according to your needs. For example:
+Compared to HTML user interface Telnet user interface is a piece of cake. Modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
 String telnetCommandHandler (String command, String parameter, String homeDirectory) {
