@@ -143,7 +143,7 @@ String httpRequestHandler (String httpRequest) {
   if (httpRequest.substring (0, 20) == "GET /example01.html ") 
     return digitalRead (2) ? "<HTML>Led is on.</HTML>" : "<HTML>Led is off.</HTML>";
                                                                    
-  return ""; 
+  return ""; // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
 }
 ```
 
@@ -158,7 +158,7 @@ String httpRequestHandler (String httpRequest) {
   if (httpRequest.substring (0, 16) == "GET /builtInLed ") {
       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
 
-  return ""; 
+  return "";  // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
 }
 ```
 
@@ -214,7 +214,7 @@ getBuiltInLed:
       goto getBuiltInLed;
   } 
 
-  return ""; 
+  return "";  // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
 }
 ```
 
@@ -342,7 +342,7 @@ getBuiltInLed:
     goto getBuiltInLed;
   }
   
-  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
+  return ""; // telnetCommandHandler did not handle command | parameter, let the telnet server try to process it otherway
 }
 ```
 
