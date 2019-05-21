@@ -33,9 +33,7 @@
   }
 
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
-  #if FTP_USER_MANAGEMENT == FTP_USE_USER_MANAGEMENT
-    #include "user_management.h"  // ftpServer.hpp needs user_management.h
-  #endif
+  #include "user_management.h"    // ftpServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // ftpServer.hpp is built upon TcpServer.hpp
   #include "real_time_clock.hpp"  // ftpServer.hpp uses real_time_clock.hpp
 
@@ -54,7 +52,7 @@
                                                   this->__tcpServer__ = new TcpServer ( __ftpConnectionHandler__, // worker function
                                                                                         NULL,                     // we don't need additional paramater for __ftpConnectionHandler__
                                                                                         4096,                     // 4 KB stack is enough for ftpConnectionHandler
-                                                                                        180000,                   // close connection if inactive for more than 3 minutes
+                                                                                        300000,                   // close connection if inactive for more than 5 minutes
                                                                                         serverIP,                 // accept incomming connections on on specified addresses
                                                                                         serverPort,               // FTP port
                                                                                         firewallCallback);        // firewall callback function
@@ -86,8 +84,8 @@
         char homeDir [33]; *homeDir = 0;    // store home directory of the user that has logged in here
         char fileName [33];                 // define once here, will be used in several places of this function latter
         File file;                          // define once here, will be used in several places of this function latter
-      
-        #if FTP_USER_MANAGEMENT == FTP_FOR_EVERYONE 
+  
+        #if USER_MANAGEMENT == NO_USER_MANAGEMENT
           if (!connection->sendData ("220-ESP32 FTP server - everyone is allowed to login\r\n220 \r\n", strlen ("220-ESP32 FTP server - everyone is allowed to login\r\n220 \r\n"))) goto closeFtpConnection;
         #else
           if (!connection->sendData ("220-ESP32 FTP server - please login\r\n220 \r\n", strlen ("220-ESP32 FTP server - please login\r\n220 \r\n"))) goto closeFtpConnection;

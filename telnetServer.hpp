@@ -51,7 +51,7 @@
                                                   this->__tcpServer__ = new TcpServer ( __telnetConnectionHandler__,    // worker function
                                                                                         (void *) telnetCommandHandler,  // tell TcpServer to pass reference callback function to __telnetConnectionHandler__
                                                                                         stackSize,                      // usually 4 KB will do for telnetConnectionHandler
-                                                                                        180000,                         // close connection if inactive for more than 3 minutes
+                                                                                        300000,                         // close connection if inactive for more than 5 minutes
                                                                                         serverIP,                       // accept incomming connections on on specified addresses
                                                                                         serverPort,                     // telnet port
                                                                                         firewallCallback);              // firewall callback function

@@ -7,6 +7,8 @@
  * History:
  *          - first release, 
  *            April 14, 2019, Bojan Jurca
+ *          - added WebSocket example,
+ *            May, 20, 2019, Bojan Jurca
  *  
  */
 
@@ -31,7 +33,7 @@ void example06_filesAndDelays () {
     if ((bool) (file = SPIFFS.open ("/ID", FILE_READ)) && !file.isDirectory ()) {
       while (file.available ()) s += String ((char) file.read ());
       file.close (); 
-      Serial.printf ("[example 06] %s\n", s.c_str ());
+      Serial.printf ("[example 06] the content of file /ID is %s\n", s.c_str ());
     } else {
       Serial.printf ("[example 06] can't read file /ID\n");
     }
@@ -64,43 +66,63 @@ void example07_realTimeClock () {
 // Example 08 shows how we can use TcpServer objects to make HTTP requests
 
 void example08_makeRestCall () {
-  char buffer [256]; *buffer = 0; // reserve some space to hold the response
-  // create non-threaded TCP client instance
-  TcpClient myNonThreadedClient ("127.0.0.1", // server's IP address (local loopback in this example)
-                                 80,          // server port (usual HTTP port)
-                                 3000);       // time-out (3 s in this example)
-  // get reference to TCP connection. Befor non-threaded constructor of TcpClient returns the 
-  // connection is established if this is possible
-  TcpConnection *myConnection = myNonThreadedClient.connection ();
-  
-  if (myConnection) { // test if connection is established
-    int sendTotal = myConnection->sendData ("GET /upTime \r\n\r\n", strlen ("GET /upTime \r\n\r\n")); // send REST request
-    // Serial.printf ("[example 08] a request of %i bytes sent to the server\n", sendTotal);
-    int receivedTotal = 0;
-    // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
-    // if the response is short enough it will normally arrive in one data block although
-    // TCP does not guarantee that it would
-    while (int received = myConnection->recvData (buffer + receivedTotal, sizeof (buffer) - receivedTotal - 1)) {
-      buffer [receivedTotal += received] = 0; // mark the end of the string we have just read
+  String s = webClient ("127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
+  if (s > "")
+    Serial.print ("[example 08] " + s);
+  else
+    Serial.printf ("[example 08] the reply didn't arrive (in time) or it is corrupt or too long\n");
+  return;
+}
+
+
+// Example 09 - basic WebSockets demonstration
+
+void example09_webSockets (WebSocket *webSocket) {
+  while (true) {
+    switch (webSocket->available ()) {
+      case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
+                                      break;
+      case WebSocket::STRING:       { // text received
+                                      String s = webSocket->readString ();
+                                      Serial.printf ("[example 09] got text from browser over webSocket: %s\n", s.c_str ());
+                                      break;
+                                    }
+      case WebSocket::BINARY:       { // binary data received
+                                      char buffer [256];
+                                      int bytesRead = webSocket->readBinary (buffer, sizeof (buffer));
+                                      Serial.printf ("[example 09] got %i bytes of binary data from browser over webSocket\n"
+                                                     "[example 09]", bytesRead);
+                                      // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 16 bit integers
+                                      // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
+                                      int16_t *i = (int16_t *) buffer;
+                                      while ((char *) (i + 1) <= buffer + bytesRead) Serial.printf (" %i", *i ++);
+                                      Serial.printf ("\n[example 09] Looks like this is the Fibonacci sequence,\n"
+                                                       "[example 09] which means that both, endianness and complements are compatible with javascript client.\n");
+                                      
+                                      // send text data
+                                      if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
+
+                                      // send binary data
+                                      float geometricSequence [8] = {1.0}; for (int i = 1; i < 8; i++) geometricSequence [i] = geometricSequence [i - 1] / 2;
+                                      if (!webSocket->sendBinary ((byte *) geometricSequence, sizeof (geometricSequence))) goto errorInCommunication;
+                                                       
+                                      break; // this is where webSocket connection ends - in our simple "protocol" browser closes the connection but it could be the server as well ...
+                                             // ... just "return;" in this case (instead of break;)
+                                    }
+      case WebSocket::ERROR:          
+errorInCommunication:     
+                                      Serial.printf ("[example 09] error in communication, closing connection\n");
+                                      return; // close this connection
     }
-    
-  } 
-  
-  // check if the reply is correct - the best way is to parse the response but here we'll just check if 
-  // the whole reply arrived - our JSON reponse ends with "}\r\n"
-  if (strstr (buffer, "}\r\n")) {
-    Serial.printf ("[example 08] %s\n", buffer);
-  } else {
-    Serial.printf ("[example 08] %s ... the reply didn't arrive (in time) or it is corrupt or too long\n", buffer);
   }
 }
 
 
-// Example 09 - a simple echo server except that it echos Morse code back to the client
+// Example 10 - a simple echo server except that it echos Morse code back to the client
     
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameter); // connection handler callback function
 
-void example09_morseEchoServer () {
+void example10_morseEchoServer () {
   // start new TCP server
   TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler, // function that is going to handle the connections
                                        NULL,      // no additional parameter will be passed to morseEchoServerConnectionHandler function
@@ -111,21 +133,21 @@ void example09_morseEchoServer () {
                                        NULL);     // don't use firewall in this example
   // check success
   if (myServer->started ()) {
-    Serial.printf ("[example 09] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
+    Serial.printf ("[example 10] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
   
     // let the server run for 30 seconds - this much time you have to connect to it to test how it works
     SPIFFSsafeDelay (30000);
   
     // shut down the server - is any connection is still active it will continue to run anyway
     delete (myServer);
-    Serial.printf ("[example 09] Morse echo server stopped, already active connections will continue to run anyway\n");
+    Serial.printf ("[example 10] Morse echo server stopped, already active connections will continue to run anyway\n");
   } else {
-    Serial.printf ("[example 09] unable to start Morse echo server\n");
+    Serial.printf ("[example 10] unable to start Morse echo server\n");
   }
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[example 09] new connection arrived from %s\n", connection->getOtherSideIP ());
+  Serial.printf ("[example 10] new connection arrived from %s\n", connection->getOtherSideIP ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
@@ -154,7 +176,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   bytesToSend = strlen (outputBuffer);
   if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
     *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[example 09] error while sending response\n");
+    Serial.printf ("[example 10] error while sending response\n");
     goto endThisConnection;
   }
   *outputBuffer = 0; // mark outputBuffer as empty
@@ -177,7 +199,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         bytesToSend = strlen (outputBuffer);
         if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
           *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[example 09] error while sending response\n");
+          Serial.printf ("[example 10] error while sending response\n");
           goto endThisConnection;
         }
         strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
@@ -207,7 +229,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
       *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[example 09] error while sending response\n");
+      Serial.printf ("[example 10] error while sending response\n");
       goto endThisConnection;
     }    
     *outputBuffer = 0; // mark outputBuffer as empty
@@ -217,9 +239,9 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   if (*outputBuffer) {
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[example 09] error while sending response\n");
+      Serial.printf ("[example 10] error while sending response\n");
   }
-  Serial.printf ("[example 09] connection has just ended\n");
+  Serial.printf ("[example 10] connection has just ended\n");
 }
 
 
@@ -227,7 +249,7 @@ void examples (void *notUsed) {
   example06_filesAndDelays ();
   example07_realTimeClock ();
   example08_makeRestCall ();
-  example09_morseEchoServer ();
+  example10_morseEchoServer ();
 
   vTaskDelete (NULL); // end this thread
 }

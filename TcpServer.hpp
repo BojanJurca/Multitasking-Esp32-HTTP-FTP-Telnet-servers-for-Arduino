@@ -22,6 +22,8 @@
  *            November 22, 2018, Bojan Jurca
  *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
+ *          - added available () memeber function of TcpConnection object
+ *            May 12, 2019, Bojan Jurca
  *  
  */
 
@@ -186,6 +188,33 @@
                                                                 log_i ("[Thread:%lu][Core:%i][Socket:%i] recvData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, recvTotal);
                                                                 return recvTotal;
                                                     }
+                                                  }
+                                                }
+
+      // define available data types
+      enum AVAILABLE_TYPE {
+        NOT_AVAILABLE = 0,  // no data is available to be read 
+        AVAILABLE = 1,      // data is available to be read 
+        ERROR = 3           // error in communication
+      };
+      AVAILABLE_TYPE available ()               { // checks if incoming data is pending to be read
+                                                  char buffer;
+                                                  if (-1 == recv (this->__socket__, &buffer, sizeof (buffer), MSG_PEEK)) {
+                                                    #define EAGAIN 11
+                                                    if (errno == EAGAIN || errno == EBADF) {
+                                                      if ((this->__timeOutMillis__ == TCP_SERVER_INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ >= this->__timeOutMillis__)) {
+                                                        this->__timeOut__ = true;
+                                                        this->closeConnection ();
+                                                        Serial.printf ("BJBJBJ [Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                        return ERROR;
+                                                      }                                                      
+                                                      return NOT_AVAILABLE;
+                                                    } else {
+                                                      // Serial.printf ("recv (MSG_PEEK) error: %s: %i\n", strerror (errno), errno);
+                                                      return ERROR;
+                                                    }
+                                                  } else {
+                                                    return AVAILABLE;
                                                   }
                                                 }
   

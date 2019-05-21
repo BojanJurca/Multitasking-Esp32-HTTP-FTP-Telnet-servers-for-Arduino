@@ -258,6 +258,8 @@
         if (WiFi.softAP (apSSID.c_str (), apPassword.c_str ())) { 
           WiFi.softAPConfig (IPAddressFromString (apIP), IPAddressFromString (apGateway), IPAddressFromString (apSubnetMask));
           WiFi.begin ();
+          Serial.printf ("[network][AP] SSID: %s\n", apSSID.c_str ());
+          Serial.printf ("[network][AP] password: %s\n", apPassword.c_str ());
           Serial.print ("[network][AP] IP: "); Serial.println (WiFi.softAPIP ());
           networkAccesPointWorking = true;
         } else {

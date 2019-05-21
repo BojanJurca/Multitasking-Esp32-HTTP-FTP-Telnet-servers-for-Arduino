@@ -31,8 +31,9 @@
   #define HARDCODED_USER_MANAGEMENT             2   // define user name nad password that will be hard coded into program
   #define UNIX_LIKE_USER_MANAGEMENT             3   // user name and password will be checked by user_management.h
   // select one of the above login methods
+#ifndef USER_MANAGEMENT
   #define USER_MANAGEMENT                       UNIX_LIKE_USER_MANAGEMENT // change to one of the above definitions as you wish
-
+#endif
 
   #if USER_MANAGEMENT == NO_USER_MANAGEMENT           // ----- NO_USER_MANAGEMENT -----
   
@@ -50,9 +51,13 @@
   #endif  
 
   #if USER_MANAGEMENT == HARDCODED_USER_MANAGEMENT    // ----- HARDCODED_USER_MANAGEMENT -----
-  
+
+#ifndef USERNAME
     #define USERNAME "root"                           // change according to your needs
+#endif
+#ifndef PASSWORD
     #define PASSWORD "rootpassword"                   // change according to your needs
+#endif
     #define USER_HOME_DIRECTORY "/"                                                 // (home direcotry for FTP and Telnet user) change according to your needs
     #define WEBSERVER_HOME_DIRECTORY "/var/www/html/"                               // (where .html files are located) change according to your needs
     #define TELNETSERVER_HOME_DIRECTORY "/var/telnet/"                              // (where telnet help file is located) change according to your needs
@@ -90,8 +95,6 @@
                                                                              // only 3 fields are used: user name, hashed password and home directory
       if (!SPIFFSmounted) { Serial.printf ("[user_management] can't manage users configuration files since file system is not mounted"); return; }
       
-      // #if INITIALIZE_USERS == DO_INITIALIZE_USERS
-
       File file;
       bool fileExists;
       

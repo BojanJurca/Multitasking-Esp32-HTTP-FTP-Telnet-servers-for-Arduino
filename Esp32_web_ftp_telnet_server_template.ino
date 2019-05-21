@@ -45,35 +45,40 @@ real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
 #include "webServer.hpp"
 webServer *webSrv;
 
-String httpRequestHandler (String httpRequest) {  // httpRequest is HTTP request, function returns HTML, json, ... reply
-                                                  // httpRequestHandler is supposed to be used with smaller replies,
-                                                  // if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (/var/www/html/ by default)
-                                                  // return HTML, JSON ... if httpRequest has been handled, "" if not
-                                                  // - has to be reentrant!
-       connectionCount.increaseCounter ();        // gether some statistics
+#include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10
 
-       if (httpRequest.substring (0, 20) == "GET /example01.html ") {
-                                                                      return digitalRead (2) ? "<HTML>Led is on.</HTML>" : "<HTML>Led is off.</HTML>";
+
+String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
+                                                                        // - for WebSocket httpRequest is WS request, webSocket pointer is set, whatever function returns will be discarded
+                                                                        // httpRequestHandler is supposed to be used with smaller replies,
+                                                                        // if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (/var/www/html/ by default)
+                                                                        // - has to be reentrant!
+                                                                        
+       connectionCount.increaseCounter ();                              // gether some statistics
+
+  // handling HTTP
+       if (httpRequest.substring (0, 20) == "GET /example01.html ") { // Example 01
+                                                                      return String ("<HTML>Example 01 - dynamic HTML page<br><br>") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("</HTML>");
                                                                     }
-  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  {
+  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // Example 02, Example 03, Example 04, index.html
+                                                                    getBuiltInLed:
+                                                                      return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+                                                                    }                                                                    
+  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  { // Example 03, Example 04
                                                                       digitalWrite (2, HIGH);
                                                                       goto getBuiltInLed;
                                                                     }
-  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") {
+  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") { // Example 03, Example 04, index.html
                                                                       digitalWrite (2, LOW);
                                                                       goto getBuiltInLed;
                                                                     }
-  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") {
+  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") { // index.html
                                                                         digitalWrite (2, HIGH);
                                                                         SPIFFSsafeDelay (10000);
                                                                         digitalWrite (2, LOW);
                                                                         goto getBuiltInLed;
                                                                       }
-  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     {
-                                                                    getBuiltInLed:
-                                                                      return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
-                                                                    }
-  else if (httpRequest.substring (0, 12) == "GET /upTime ")         {
+  else if (httpRequest.substring (0, 12) == "GET /upTime ")         { // index.html
                                                                       if (rtc.isGmtTimeSet ()) {
                                                                         unsigned long long l = rtc.getGmtTime () - rtc.getGmtStartupTime ();
                                                                         // int s = l % 60;
@@ -88,12 +93,18 @@ String httpRequestHandler (String httpRequest) {  // httpRequest is HTTP request
                                                                         return "{\"id\":\"esp32\",\"upTime\":\"unknown\"}\r\n";
                                                                       }
                                                                     }                                                                    
-  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       {
+  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       { // index.html
                                                                       return freeHeap.measurements2json (5);
                                                                     }
-  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){
+  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // index.html
                                                                       return connectionCount.measurements2json (5);
                                                                     }
+  // handling WS (WebSockets)
+  else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // Example 09
+                                                                      example09_webSockets (webSocket);
+                                                                      return ""; // doesn't matter what the function returns in case of WebSockets
+                                                                    }
+                                                                    
   else                                                              return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
 }
 
@@ -111,7 +122,7 @@ bool ftpAndTelnetFirewall (char *IP) {          // firewall callback function, r
 #include "telnetServer.hpp"
 telnetServer *telnetSrv;
 
-String telnetCommandHandler (String command, String parameter, String homeDirectory) {
+String telnetCommandHandler (String command, String parameter, String homeDirectory) { // Example 05
   if (command + " " + parameter  == "led state") {
 getBuiltInLed:
     return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
@@ -126,16 +137,15 @@ getBuiltInLed:
   return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
 }
 
-#include "examples.h"
 
 // setup (), loop () --------------------------------------------------------
 
- //disable brownout detector 
- //#include "soc/soc.h"
- //#include "soc/rtc_cntl_reg.h"
+  //disable brownout detector - if power asupply is rather poor
+  #include "soc/soc.h"
+  #include "soc/rtc_cntl_reg.h"
 
 void setup () {
-  //WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
+  WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
   
   Serial.begin (115200);
 
