@@ -2,9 +2,9 @@
 
 Esp32_web_ftp_telnet_server_templat makes developing Web and Telnet user interfaces for ESP32 projects almost as easy as possible. 
 
-In case of Web user interface all you need to do is upload (using FTP) .html (.png, .jpg, …) files into /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
+In case of Web user interface all you need to do is to upload (using FTP) .html (.png, .jpg, â€¦) files into /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
-In case of Telnet all you need to do is modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
+In case of Telnet all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
 ![Screenshot](screenshot.png)
 
 You can go directly to Setup instructions and examples now or continue reading the rest of this text.
@@ -15,10 +15,10 @@ While working on my ESP32 / Arduino home automation project I was often missing 
 
 Here is a list of features of objects included into Esp32_web_ftp_telnet_server_template with their functionalities:
 
-- **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that has been previously uploaded into /var/www/html directory. Features:
+- **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies â€“ see examples) or by sending .html files that has been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
-   - WS protocol – only basic support for WebSockets is included so far,
+   - WS protocol â€“ only basic support for WebSockets is included so far,
    - webClient function is included for making simple HTTP requests,
    - threaded web server sessions,
    - time-out set to 1,5 seconds for HTTP protocol and ??? seconds for WS protocol to free up limited ESP32 resources used by inactive sessions,  
@@ -108,7 +108,7 @@ You may have to modify getLocalTime () function yourself to match your country a
 
 Doing this the following will happen:
 
-   - ESP32 flash memory will be formatted with SPIFFS file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
+   - ESP32 flash memory will be formatted with SPIFFS file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
    - network configuration files will be created with the following settings:
       - your ESP32 will be configured to use DHCP in STAtion mode,
       - your ESP32 AccessPoint name will be ESP32_SRV,
@@ -244,7 +244,7 @@ We do not have C++ compiler available in a browser, but Javascript will do the j
 
 **Example 03 - HTML page interacting with ESP32**
 
-We had only one-way client – server (HTML - ESP32) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of the use of PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
+We had only one-way client â€“ server (HTML - ESP32) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional â€“ client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of the use of PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
 
 Server will have to handle two additional cases:
 
@@ -463,7 +463,7 @@ void example08_makeRestCall () {
 
 **Example 09 - WebSockets**
 
-A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 – little endian so they understand each other without doing byte reordering. TCP suggests using network byte ordering for sending binary data over network which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
+A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 â€“ little endian so they understand each other without doing byte reordering. TCP suggests using network byte ordering for sending binary data over network which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
 
 Example 09 demonstrates how ESP32 server could handle WebSockets:
 
@@ -599,7 +599,7 @@ On the browser site Javascript program could look something like this:
 
 **Example 10 - Morse server**
 
-In example 10 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
+In example 10 weâ€™ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
 Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
 While starting and stopping the server is quite straightforward, more attention has to be put to routine that handles the connection. Make sure it is re-entrant for it can run in many threads simultaneously.
 
