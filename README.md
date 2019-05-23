@@ -67,10 +67,10 @@ Like webServer and telentServer it also offers:
 
 - **Network** configuration files. Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files (although it is a little awkward how network configuration is implemented in these operating systems). The following files are used to store STAtion and AccessPoint configuration parameters:
 
-   - /network/interfaces
-   - /etc/wpa_supplicant.conf
-   - /etc/dhcpcd.conf
-   - /etc/hostapd/hostapd.conf  
+      - /network/interfaces
+      - /etc/wpa_supplicant.conf
+      - /etc/dhcpcd.conf
+      - /etc/hostapd/hostapd.conf  
 
 Modify these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
@@ -494,9 +494,8 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                         // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
                                         int16_t *i = (int16_t *) buffer;
                                         while ((char *) (i + 1) <= buffer + bytesRead) Serial.printf (" %i", *i ++);
-                                        Serial.printf ("\n[example 09] Looks like this is the Fibonacci sequence,\n"
-                                                         "[example 09] which means that both, endianness and complements are compatible with javascript client.\n");
-                                        
+                                        Serial.printf ("\n[example 09] if the sequence is -21 13 -8 5 -3 2 -1 1 0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946 17711 28657\n"
+                                                         "             it means that both, endianness and complements are compatible with javascript client.\n");
                                         // send text data
                                         if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
   
@@ -529,7 +528,7 @@ On the browser site Javascript program could look something like this:
     <script type='text/javascript'>
 
       if ("WebSocket" in window) {
-        var ws = new WebSocket ("ws://10.0.0.3/example09_WebSockets"); // open webSocket connection
+        var ws = new WebSocket ("ws://" + self.location.host + "/example09_WebSockets"); // open webSocket connection
 				
         ws.onopen = function () {
           alert ("WebSocket connection established.");
@@ -573,8 +572,8 @@ On the browser site Javascript program could look something like this:
                 // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 32 bit floating point numbers
                 // (I know they are 32 bit floating point numbers because I have written server C++ example myself but this information can not be obtained from webSocket)
 
-                alert ("[example 09] Looks like this is the geometric sequence,\n" + 
-                       "[example 09] which means that 32 bit floating point format is compatible with ESP32 C++ server.\n");
+                alert ("[example 09] if the sequence is 1 0.5 0.25 0.125 0.0625 0.03125 0.015625 0.0078125\n" + 
+                       "             it means that 32 bit floating point format is compatible with ESP32 C++ server.\n");
 
                 ws.close (); // this is where webSocket connection ends - in our simple "protocol" browser closes the connection but it could be the server as well
 
