@@ -73,7 +73,7 @@ void example08_makeRestCall () {
     Serial.printf ("[example 08] the reply didn't arrive (in time) or it is corrupt or too long\n");
   return;
 }
-
+ 
 
 // Example 09 - basic WebSockets demonstration
 
@@ -96,9 +96,8 @@ void example09_webSockets (WebSocket *webSocket) {
                                       // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
                                       int16_t *i = (int16_t *) buffer;
                                       while ((char *) (i + 1) <= buffer + bytesRead) Serial.printf (" %i", *i ++);
-                                      Serial.printf ("\n[example 09] Looks like this is the Fibonacci sequence,\n"
-                                                       "[example 09] which means that both, endianness and complements are compatible with javascript client.\n");
-                                      
+                                      Serial.printf ("\n[example 09] if the sequence is -21 13 -8 5 -3 2 -1 1 0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946 17711 28657\n"
+                                                       "             it means that both, endianness and complements are compatible with javascript client.\n");
                                       // send text data
                                       if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
 
@@ -252,4 +251,37 @@ void examples (void *notUsed) {
   example10_morseEchoServer ();
 
   vTaskDelete (NULL); // end this thread
+}
+
+
+// razvoj
+
+String oscilloscope () {
+  measurements samples (256);
+
+/*
+  pinMode (36, INPUT);
+  unsigned int start = micros ();
+  for (int i = 0; i < 256; i++) {
+    samples.addMeasurement (micros () - start, digitalRead (36));
+    SPIFFSsafeDelayMicroseconds (10 - 4); // !!!!! tole je približno na 10 us, kar je minimum, da še izgleda smiselno, 4 us je za ostalo procesiranje !!!!! cca 100 KZh
+  }
+*/
+
+/*
+  pinMode (36, INPUT);
+  unsigned int start = millis ();
+  for (int i = 0; i < 256; i++) {
+    samples.addMeasurement (millis () - start, digitalRead (36));
+    SPIFFSsafeDelay (2); // !!!!! tole je minimum za prehod na ms skalo, da smiselno prikazuje, raje nekaj več !!!!!
+  }
+*/
+
+  unsigned int start = micros ();
+  for (int i = 0; i < 256; i++) {
+    samples.addMeasurement (micros () - start, analogRead (36));
+    SPIFFSsafeDelayMicroseconds (60 - 12); // !!!!! je približno na 60 us, kar je minimum, da še izgleda smiselno, 12 us je za ostalo procesiranje !!!!! cca 16 KHz
+  }
+  
+  return (samples.measurements2json (1));
 }
