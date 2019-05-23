@@ -21,7 +21,7 @@ Here is a list of features of objects included into Esp32_web_ftp_telnet_server_
    - WS protocol – only basic support for WebSockets is included so far,
    - webClient function is included for making simple HTTP requests,
    - threaded web server sessions,
-   - time-out set to 1,5 seconds for HTTP protocol and ??? seconds for WS protocol to free up limited ESP32 resources used by inactive sessions,  
+   - time-out set to 1,5 seconds for HTTP protocol and 5 minutes for WS protocol to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming requests.
 
 - **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Only a few built-in commands are implemented so far:
@@ -38,7 +38,9 @@ Here is a list of features of objects included into Esp32_web_ftp_telnet_server_
    - reboot,
    - help,
    - quit.
+
 Like webServer it also offers:
+
    - threaded Telnet sessions,
    - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
@@ -80,10 +82,10 @@ Modify these files according to your needs or upload your own files onto ESP32 b
 
 By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization or upload your own files onto ESP32 by using FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
 
-   - /etc/passwd
-   - /etc/shadow
+      - /etc/passwd
+      - /etc/shadow
 
-- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT.Five European time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
+- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT. Five European time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
 
    - GMT,   
    - WET (= GMT + DST), 
@@ -508,7 +510,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
         case WebSocket::ERROR:          
   errorInCommunication:     
                                         Serial.printf ("[example 09] error in communication, closing connection\n");
-                                        return ""; // close this connection, the return value will be discarded (in WebSOcket case) so it doesn't matter wht it is
+                                        return ""; // close this connection, the return value will be discarded (in WebSocket case) so it doesn't matter wht it is
       }
     }
                                                                     
