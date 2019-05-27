@@ -148,29 +148,29 @@
                                                     case READING_SHORT_HEADER:    { 
                                                                                     // Serial.printf ("[webSocket] READING_SHORT_HEADER, reading 6 bytes of header\n");                
                                                                                     switch (this->__connection__->available ()) {
-                                                                                      case TcpConnection::NOT_AVAILABLE: return NOT_AVAILABLE;
-                                                                                      case TcpConnection::ERROR:         return ERROR;
+                                                                                      case TcpConnection::NOT_AVAILABLE: return WebSocket::NOT_AVAILABLE;
+                                                                                      case TcpConnection::ERROR:         return WebSocket::ERROR;
                                                                                     }
                                                                     
                                                                                     // read 6 bytes of short header
-                                                                                    if (6 != (this->__bytesRead__ += this->__connection__->recvData ((char *) this->__header__ + this->__bytesRead__, 6 - this->__bytesRead__))) return NOT_AVAILABLE; // if we haven't got 6 bytes continue reading short header the next time available () is called
+                                                                                    if (6 != (this->__bytesRead__ += this->__connection__->recvData ((char *) this->__header__ + this->__bytesRead__, 6 - this->__bytesRead__))) return WebSocket::NOT_AVAILABLE; // if we haven't got 6 bytes continue reading short header the next time available () is called
 
                                                                                     // check if this frame type is supported
                                                                                     if (!(this->__header__ [0] & 0b10000000)) { // check fin bit
                                                                                       Serial.printf ("[webSocket] browser send a frame that is not supported: fin bit is not set\n");
                                                                                       this->__connection__->closeConnection ();
-                                                                                      return ERROR;
+                                                                                      return WebSocket::ERROR;
                                                                                     }
                                                                                     byte b  = this->__header__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close
                                                                                     if (b == 8) {
                                                                                       this->__connection__->closeConnection ();
                                                                                       Serial.printf ("[webSocket] browser requested to close webSocket\n");
-                                                                                      return NOT_AVAILABLE;
+                                                                                      return WebSocket::NOT_AVAILABLE;
                                                                                     }
                                                                                     if (b != 1 && b != 2) { 
                                                                                       Serial.printf ("[webSocket] browser send a frame that is not supported: opcode is not text or binary\n");
                                                                                       this->__connection__->closeConnection ();
-                                                                                      return ERROR;
+                                                                                      return WebSocket::ERROR;
                                                                                     } // NOTE: after this point only TEXT and BINRY frames are processed!
                                                                                     // check payload length that also determines frame type
                                                                                     this->__payloadLength__ = this->__header__ [1] & 0b01111111; // byte 1: mask bit is always 1 for packets thet came from browsers, cut it off
@@ -179,7 +179,7 @@
                                                                                           if (!(this->__payload__ = (byte *) malloc (this->__payloadLength__ + 1))) { // + 1: final byte to conclude C string if data type is text
                                                                                             this->__connection__->closeConnection ();
                                                                                             Serial.printf ("[webSocket] malloc failed - out of memory\n");
-                                                                                            return ERROR;                                                                                            
+                                                                                            return WebSocket::ERROR;                                                                                            
                                                                                           }
                                                                                           // continue with reading payload immediatelly
                                                                                           this->__bufferState__ = READING_PAYLOAD;
@@ -191,7 +191,7 @@
                                                                                     } else { // 127 means large data block - not supported since ESP32 doesn't have enough memory
                                                                                           Serial.printf ("[webSocket] browser send a frame that is not supported: payload is larger then 65535 bytes\n");
                                                                                           this->__connection__->closeConnection ();
-                                                                                          return ERROR;                         
+                                                                                          return WebSocket::ERROR;                         
                                                                                     }
                                                                                   }
                                                     case READING_MEDIUM_HEADER:   { 
@@ -199,14 +199,14 @@
                                                                                     // we don't have to repeat the checking already done in short header case, just read additiona 2 bytes and correct data structure
 
                                                                                     // read additional 2 bytes (8 altogether) bytes of medium header
-                                                                                    if (8 != (this->__bytesRead__ += this->__connection__->recvData ((char *) this->__header__ + this->__bytesRead__, 8 - this->__bytesRead__))) return NOT_AVAILABLE; // if we haven't got 8 bytes continue reading medium header the next time available () is called
+                                                                                    if (8 != (this->__bytesRead__ += this->__connection__->recvData ((char *) this->__header__ + this->__bytesRead__, 8 - this->__bytesRead__))) return WebSocket::NOT_AVAILABLE; // if we haven't got 8 bytes continue reading medium header the next time available () is called
                                                                                     // correct internal structure for reading into extended buffer and continue at FILLING_EXTENDED_BUFFER immediately
                                                                                     this->__payloadLength__ = this->__header__ [2] << 8 | this->__header__ [3];
                                                                                     this->__mask__ = this->__header__ + 4; // bytes 4, 5, 6, 7
                                                                                     if (!(this->__payload__ = (byte *) malloc (this->__payloadLength__ + 1))) { // + 1: final byte to conclude C string if data type is text
                                                                                       this->__connection__->closeConnection ();
                                                                                       Serial.printf ("[webSocket] malloc failed - out of memory\n");
-                                                                                      return ERROR;                                                                                            
+                                                                                      return WebSocket::ERROR;                                                                                            
                                                                                     }
                                                                                     this->__bufferState__ = READING_PAYLOAD;
                                                                                     this->__bytesRead__ = 0; // reset the counter, count only payload from now on
@@ -218,19 +218,19 @@ readingPayload:
                                                                                   {
                                                                                     // read all payload bytes
                                                                                     if (this->__payloadLength__ != (this->__bytesRead__ += this->__connection__->recvData ((char *) this->__payload__ + this->__bytesRead__, this->__payloadLength__ - this->__bytesRead__))) {
-                                                                                      return NOT_AVAILABLE; // if we haven't got all payload bytes continue reading the next time available () is called
+                                                                                      return WebSocket::NOT_AVAILABLE; // if we haven't got all payload bytes continue reading the next time available () is called
                                                                                     }
                                                                                     // all is read, decode (unmask) the data
                                                                                     for (int i = 0; i < this->__payloadLength__; i++) this->__payload__ [i] = (this->__payload__ [i] ^ this->__mask__ [i % 4]);
-                                                                                    //conclude payload with 0 in case tis is going to be interpreted as text - like C string
+                                                                                    // conclude payload with 0 in case this is going to be interpreted as text - like C string
                                                                                     this->__payload__ [this->__payloadLength__] = 0;
                                                                                     this->__bufferState__ = FULL;     // stop reading until buffer is read by the calling program
-                                                                                    return this->__header__ [0] & 0b0000001 ? STRING : BINARY; // notify calling program about the type of data waiting to be read, 1 = text, 2 = binary
+                                                                                    return this->__header__ [0] & 0b0000001 /* if text bit set */ ? STRING : BINARY; // notify calling program about the type of data waiting to be read, 1 = text, 2 = binary
                                                                                   }
 
                                                     case FULL:                    // return immediately, there is no space left to read new incoming data
                                                                                   // Serial.printf ("[webSocket] FULL, waiting for calling program to fetch the data\n");
-                                                                                  return this->__header__ [0] & 0b0000001 ? STRING : BINARY; // notify calling program about the type of data waiting to be read, 1 = text, 2 = binary 
+                                                                                  return this->__header__ [0] & 0b0000001 /* if text bit set */ ? STRING : BINARY; // notify calling program about the type of data waiting to be read, 1 = text, 2 = binary 
                                                   }
                                                   // for every case that has not been handeled earlier return not available
                                                   return NOT_AVAILABLE;
@@ -238,25 +238,28 @@ readingPayload:
 
       String readString ()                      { // reads String that arrived from browser (it is a calling program responsibility to check if data type is text)
                                                   // returns "" in case of communication error
-                                                  do {
-                                                    switch (this->__connection__->available ()) {
-                                                      case TcpConnection::NOT_AVAILABLE: SPIFFSsafeDelay (1); continue;
-                                                      case TcpConnection::ERROR:                              return "";
-                                                    }
-                                                  } while (false);
-                                                  String s;
-                                                  if (this->__bufferState__ == FULL && this->__payload__) { // double check ...
-                                                    s = String ((char *) this->__payload__); 
-                                                    free (this->__payload__);
-                                                    this->__payload__ = NULL;
-                                                    this->__bufferState__ = EMPTY;
-                                                  } else {
-                                                    s = "";
+                                                  while (true) {
+                                                    switch (this->available ()) {
+                                                      case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
+                                                                                      break;
+                                                      case WebSocket::STRING:         { // Serial.printf ("readString: binary size = %i, buffer state = %i, available = %i\n", this->binarySize (), this->__bufferState__, this->available ());
+                                                                                        String s;
+                                                                                        // if (this->__bufferState__ == FULL && this->__payload__) { // double check ...
+                                                                                          s = String ((char *) this->__payload__); 
+                                                                                          free (this->__payload__);
+                                                                                          this->__payload__ = NULL;
+                                                                                          this->__bufferState__ = EMPTY;
+                                                                                        // } else {
+                                                                                        //   s = "";
+                                                                                        // }
+                                                                                        return s;
+                                                                                      }
+                                                      default:                        return ""; // WebSocket::BINARY or WebSocket::ERROR
+                                                    }                                                    
                                                   }
-                                                  return s;
                                                 }
 
-      unsigned int binarySize ()                { // returns how many bytes has arrived from browser, 0 if data is not ready to be read
+      size_t binarySize ()                      { // returns how many bytes has arrived from browser, 0 if data is not ready (yet) to be read
                                                   if (this->__bufferState__ == FULL) {
                                                     // if the calling program wants to interpret text payload as binary we'll return C string with closing 0
                                                     return this->__header__ [0] & 0b00000001 /* if text bit set */ ? this->__payloadLength__ + 1 : this->__payloadLength__;
@@ -265,32 +268,38 @@ readingPayload:
                                                   }
                                                 }
 
-      unsigned int readBinary (char *buffer, size_t bufferSize) { // returns how many bytes have been copied
-                                                                  // returns 0 if there is not enough space in buffer or in case of communication error
-                                                  do {
-                                                    switch (this->__connection__->available ()) {
-                                                      case TcpConnection::NOT_AVAILABLE: SPIFFSsafeDelay (1); continue;
-                                                      case TcpConnection::ERROR:                              return 0;
-                                                    }
-                                                  } while (false);
-                                                  unsigned int l = this->binarySize ();
-                                                  if (this->__bufferState__ == FULL && this->__payload__) { // double check ...
-                                                    memcpy (buffer, this->__payload__, l);
-                                                    free (this->__payload__);
-                                                    this->__payload__ = NULL;
-                                                    this->__bufferState__ = EMPTY;
-                                                  } else {
-                                                    l = 0;
+      size_t readBinary (byte *buffer, size_t bufferSize) { // returns number bytes copied into buffer
+                                                            // returns 0 if there is not enough space in buffer or in case of communication error
+                                                  while (true) {
+                                                    switch (this->available ()) {
+                                                      case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
+                                                                                      break;
+                                                      case WebSocket::BINARY:         { // Serial.printf ("readBinary: binary size = %i, buffer state = %i, available = %i\n", this->binarySize (), this->__bufferState__, this->available ());
+                                                                                        size_t l = this->binarySize ();
+                                                                                        // if (this->__bufferState__ == FULL && this->__payload__) { // double check ...
+                                                                                          if (bufferSize >= l) 
+                                                                                            memcpy (buffer, this->__payload__, l);
+                                                                                          else
+                                                                                            l = 0;
+                                                                                          free (this->__payload__);
+                                                                                          this->__payload__ = NULL;
+                                                                                          this->__bufferState__ = EMPTY;
+                                                                                        // } else {
+                                                                                        //   l = 0;
+                                                                                        // }
+                                                                                        return l; 
+                                                                                      }
+                                                      default:                        return 0; // WebSocket::STRING or WebSocket::ERROR
+                                                    }                                                    
                                                   }
-                                                  return l;      
                                                 }
-
+                                                
       bool sendString (String text)             { // returns success
-                                                  return this->__sendFrame__ ((byte *) text.c_str (), text.length (), STRING);
+                                                  return this->__sendFrame__ ((byte *) text.c_str (), text.length (), WebSocket::STRING);
                                                 }
 
       bool sendBinary (byte *buffer, size_t bufferSize) { // returns success
-                                                  return this->__sendFrame__ (buffer, bufferSize, BINARY);
+                                                  return this->__sendFrame__ (buffer, bufferSize, WebSocket::BINARY);
                                                 }
                                                 
     private:

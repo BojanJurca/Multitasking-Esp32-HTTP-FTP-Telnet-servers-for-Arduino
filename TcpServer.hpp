@@ -63,7 +63,11 @@
         }
       }
 
-
+      void SPIFFSsafeDelayMicroseconds (unsigned int us) { // use this function instead of delayMicroseconds ()
+        unsigned int usStart = micros ();
+        while (micros () - usStart < us);
+      }
+      
       void __connectionHandler__ (void *threadParameters);
   
   class TcpConnection {                                             
@@ -205,7 +209,7 @@
                                                       if ((this->__timeOutMillis__ == TCP_SERVER_INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ >= this->__timeOutMillis__)) {
                                                         this->__timeOut__ = true;
                                                         this->closeConnection ();
-                                                        Serial.printf ("BJBJBJ [Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                        log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                         return ERROR;
                                                       }                                                      
                                                       return NOT_AVAILABLE;
