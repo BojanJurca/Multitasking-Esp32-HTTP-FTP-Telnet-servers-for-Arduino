@@ -2,7 +2,7 @@
  *
  * Esp32_web_ftp_telnet_server_template.ino
  *
- *  This file is part of Esp32_web_ftp_telnet_server_template.ino project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  *
  *  File contains a working template for some operating system functionalities that can support your projects.
  *
@@ -35,17 +35,15 @@ real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
                       "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
 
 #include "file_system.h"
-// make sure FILE_SYSTEM_MOUNT_METHOD is defined in file_system.h according to what you want to do
 
 #include "network.h"
-// make sure NETWORK_CONNECTION_METHOD is defined in network.h according to what you want to do
 
 #include "user_management.h"
 
 #include "webServer.hpp"
 webServer *webSrv;
 
-#include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10
+#include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10, Oscilloscope
 
 
 String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
@@ -104,7 +102,11 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                                                       example09_webSockets (webSocket);
                                                                       return ""; // doesn't matter what the function returns in case of WebSockets
                                                                     }
-                                                                    
+  else if (httpRequest.substring (0, 21) == "GET /runOscilloscope "){ // oscilloscope.html
+                                                                      example_oscilloscope (webSocket);
+                                                                      return "";
+                                                                    }
+
   else                                                              return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
 }
 
@@ -114,7 +116,7 @@ ftpServer *ftpSrv;
 
 bool ftpAndTelnetFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
                                                 // - has to be reentrant!
-  if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ...
+  if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
   else                          return true;    // ... but let every other client through
 }
 

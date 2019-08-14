@@ -7,8 +7,7 @@
  *  Measurements.hpp include circular queue for storing measurements data set.
  * 
  * History:
- *          - first release, 
- *            October 31, 2018, Bojan Jurca
+ *          - first release, October 31, 2018, Bojan Jurca
  *  
  */
 

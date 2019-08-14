@@ -1,21 +1,21 @@
-# ESP 32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock
+﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock
 
 Esp32_web_ftp_telnet_server_templat makes developing Web and Telnet user interfaces for ESP32 projects almost as easy as possible. 
 
-In case of Web user interface all you need to do is to upload (using FTP) .html (.png, .jpg, …) files into /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
+In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
 In case of Telnet all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
-![Screenshot](screenshot.png)
+![Screenshot](presentation.png)
 
 You can go directly to Setup instructions and examples now or continue reading the rest of this text.
 
-While working on my ESP32 / Arduino home automation project I was often missing functionalities that are available on bigger computers. This template is an attempt of providing some functionalities of operating system such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather then making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface to turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. It creates Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
+While I was working on my ESP32 / Arduino home automation project I often missed functionalities that were available on real computers. This template is an attempt of providing some of this functionalities such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather than making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface through which users can turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. It creates somewhat Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
 
 ## Features
 
-Here is a list of features of objects included into Esp32_web_ftp_telnet_server_template with their functionalities:
+Here is a list of features of objects included in Esp32_web_ftp_telnet_server_template with their functionalities:
 
-- **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that has been previously uploaded into /var/www/html directory. Features:
+- **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
    - WS protocol – only basic support for WebSockets is included so far,
@@ -45,7 +45,7 @@ Like webServer it also offers:
    - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
-- **ftpServer** is needed for uploading configuration files, .html files, etc onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
+- **ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
 
    - ls,
    - rm [esp32FileName],
@@ -67,32 +67,32 @@ Like webServer and telentServer it also offers:
 
 - **Network** configuration files. Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files (although it is a little awkward how network configuration is implemented in these operating systems). The following files are used to store STAtion and AccessPoint configuration parameters:
 
-      - /network/interfaces
-      - /etc/wpa_supplicant.conf
-      - /etc/dhcpcd.conf
-      - /etc/hostapd/hostapd.conf  
+   - /network/interfaces
+   - /etc/wpa_supplicant.conf
+   - /etc/dhcpcd.conf
+   - /etc/hostapd/hostapd.conf  
 
-Modify these files according to your needs or upload your own files onto ESP32 by using FTP. 
+Modify (the part of code that create) these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
-- **User accounts**. Three types of managing user login are supported:
+- **User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
 
-   - UNIX, LINUX, Raspbian like (using user management files),
-   - hardcoded (username and password are hardcoded in to Arduino sketch constants),
-   - no user management at all (everyone can Telnet or FTP to ESP32 servers).
+   - UNIX, LINUX, Raspbian like (using user management files - default setting - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT),
+   - hardcoded (username and password are hardcoded in to Arduino sketch constants - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT),
+   - no user management at all (everyone can Telnet or FTP to ESP32 servers - use #define USER_MANAGEMENT   NO_USER_MANAGEMENT).
 
-By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization or upload your own files onto ESP32 by using FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
+By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code that creates user management files) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
 
       - /etc/passwd
       - /etc/shadow
 
-- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not covered adequately since different countries have different rules how to calculate it from GMT. Five European time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
+- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Five European time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
 
    - GMT,   
-   - WET (= GMT + DST), 
-   - ISLAND (= GMT), 
-   - CET (= GMT + 1 + DST), 
-   - EET (= GMT + 2 + DST), 
-   - FET (= GMT + 3). 
+   - WET (Western European Time = GMT + DST - use #define TIMEZONE   WET_TIMEZONE), 
+   - ICELAND (Iceland Time = GMT - use #define TIMEZONE   ICELAND_TIMEZONE), 
+   - CET (Central European Time = GMT + 1 + DST - use #define TIMEZONE   CET_TIMEZONE), 
+   - EET (Eastern European Time = GMT + 2 + DST - use #define TIMEZONE   EET_TIMEZONE), 
+   - FET (Further-Eastern European Time = GMT + 3 - use #define TIMEZONE   FET_TIMEZONE). 
 
 You may have to modify getLocalTime () function yourself to match your country and location.
 
@@ -121,7 +121,7 @@ Doing this the following will happen:
       - webserver with no password since this is a system account used only to define webserver home directory,
       - telnetserver with no password since this is also a system account used only to define telnetserver home directory.
 
-At this point, you can already test if everything goes on as planned by www, FTP or Telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to do.
+At this point, you can already test if everything goes on as planned by Www, FTP or Telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to do.
 
 5. FTP to your ESP32 as webadmin / webadminpassword and upload the following files:
 
@@ -131,7 +131,8 @@ At this point, you can already test if everything goes on as planned by www, FTP
    - example02.html,
    - example03.html,
    - example04.html,
-   - example09.html.
+   - example09.html,
+   - oscilloscope.html.
 
 ```
 C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
@@ -155,12 +156,14 @@ ftp> put example04.html
 226 /var/www/html/example04.html transfer complete
 ftp> put example09.html
 226 /var/www/html/example09.html transfer complete
+ftp> put oscilloscope.html oscilloscope.html
+226 /var/www/html/oscilloscope.html transfer complete
 ftp>
 ```
 
 Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
 
-6. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory (put help.txt /var/telnet/help.txt), which is a home directory for telnetserver system account.
+6. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory (put help.txt /var/telnet/help.txt), which is a home directory of telnetserver system account.
 
 ```
 C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
@@ -177,7 +180,7 @@ ftp>
 
 ## How to continue from here?
 
-Esp32_web_ftp_telnet_server_template is what its name says, just a working template. A programmer is highly encouraged to add or change each piece of code as he or she sees appropriate for his or her projects. Esp32_web_ftp_telnet_server_template.ino is pretty comprehansive, small and easy to modify so it may be a good starting point.
+Esp32_web_ftp_telnet_server_template is what its name says, just a working template. A programmer is highly encouraged to add or change each piece of code as he or she sees appropriate for his or her projects. Esp32_web_ftp_telnet_server_template.ino is pretty comprehensive, small and easy to modify so it may be a good starting point.
 
 ## Building HTML user interface for your ESP32 project
 
@@ -185,7 +188,7 @@ A series of examples will demonstrate how to create a neatly HTML user interface
 
 **Example 01 - dynamic HTML page**
 
-You can always use static HTML that can be uploaded (via FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each occasion. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
+You can always use static HTML that can be uploaded (with FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each HTTP request. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
 String httpRequestHandler (String httpRequest, WebSocket *webSocket) {
@@ -236,7 +239,7 @@ We do not have C++ compiler available in a browser, but Javascript will do the j
     // make a REST call and initialize/populate this page
     var client = new httpClient ();
     client.request ('/builtInLed', 'GET', function (json) {
-                                                            // json reply is like: {"id":"ESP32_SRV","builtInLed":"on"}
+                                                            // json reply looks like: {"id":"ESP32_SRV","builtInLed":"on"}
                                                             document.getElementById ('ledState').innerText = (JSON.parse (json).builtInLed);
                                                           });
 
@@ -292,7 +295,7 @@ In HTML we use input tag of checkbox type:
     // make a REST call and initialize/populate this page
     var client = new httpClient ();
     client.request ('/builtInLed', 'GET', function (json) {
-                                                            // json reply will be in a form: {"id":"ESP32_SRV","builtInLed":"on"}
+                                                            // json reply will look like: {"id":"ESP32_SRV","builtInLed":"on"}
                                                             var obj=document.getElementById ('ledSwitch'); 
                                                             obj.disabled = false; 
                                                             obj.checked = (JSON.parse (json).builtInLed == 'on');
@@ -445,7 +448,7 @@ if (rtc.isGmtTimeSet ()) {
 
 **Example 08 - making HTTP requests (REST calls for example) directly from ESP32**
 
-Up to now, we have only made REST calls from within Javascript (from browser). However, for establishing machine-to-machine communication REST calls should be made directly from C++ code residing in ESP32.  The only drawback is that C++ does not support parsing JSON answers natively. You have to program the parsing yourself (not included in this example).
+Up to now, we have only made REST calls from within Javascript (from browser). However, for establishing machine-to-machine communication REST calls should be made directly from C++ code residing in ESP32. The only drawback is that C++ does not support parsing JSON answers natively. You have to program the parsing yourself (not included in this example).
 
 Example 08 shows how we can use TcpServer objects to make HTTP requests.
 
@@ -465,7 +468,7 @@ void example08_makeRestCall () {
 
 **Example 09 - WebSockets**
 
-A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 – little endian so they understand each other without doing byte reordering. TCP suggests using network byte ordering for sending binary data over network which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
+A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 – little endian so they understand each other without doing byte reordering. TCP suggests using network byte order, for sending binary data over network, which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
 
 Example 09 demonstrates how ESP32 server could handle WebSockets:
 
@@ -494,8 +497,9 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                         // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
                                         int16_t *i = (int16_t *) buffer;
                                         while ((char *) (i + 1) <= buffer + bytesRead) Serial.printf (" %i", *i ++);
-                                        Serial.printf ("\n[example 09] if the sequence is -21 13 -8 5 -3 2 -1 1 0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946 17711 28657\n"
-                                                         "             it means that both, endianness and complements are compatible with javascript client.\n");
+                                        Serial.printf ("\n[example 09] Looks like this is the Fibonacci sequence,\n"
+                                                         "[example 09] which means that both, endianness and complements are compatible with javascript client.\n");
+                                        
                                         // send text data
                                         if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
   
@@ -509,7 +513,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
         case WebSocket::ERROR:          
   errorInCommunication:     
                                         Serial.printf ("[example 09] error in communication, closing connection\n");
-                                        return ""; // close this connection, the return value will be discarded (in WebSocket case) so it doesn't matter wht it is
+                                        return ""; // close this connection, the return value will be discarded (in WebSocket case) so it doesn't matter what it is
       }
     }
                                                                     
@@ -528,7 +532,7 @@ On the browser site Javascript program could look something like this:
     <script type='text/javascript'>
 
       if ("WebSocket" in window) {
-        var ws = new WebSocket ("ws://" + self.location.host + "/example09_WebSockets"); // open webSocket connection
+        var ws = new WebSocket ("ws://10.0.0.3/example09_WebSockets"); // open webSocket connection
 				
         ws.onopen = function () {
           alert ("WebSocket connection established.");
@@ -572,8 +576,8 @@ On the browser site Javascript program could look something like this:
                 // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 32 bit floating point numbers
                 // (I know they are 32 bit floating point numbers because I have written server C++ example myself but this information can not be obtained from webSocket)
 
-                alert ("[example 09] if the sequence is 1 0.5 0.25 0.125 0.0625 0.03125 0.015625 0.0078125\n" + 
-                       "             it means that 32 bit floating point format is compatible with ESP32 C++ server.\n");
+                alert ("[example 09] Looks like this is the geometric sequence,\n" + 
+                       "[example 09] which means that 32 bit floating point format is compatible with ESP32 C++ server.\n");
 
                 ws.close (); // this is where webSocket connection ends - in our simple "protocol" browser closes the connection but it could be the server as well
 
@@ -725,3 +729,13 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   Serial.printf ("[example 10] connection has just ended\n");
 }
 ```
+
+## Demonstration project
+
+**ESP32 Oscilloscope - see the signals the way ESP32 sees them**
+
+ESP32 oscilloscope is web based application included in Esp32_web_ftp_telnet_server_template. It is accessible through web browser once oscilloscope.html is uploaded to ESP32 (with FTP). ESP32 Oscilloscope is using WebSockets to exchange measured signal values between ESP32 and web browser.
+
+The first picture below was generated by bouncing of an end switch. ESP32 Oscilloscope performed digitalRead-s after pin has been initialised in INPUT_PULLUP mode. The second picture shows noise coming from purely regulated power supply. ESP32 Oscilloscope used analogRead-s on an unconnected pin.
+
+![Screenshot](oscilloscope.png)

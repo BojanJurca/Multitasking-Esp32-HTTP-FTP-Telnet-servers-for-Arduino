@@ -34,7 +34,7 @@
   #include "user_management.h"    // webServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp
 
-  // missing C function in Arduino but we need it
+  // missing C function in Arduino, but we are going to need it
   char *stristr (char *haystack, char *needle) { 
     if (!haystack || !needle) return NULL; // nonsense
     int nCheckLimit = strlen (needle);                     
@@ -120,6 +120,8 @@
                                                     free (this->__payload__);
                                                     // this->__payload__ = NULL;
                                                   }
+                                                  // send closing frame if possible
+                                                  this->__sendFrame__ (NULL, 0, WebSocket::CLOSE);
                                                 } 
 
       String getWsRequest ()                    {return this->__wsRequest__;}
@@ -128,6 +130,7 @@
         NOT_AVAILABLE = 0,          // no data is available to be read 
         STRING = 1,                 // text data is available to be read
         BINARY = 2,                 // binary data is available to be read
+        CLOSE = 8,        
         ERROR = 3
       };
 
@@ -162,12 +165,12 @@
                                                                                       return WebSocket::ERROR;
                                                                                     }
                                                                                     byte b  = this->__header__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close
-                                                                                    if (b == 8) {
+                                                                                    if (b == WebSocket::CLOSE) {
                                                                                       this->__connection__->closeConnection ();
                                                                                       Serial.printf ("[webSocket] browser requested to close webSocket\n");
                                                                                       return WebSocket::NOT_AVAILABLE;
                                                                                     }
-                                                                                    if (b != 1 && b != 2) { 
+                                                                                    if (b != WebSocket::STRING && b != WebSocket::BINARY) { 
                                                                                       Serial.printf ("[webSocket] browser send a frame that is not supported: opcode is not text or binary\n");
                                                                                       this->__connection__->closeConnection ();
                                                                                       return WebSocket::ERROR;
@@ -260,12 +263,7 @@ readingPayload:
                                                 }
 
       size_t binarySize ()                      { // returns how many bytes has arrived from browser, 0 if data is not ready (yet) to be read
-                                                  if (this->__bufferState__ == FULL) {
-                                                    // if the calling program wants to interpret text payload as binary we'll return C string with closing 0
-                                                    return this->__header__ [0] & 0b00000001 /* if text bit set */ ? this->__payloadLength__ + 1 : this->__payloadLength__;
-                                                  } else {
-                                                    return 0;
-                                                  }
+                                                  return this->__bufferState__ == FULL ? this->__payloadLength__ : 0;                                                    return 0;
                                                 }
 
       size_t readBinary (byte *buffer, size_t bufferSize) { // returns number bytes copied into buffer
@@ -332,7 +330,7 @@ readingPayload:
                                                   }
                                                   frame [0] = 0b10000000 | dataType; // set FIN bit and frame data type
                                                   frame [1] = bufferSize; // small frame size, without masking (we won't do the masking, won't set the MASK bit)
-                                                  memcpy (frame + 2, buffer, bufferSize);  
+                                                  if (bufferSize) memcpy (frame + 2, buffer, bufferSize);  
                                                 }
                                                 if (this->__connection__->sendData ((char *) frame, frameSize) != frameSize) {
                                                   free (frame);
