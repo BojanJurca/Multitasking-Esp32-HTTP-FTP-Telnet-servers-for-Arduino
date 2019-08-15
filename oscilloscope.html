@@ -390,7 +390,7 @@
 
                				ws.onclose = function() { 
 						// websocket is closed.
-						// alert ("WebSocket is closed."); 
+						enableDisableControls (false); 
 					};
 
 				} else {
@@ -700,18 +700,6 @@
 					document.getElementById ('frequencyLabel').style.color = 'gray';
 					document.getElementById ('startButton').disabled = true;
 					document.getElementById ('stopButton').disabled = false;
-
-					//document.getElementById ('startButton').classList.toggle ('button3'); // DELA!!! verjetno, ker button3 onstaja, button1 pa ne dela
-					// document.getElementById('startButton').classList.remove('button2'); // TO DVOJE ...
-					//document.getElementById('startButton').classList.add('button1'); // PA DELA TUDI TAKO !!!
-
-					
-
-// document.getElementById("MyElement").classList.add('MyClass');
-// document.getElementById("MyElement").classList.remove('MyClass');
-// if ( document.getElementById("MyElement").classList.contains('MyClass') )
-// document.getElementById("MyElement").classList.toggle('MyClass');
-
 
 				} else {
 

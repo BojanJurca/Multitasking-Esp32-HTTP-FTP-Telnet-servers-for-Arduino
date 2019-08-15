@@ -521,7 +521,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
 }
 ```
 
-On the browser site Javascript program could look something like this:
+On the browser side Javascript program could look something like this:
 
 ```HTML
 <html>
@@ -532,7 +532,7 @@ On the browser site Javascript program could look something like this:
     <script type='text/javascript'>
 
       if ("WebSocket" in window) {
-        var ws = new WebSocket ("ws://10.0.0.3/example09_WebSockets"); // open webSocket connection
+        var ws = new WebSocket ("ws://" + self.location.host + "/example09_WebSockets"); // open webSocket connection
 				
         ws.onopen = function () {
           alert ("WebSocket connection established.");
