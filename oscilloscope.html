@@ -22,17 +22,19 @@
 			/* select control */
 			select {padding: 8px 24px; border-radius: 12px; font-size: 16px; color: black; background-color: #eee; -webkit-appearance: none; -moz-appearance: none; box-sizing: border-box; border: 3px solid #ccc; -webkit-transition: 0.5s; transition: 0.5s; outline: none}
 			select::-ms-expand {display: none}
-			select:disabled {background-color: #bbb}
+			select:disabled {background-color: #aaa}
 
 			/* radio button control */
 			.container {display: black; position: relative; padding-left: 222px; margin-bottom: 14px; cursor: pointer; font-family: verdana; font-size: 30px; color: gray; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none}
 			.container input {position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0}
 			.checkmark {position: absolute; top: 0; left: 0; height: 34px; width: 34px; background-color: #ddd; border-radius: 50%} 
 			.container:hover input ~ .checkmark {background-color: #ccc}
-			.container input:checked ~ .checkmark {background-color: #2196F3} /* TO DO: set background-color to gray when disabled */
+			.container input:checked ~ .checkmark {background-color: #2196F3}
 			.checkmark:after {content: ""; position: absolute; display: none}
 			.container input:checked ~ .checkmark:after {display: block}
 			.container .checkmark:after {top: 9px; left: 9px; width: 15px; height: 15px; border-radius: 50%; background: white}
+			.container input:disabled ~ .checkmark {background-color: gray} 
+			.container input:disabled ~ .checkmark {background-color: #aaa}
 
 			/* slider control */
 			input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 250px; height: 28px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: #2196F3; outline: none}
@@ -44,8 +46,8 @@
 			input[type='range']::-webkit-slider-thumb {-webkit-appearance: none; width: 38px; height: 26px; border: none; border-radius: 13px; background-color: white}
 			input[type='range']::-moz-range-thumb {width: 38px; height: 26px; border: none; border-radius: 13px; background-color: white}
 			input[type='range']::-ms-thumb {width: 38px; height: 26px; border-radius: 13px; border: 0; background-color: white}
-			input:disabled+.slider {background-color: gray}
-			input[type='range']:disabled {background: gray}
+			input:disabled+.slider {background-color: #aaa}
+			input[type='range']:disabled {background: #aaa}
 
 			/* switch control */
 			.switch {position: relative; display: inline-block; width: 60px; height: 34px}
@@ -57,12 +59,12 @@
 			.switch input {display: none}
 			.slider.round {border-radius: 34px}
 			.slider.round:before {border-radius: 50%}
-			input:disabled+.slider {background-color: gray}
+			input:disabled+.slider {background-color: #aaa}
 
 			/* button control */
 			.button {padding: 10px 15px; font-size: 22px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 42px}
-			button:disabled {background-color: gray}
-			button:disabled:hover {background-color: gray}
+			button:disabled {background-color: #aaa}
+			button:disabled:hover {background-color: #aaa}
 
 			/* blue button */
 			.button1 {background-color: #2196F3}
@@ -388,8 +390,14 @@
 						}
 					};
 
-               				ws.onclose = function() { 
+               				ws.onclose = function () { 
 						// websocket is closed.
+						enableDisableControls (false); 
+					};
+
+					ws.onerror = function (event) {
+						ws.close (); 
+						alert ("WebSocket error: " + event);
 						enableDisableControls (false); 
 					};
 
@@ -584,7 +592,7 @@
 							break;
 				}
 
-				for (x = 0; x < screenWidthTime * 1.1; x += xGridTick) { // * TO DO: 1.1 factor is here to bypass the problem of colouring the last vertical line with the signal colour which I'm not addressing right now
+				for (x = 0; x < screenWidthTime; x += xGridTick) { 
 					i = xOffset + xScale * x;
 					ctx.strokeText (xLabel, i + 25, yOffset + 25);	
 					ctx.beginPath ();
@@ -593,6 +601,7 @@
 					ctx.closePath ();
 					ctx.stroke ();
 				}
+				ctx.beginPath (); ctx.moveTo (-1, -1); ctx.lineTo (-1, -1); ctx.closePath (); ctx.stroke (); // non-existing line - this line will be redrawn latter with signal color after first stroke - put it outside of view since we don't want this to hapen
 
 			}
 
@@ -798,6 +807,7 @@
 				while ((performance.now () - start) < milliseconds);
 			}
 			
+			// enableDisableControls (true);
 			// test_analog_1_sample_at_a_time ();
 			// test_analog_1_screen_at_a_time ();
 			// test_digital_1_sample_at_a_time ();
