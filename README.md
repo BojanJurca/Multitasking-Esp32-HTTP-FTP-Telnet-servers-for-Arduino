@@ -1,4 +1,4 @@
-﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock
+﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock. Web-based oscilloscope is attached as a demonstration project.
 
 Esp32_web_ftp_telnet_server_templat makes developing Web and Telnet user interfaces for ESP32 projects almost as easy as possible. 
 
@@ -24,16 +24,19 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
    - time-out set to 1,5 seconds for HTTP protocol and 5 minutes for WS protocol to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming requests.
 
-- **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Only a few built-in commands are implemented so far:
+- **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. A few built-in commands are implemented so far:
 
-   - passwd,
-   - ls ([directoryName]) or dir ([directoryName]),
-   - cat [fileName] or type [fileName],
-   - rm [fileName] or del [fileName],
-   - ping [target] (ping used here was taken and modified from https://github.com/pbecchi/ESP32_ping),
+   - ls (<directoryName>) or dir (<directoryName>),
+   - cat <fileName> or type <fileName>,
+   - rm <fileName> or del <fileName>,
+   - ping <target>,
    - ifconfig or ipconfig,
-   - arp (synonym for "arp -a" as implemented here),
-   - iw (synonym for "iw dev wlan1 station dump" as implemented here),
+   - arp /* synonym for "arp -a" as implemented here */,
+   - iw /* synonym for "iw dev wlan1 station dump" as implemented here */,
+   - useradd -u <userId> -d <userHomeDirectory> <userName>,
+   - userdel <userName>,
+   - passwd (<userName>),
+   - dmesg (--follow),
    - uptime,
    - reboot,
    - help,
@@ -51,6 +54,7 @@ Like webServer it also offers:
    - rm [esp32FileName],
    - put ([osFileName]) [esp32FileName],
    - get [sp32FileName] ([osFileName]).
+
 Like webServer and telentServer it also offers:
    - threaded FTP sessions,
    - time-out set to 5 minutes to free up limited ESP32 the resources used by inactive sessions,  
@@ -163,7 +167,7 @@ ftp>
 
 Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
 
-6. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory (put help.txt /var/telnet/help.txt), which is a home directory of telnetserver system account.
+6. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory of telnetserver system account.
 
 ```
 C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
@@ -177,6 +181,8 @@ ftp> put help.txt /var/telnet/help.txt
 226 /var/telnet/help.txt transfer complete
 ftp>
 ```
+
+7. Delete all the examples that are not needed and all the references to these examples in the code. They are included just to make the development easier for you.
 
 ## How to continue from here?
 
@@ -382,19 +388,18 @@ Style user interface with CSS:
 Compared to HTML user interface Telnet user interface is a piece of cake. Modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
-String telnetCommandHandler (String command, String parameter, String homeDirectory) {
-  if (command + " " + parameter  == "led state") {
+String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
+  if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
 getBuiltInLed:
     return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
-  } else if (command + " " + parameter == "turn led on") {
+  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "on") {
     digitalWrite (2, HIGH);
     goto getBuiltInLed;
-  } else if (command + " " + parameter  == "turn led off") {
+  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "off") {
     digitalWrite (2, LOW);
     goto getBuiltInLed;
   }
-  
-  return ""; // telnetCommandHandler did not handle command | parameter, let the telnet server try to process it otherway
+  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
 }
 ```
 
@@ -729,6 +734,14 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   Serial.printf ("[example 10] connection has just ended\n");
 }
 ```
+
+## Run-time monitoring your ESP32 behaviour
+
+**Example 11 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
+
+Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it connect to your ESP32 with telnet and type dmesg command.
+
+![Screenshot](dmesg.png)
 
 ## Demonstration project
 

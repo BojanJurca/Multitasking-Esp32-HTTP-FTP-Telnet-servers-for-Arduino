@@ -14,14 +14,20 @@
  *            November 18, 2018, Bojan Jurca
  *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
+ *          - introduction of FTP_FILE_TIME definition
+ *            August, 25, 2019, Bojan Jurca
  *  
  */
 
 
 #ifndef __FTP_SERVER__
   #define __FTP_SERVER__
- 
-  // change this definitions according to your needs
+
+  // SPIFSS does not support file time attribute but we have to send something through FTP protocol. Any time will do.
+  // It could be 1566643632 for example or rtc.getLocalTime () if rtc is defined, ... 
+  #ifndef FTP_FILE_TIME
+    #define FTP_FILE_TIME 1566643632; // right the time I have written this line
+  #endif
 
   int __pasiveDataPort__ () {
     static portMUX_TYPE csFtpPasiveDataPort = portMUX_INITIALIZER_UNLOCKED;
@@ -35,8 +41,6 @@
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
   #include "user_management.h"    // ftpServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // ftpServer.hpp is built upon TcpServer.hpp
-  #include "real_time_clock.hpp"  // ftpServer.hpp uses real_time_clock.hpp
-
 
     void __ftpConnectionHandler__ (TcpConnection *connection, void *);
   
@@ -113,7 +117,7 @@
           
           } else if (!strcmp (ftpCmd, "PASS")) {  // ---------- PASS ----------
             
-                if (checkUserNameAndPassword (user, ftpParam)) { char *p = getUserHomeDirectory (user); if (p && strlen (p) < sizeof (homeDir)) strcpy (homeDir, p); }
+                if (checkUserNameAndPassword (user, ftpParam)) getUserHomeDirectory (homeDir, user);
                 if (*homeDir) { 
                   loggedIn = true; 
                   sprintf (buffer, "230 logged on, use \"/\" to refer to your home directory \"%s\"\r\n", homeDir);
@@ -329,7 +333,7 @@
           if(!file.isDirectory ()) {
             char c [60];
             sprintf (c, "  %6i", file.size ());
-            time_t now = rtc.getLocalTime (); // SPIFFS does not have file-time attribute, we'll just use current time if it is set (otherwise whatever time we have) on ESP32 here
+            time_t now = FTP_FILE_TIME; 
             strftime (c + strlen (c), 25, " %b %d %H:%M      ", gmtime (&now)); // locatime is the same as gmtime since ESP is not aware of its location
             s += String ("-r-xr-xrwx   1 owner    group        ") + String (c) + String (file.name ()) + String ("\r\n");
           }

@@ -13,38 +13,75 @@
  *            December 5, 2018, Bojan Jurca
  *          - added SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
+ *          - telnetCommandHandler parameters are now easyer to access 
+ *            September 4th, Bojan Jurca   
  *  
  */
 
 
-#define PROJECT_ID "Esp32_web_ftp_telnet_server_template" // change with the name of your project
-
 #include <WiFi.h>
+
+// ----- include project features - order may be important -----
+
+#define PROJECT_ID "Esp32_web_ftp_telnet_server_template" // change this definition for your project - it is going to be written into /ID file
+#include "file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
+
+#include "network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
+                                                          
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT             // Telnet and FTP servers use user management, Web server uses it only to get its home directory
+// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT      // define the kind of user management project is going to use
+// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
+#include "user_management.h"
+                    
+#include "real_time_clock.hpp"                            // Telnet server needs rtc to execute certain commands such as uptime
+real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
+                      "3.si.pool.ntp.org",  // second NTP server if the first one is not accessible
+                      "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
+
+#include "telnetServer.hpp"                               // Telnet server - if other server are going to use dmesg telnetServer.hpp has to be defined priorly
+
+#include "webServer.hpp"                                  // Web server
+
+#define FTP_FILE_TIME rtc.getLocalTime()                  // define this if FTP is going to use current time to report file creation time 
+#include "ftpServer.hpp"                                  // SPIFFS doesn't record file creation time so this information will be false anyway
+
+// ----- add what this template needs for demonstration -----
 
 #include "measurements.hpp"
 measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
 measurements connectionCount (60);          // measure how many web connections arrive each minute
 
-
-
-// features
-
-#include "real_time_clock.hpp"
-real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
-                      "3.si.pool.ntp.org",  // second NTP server if the first one is not accessible
-                      "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
-
-#include "file_system.h"
-
-#include "network.h"
-
-#include "user_management.h"
-
-#include "webServer.hpp"
-webServer *webSrv;
-
 #include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10, Oscilloscope
 
+// ----- use features in the project -----
+
+telnetServer *telnetSrv; // pointer to Telnet server
+String telnetCommandHandler (int argc, String argv [], String homeDirectory);
+
+String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
+  if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
+getBuiltInLed:
+    return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
+  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "on") {
+    digitalWrite (2, HIGH);
+    goto getBuiltInLed;
+  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "off") {
+    digitalWrite (2, LOW);
+    goto getBuiltInLed;
+  }
+  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
+}
+
+bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
+                                                // - has to be reentrant!
+  if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
+  else                          return true;    // ... but let every other client through
+}
+
+ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
+
+webServer *webSrv; // pointer to Web server
+String httpRequestHandler (String httpRequest, WebSocket *webSocket);
 
 String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
                                                                         // - for WebSocket httpRequest is WS request, webSocket pointer is set, whatever function returns will be discarded
@@ -54,29 +91,29 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                                                         
        connectionCount.increaseCounter ();                              // gether some statistics
 
-  // handling HTTP
-       if (httpRequest.substring (0, 20) == "GET /example01.html ") { // Example 01
+  // handle HTTP protocol requests
+       if (httpRequest.substring (0, 20) == "GET /example01.html ") { // used in Example 01
                                                                       return String ("<HTML>Example 01 - dynamic HTML page<br><br>") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("</HTML>");
                                                                     }
-  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // Example 02, Example 03, Example 04, index.html
+  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // used in Example 02, Example 03, Example 04, index.html
                                                                     getBuiltInLed:
                                                                       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
                                                                     }                                                                    
-  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  { // Example 03, Example 04
+  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  { // used in Example 03, Example 04
                                                                       digitalWrite (2, HIGH);
                                                                       goto getBuiltInLed;
                                                                     }
-  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") { // Example 03, Example 04, index.html
+  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") { // used in Example 03, Example 04, index.html
                                                                       digitalWrite (2, LOW);
                                                                       goto getBuiltInLed;
                                                                     }
-  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") { // index.html
+  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") { // used in index.html
                                                                         digitalWrite (2, HIGH);
                                                                         SPIFFSsafeDelay (10000);
                                                                         digitalWrite (2, LOW);
                                                                         goto getBuiltInLed;
                                                                       }
-  else if (httpRequest.substring (0, 12) == "GET /upTime ")         { // index.html
+  else if (httpRequest.substring (0, 12) == "GET /upTime ")         { // used in index.html
                                                                       if (rtc.isGmtTimeSet ()) {
                                                                         unsigned long long l = rtc.getGmtTime () - rtc.getGmtStartupTime ();
                                                                         // int s = l % 60;
@@ -91,54 +128,24 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                                                         return "{\"id\":\"esp32\",\"upTime\":\"unknown\"}\r\n";
                                                                       }
                                                                     }                                                                    
-  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       { // index.html
+  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       { // used in index.html
                                                                       return freeHeap.measurements2json (5);
                                                                     }
-  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // index.html
+  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // used in index.html
                                                                       return connectionCount.measurements2json (5);
                                                                     }
-  // handling WS (WebSockets)
-  else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // Example 09
+  // handle WS (WebSockets) protocol requests
+  else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // used in Example 09
                                                                       example09_webSockets (webSocket);
-                                                                      return ""; // doesn't matter what the function returns in case of WebSockets
+                                                                      return ""; // it doesn't matter what the function returns in case of WebSockets
                                                                     }
-  else if (httpRequest.substring (0, 21) == "GET /runOscilloscope "){ // oscilloscope.html
+  else if (httpRequest.substring (0, 21) == "GET /runOscilloscope " && webSocket){ // used in oscilloscope.html
                                                                       example_oscilloscope (webSocket);
-                                                                      return "";
+                                                                      return ""; // it doesn't matter what the function returns in case of WebSockets
                                                                     }
 
   else                                                              return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
 }
-
-
-#include "ftpServer.hpp"
-ftpServer *ftpSrv;
-
-bool ftpAndTelnetFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
-                                                // - has to be reentrant!
-  if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
-  else                          return true;    // ... but let every other client through
-}
-
-
-#include "telnetServer.hpp"
-telnetServer *telnetSrv;
-
-String telnetCommandHandler (String command, String parameter, String homeDirectory) { // Example 05
-  if (command + " " + parameter  == "led state") {
-getBuiltInLed:
-    return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
-  } else if (command + " " + parameter == "turn led on") {
-    digitalWrite (2, HIGH);
-    goto getBuiltInLed;
-  } else if (command + " " + parameter  == "turn led off") {
-    digitalWrite (2, LOW);
-    goto getBuiltInLed;
-  }
-  
-  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
-}
-
 
 // setup (), loop () --------------------------------------------------------
 
@@ -151,35 +158,47 @@ void setup () {
   
   Serial.begin (115200);
 
-  mountSPIFFS ();                                     // this is the first thing that you should do
+  if (mountSPIFFS ()) dmesg ("SPIFFS mounted.");      // this is the first thing that you should do
+  else                dmesg ("SPIFFS mount failed.");
 
   usersInitialization ();                             // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
 
   connectNetwork ();                                  // network should be connected after file system is mounted since it reads its configuration from file system
-
+  if (networkAccesPointWorking) dmesg ("wlan1 is working in Access Point mode.");
+  else                          dmesg ("wlan1 could not mount Access Point.");
+  if (networkStationWorking)    dmesg ("wlan2 is connected in Station mode.");
+  else                          dmesg ("wlan2 could not connect as a station.");
+  
   writeProjectIdOnFlashDrive ();
   listFilesOnFlashDrive ();
 
   webSrv = new webServer (httpRequestHandler,         // a callback function tht will handle HTTP request that are not handled by webServer itself
                           4096,                       // 4 KB stack size is usually enough, it httpRequestHandler uses more stack increase this value until server is stabile
-                          "0.0.0.0",                  // start web server on all available ip adresses
+                          "0.0.0.0",                  // start web server on all available ip addresses
                           80,                         // HTTP port
                           NULL);                      // we won't use firewall callback function for web server
+  if (webSrv->started ()) dmesg ("Web server has started on all available IP addresses on port 80.");
+  else                    dmesg ("Web server did not start due to error.");
 
-  ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip adresses
+  ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
                           21,                         // controll connection FTP port
-                          ftpAndTelnetFirewall);      // use firewall callback function for FTP server
+                          telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
+  if (ftpSrv->started ()) dmesg ("FTP server has started on all available IP addresses on port 21 with firewall.");
+  else                    dmesg ("FTP server did not start due to error.");                           
 
   telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
-                                4096,                 // 4 KB stack size is usually enough, it telnetCommandHanlder uses more stack increase this value until server is stabile
-                                "0.0.0.0",            // start telnt server on all available ip adresses
+                                8136,                 // 8 KB stack size is usually enough, it telnetCommandHanlder uses more stack increase this value until server is stabile
+                                "0.0.0.0",            // start telnt server on all available ip addresses
                                 23,                   // telnet port
-                                ftpAndTelnetFirewall);// use firewall callback function for telnet server
+                                telnetAndFtpFirewall);// use firewall callback function for telnet server or NULL
+  if (ftpSrv->started ()) dmesg ("Telnet server has started on all available IP addresses on port 23 with firewall.");
+  else                    dmesg ("Telnet server did not start due to error.");                                
 
   pinMode (2, OUTPUT);                                // this is just for demonstration purpose - prepare built-in LED
   digitalWrite (2, LOW);
 
   // examples
+  pinMode (22, INPUT_PULLUP);                         // this is just for demonstration purpose - oscilloscope
   if (pdPASS != xTaskCreate (examples, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[examples] couldn't start examples\n");
 }
 
@@ -205,5 +224,6 @@ void loop () {
     freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s asmple of free heap in KB each minute 
     connectionCount.addCounterToMeasurements (lastScale);           // take sample of number of web connections that arrived last minute
     Serial.printf ("[loop ()][Thread:%lu][Core:%i] free heap:   %6i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), ESP.getFreeHeap ());
+    dmesg ("Free heap: " + String (ESP.getFreeHeap () / 1024) + " KB.");    
   }  
 }

@@ -2,6 +2,7 @@
  * TcpServer.hpp
  * 
  *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ *  It si also available as a stand-alone project: https://github.com/BojanJurca/Esp32_threaded_TCP_server
  *
  *  TcpServer.hpp contains a minimalistic IPv4 threaded TCP server for ESP32 / Arduino environment with:
  *    - time-out functionality,
@@ -21,8 +22,10 @@
  *            November 22, 2018, Bojan Jurca
  *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
- *          - added available () memeber function of TcpConnection object
+ *          - added available () member function to TcpConnection object
  *            May 12, 2019, Bojan Jurca
+ *          - added sendData (char []) and sendData (String) to TcpConnection object
+ *            September 5, 2019, Bojan Jurca
  *  
  */
 
@@ -139,7 +142,7 @@
                                                     this->__socket__ = -1;
                                                   portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
                                                   if (connectionSocket != -1) { // can not close socket inside of critical section
-                                                    if (shutdown (connectionSocket, SHUT_RDWR) == -1) log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
+                                                    // if (shutdown (connectionSocket, SHUT_RD) == -1) log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
                                                     if (close (connectionSocket) == -1)               log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno); 
                                                   }  
                                                   log_v ("[Thread:%lu][Core:%i][Socket:%i] } closeConnection\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);  
@@ -256,7 +259,16 @@
                                                   log_i ("[Thread:%lu][Core:%i][Socket:%i] sendData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, writtenTotal);
                                                   return writtenTotal;
                                                 }
-  
+
+      int sendData (char string [])                                 // returns the number of bytes actually sent or 0 indicatig error or closed connection
+                                                {
+                                                  return (this->sendData (string, strlen (string)));
+                                                }
+      int sendData (String string)                                 // returns the number of bytes actually sent or 0 indicatig error or closed connection
+                                                {
+                                                  return (this->sendData ((char *) string.c_str (), strlen (string.c_str ())));
+                                                }
+                                                
       bool started ()                           { return this->__threadStarted__; } // returns true if connection thread has already started - this flag is set before the constructor returns
   
       bool timeOut ()                           { return this->__timeOut__; } // returns true if time-out has occured

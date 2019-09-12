@@ -163,6 +163,7 @@
                                                       lowWord = word (ntpPacket [42], ntpPacket [43]);
                                                       secsSince1900 = highWord << 16 | lowWord;
                                                       currentTime = secsSince1900 - SEVENTY_YEARS;
+                                                      // Serial.printf ("currentTime = %i\n", currentTime);
                                                       // right now currentTime is 1542238838 (14.11.18 23:40:38), every valid time should be grater then 1542238838
                                                       if (currentTime < 1542238838) { 
                                                         log_e ("wrong NTP response\n");

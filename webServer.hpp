@@ -373,7 +373,8 @@ readingPayload:
                  int serverPort,                                                            // web server port
                  bool (* firewallCallback) (char *)                                         // a reference to callback function that will be celled when new connection arrives 
                 )                               {
-                                                  char *p = getUserHomeDirectory ("webserver"); 
+                                                  char homeDir [33];
+                                                  char *p = getUserHomeDirectory (homeDir, "webserver"); 
                                                   if (p && strlen (p) < sizeof (this->__webHomeDirectory__)) strcpy (this->__webHomeDirectory__, p);
                                                   
                                                   if (*this->__webHomeDirectory__) { 
@@ -449,7 +450,8 @@ readingPayload:
             if (buffer == strstr (buffer, "GET ")) {
               char *p; if ((p = strstr (buffer + 4, " ")) && (p - buffer) < (sizeof (htmlFile) + 4)) memcpy (htmlFile, buffer + 4, p - buffer - 4);
               if (*htmlFile == '/') strcpy (htmlFile, htmlFile + 1); if (!*htmlFile) strcpy (htmlFile, "index.html");
-              if (p = getUserHomeDirectory ("webserver")) {
+              char homeDir [33];
+              if (p = getUserHomeDirectory (homeDir, "webserver")) {
                 if (strlen (p) + strlen (htmlFile) < sizeof (fullHtmlFilePath)) strcat (strcpy (fullHtmlFilePath, p), htmlFile);
                 
                 xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);

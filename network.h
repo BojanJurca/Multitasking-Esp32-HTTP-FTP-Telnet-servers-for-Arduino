@@ -55,130 +55,73 @@
   
     // it is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used
 
-    // prepare configuration for network interface 2 that will be used latter to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to eisting WiFi)
+    String fileContent = "";
 
-    File file;
-    bool fileExists;
-        
-    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-
-    // create /network/interfaces if it doesn't exist
-
-    fileExists = (bool) (file = SPIFFS.open ("/network/interfaces", FILE_READ)) && !file.isDirectory ();
-    file.close (); 
-    if (!fileExists) {      
+    // prepare configuration for network interface 2 that will be used latter to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to your WiFi)
+    readEntireFile (&fileContent, "/network/interfaces");
+    if (fileContent == "") {
       Serial.printf ("[network] /network/interfaces does noes exist, creating new one ... ");
-      if (File file = SPIFFS.open ("/network/interfaces", FILE_WRITE)) {
       
-        String s =  "# only wlan2 can be used to connect to your WiFi\r\n"
-                    "\r\n"
-                    "# get IP address from DHCP\r\n"
-                    "   iface wlan2 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
-                    "\r\n"
-                    "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
-                    "#   iface wlan2 inet static\r\n"
-                    "#      address 10.0.0.3\r\n"                   // change 10.0.0.3 to the IP you want to assigne to your ESP32 in static mode
-                    "#      netmask 255.255.255.0\r\n"              // change 255.255.255.0 to subnet mask you want to assigne to your ESP32 in static mode
-                    "#      gateway 10.0.0.1\r\n";                  // change 10.0.0.1 to your router's IP
-      
-        if (file.print (s) != s.length ()) { 
-          file.close ();
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          Serial.printf ("error.\n"); 
-          return; 
-        }
-        file.close ();
-        Serial.printf ("created.\n");
-      }
+      fileContent =  "# only wlan2 can be used to connect to your WiFi\r\n"
+                     "\r\n"
+                     "# get IP address from DHCP\r\n"
+                     "   iface wlan2 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
+                     "\r\n"
+                     "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
+                     "#   iface wlan2 inet static\r\n"
+                     "#      address 10.0.0.3\r\n"                   // change 10.0.0.3 to the IP you want to assigne to your ESP32 in static mode
+                     "#      netmask 255.255.255.0\r\n"              // change 255.255.255.0 to subnet mask you want to assigne to your ESP32 in static mode
+                     "#      gateway 10.0.0.1\r\n";                  // change 10.0.0.1 to your router's IP
+
+      if (writeEntireFile (fileContent, "/network/interfaces")) Serial.printf ("created.\n");
+      else                                                      Serial.printf ("error creating /network/interfaces.\n");
     }
 
     // create /etc/wpa_supplicant.conf if it doesn't exist
-
-    fileExists = (bool) (file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_READ)) && !file.isDirectory ();
-    file.close (); 
-    if (!fileExists) {      
+    readEntireFile (&fileContent, "/etc/wpa_supplicant.conf");
+    if (fileContent == "") {
       Serial.printf ("[network] /etc/wpa_supplicant.conf does noes exist, creating new one ... ");
-      if (File file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_WRITE)) {
       
-        String s =  "network = {\r\n"
+      fileContent = "network = {\r\n"
                     "   ssid = \"YOUR-STA-SSID\"\r\n"               // change YOUR-STA-SSID to your WiFi SSID here
                     "   psk  = \"YOUR-STA-PASSWORD\"\r\n"           // change YOUR-STA-PASSWORD to your WiFi password here
                     "}\r\n";
-      
-        if (file.print (s) != s.length ()) { 
-          file.close ();
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          Serial.printf ("error.\n"); 
-          return; 
-        }
-        file.close ();
-        Serial.printf ("created.\n");
-      }
+
+      if (writeEntireFile (fileContent, "/etc/wpa_supplicant.conf")) Serial.printf ("created.\n");
+      else                                                           Serial.printf ("error creating /etc/wpa_supplicant.conf.\n");
     }
 
     // prepare configuration for network interface 1 that will be used latter to start WiFi access point (skip this if you don't want ESP32 to be an access point)
-
     // create /etc/wpa_supplicant.conf if it doesn't exist
-
-    fileExists = (bool) (file = SPIFFS.open ("/etc/dhcpcd.conf", FILE_READ)) && !file.isDirectory ();
-    file.close (); 
-    if (!fileExists) {      
+    readEntireFile (&fileContent, "/etc/dhcpcd.conf");
+    if (fileContent == "") {
       Serial.printf ("[network] /etc/dhcpcd.conf does noes exist, creating new one ... ");
-      if (File file = SPIFFS.open ("/etc/dhcpcd.conf", FILE_WRITE)) {
+
+      fileContent =  "# only static IP addresses can be used for acces point and only wlan1 can be used (example below)\r\n"
+                     "\r\n"
+                     "interface wlan1\r\n"
+                     "   static ip_address = 10.0.1.3\r\n"           // change 10.0.1.3 to the access point IP your ESP32 will have here
+                     "          netmask = 255.255.255.0\r\n"         // change 255.255.255.0 to the access point subnet mask your ESP32 will have here
+                     "          gateway = 10.0.1.3\r\n";             // change 10.0.1.3 to the access point IP your ESP32 will have here
       
-        String s =  "# only static IP addresses can be used for acces point and only wlan1 can be used (example below)\r\n"
-                    "\r\n"
-                    "interface wlan1\r\n"
-                    "   static ip_address = 10.0.1.3\r\n"           // change 10.0.1.3 to the access point IP your ESP32 will have here
-                    "          netmask = 255.255.255.0\r\n"         // change 255.255.255.0 to the access point subnet mask your ESP32 will have here
-                    "          gateway = 10.0.1.3\r\n";             // change 10.0.1.3 to the access point IP your ESP32 will have here
-      
-        if (file.print (s) != s.length ()) { 
-          file.close ();
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          Serial.printf ("error.\n"); 
-          return; 
-        }
-        file.close ();
-        Serial.printf ("created.\n");
-      }
+      if (writeEntireFile (fileContent, "/etc/dhcpcd.conf")) Serial.printf ("created.\n");
+      else                                                   Serial.printf ("error creating /etc/dhcpcd.conf.\n");
     }
 
     // create /etc/hostapd/hostapd.conf if it doesn't exist
+    readEntireFile (&fileContent, "/etc/hostapd/hostapd.conf");
+    if (fileContent == "") {
 
-    fileExists = (bool) (file = SPIFFS.open ("/etc/hostapd/hostapd.conf", FILE_READ)) && !file.isDirectory ();
-    file.close (); 
-    if (!fileExists) {      
-      Serial.printf ("[network] /etc/hostapd/hostapd.conf does noes exist, creating new one ... ");      
-      if (File file = SPIFFS.open ("/etc/hostapd/hostapd.conf", FILE_WRITE)) {
-      
-        String s =  "# only wlan1 can be used for access point\r\n"
-                    "\r\n"
-                    "interface = wlan1\r\n"
-                    "   ssid = ESP32_SRV\r\n"                      // change ESP32_SRV to your access point SSID here
-                    "   # use at least 8 characters for wpa_passphrase\r\n"
-                    "   wpa_passphrase = YOUR-AP-PASSWORD\r\n";    // change YOUR-AP-PASSWORD to your access point password here
-      
-        if (file.print (s) != s.length ()) { 
-          file.close ();
-          
-          xSemaphoreGive (SPIFFSsemaphore);
-          
-          Serial.printf ("error.\n"); 
-          return; 
-        }
-        file.close ();
-        Serial.printf ("created.\n");
-      }
+    fileContent =  "# only wlan1 can be used for access point\r\n"
+                   "\r\n"
+                   "interface = wlan1\r\n"
+                   "   ssid = ESP32_SRV\r\n"                      // change ESP32_SRV to your access point SSID here
+                   "   # use at least 8 characters for wpa_passphrase\r\n"
+                   "   wpa_passphrase = YOUR-AP-PASSWORD\r\n";    // change YOUR-AP-PASSWORD to your access point password here
+
+      if (writeEntireFile (fileContent, "/etc/hostapd/hostapd.conf")) Serial.printf ("created.\n");
+      else                                                            Serial.printf ("error creating /etc/hostapd/hostapd.conf.\n");
     }
-      
-    xSemaphoreGive (SPIFFSsemaphore);
       
     // read network configuration from configuration files and set it accordingly
     String staSSID = "";

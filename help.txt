@@ -1,14 +1,22 @@
 You can use the following commands:
 
-  passwd
   ls (<directoryName>) or dir (<directoryName>)
   cat <fileName> or type <fileName>
   rm <fileName> or del <fileName>
+
   ping <target>
   ifconfig or ipconfig
-  arp (synonym for "arp -a" as implemented here)
-  iw (synonym for "iw dev wlan1 station dump" as implemented here)
+  arp /* synonym for "arp -a" as implemented here */
+  iw /* synonym for "iw dev wlan1 station dump" as implemented here */
+
+  useradd -u <userId> -d <userHomeDirectory> <userName>
+  userdel <userName>
+  passwd (<userName>)
+
+  dmesg (--follow)
+
   uptime
   reboot
+
   help
   quit

@@ -12,12 +12,18 @@
  *            November 15, 2018, Bojan Jurca
  *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
+ *          - added functions __readEntireFileWithoutSemaphore__ and __writeEntireFileWithoutSemaphore__
+ *            September 8, Bojan Jurca
  *  
  */
 
 
 #ifndef __FILE_SYSTEM__
   #define __FILE_SYSTEM__
+
+  #ifndef PROJECT_ID
+    #define PROJECT_ID "PROJECT_ID is not #define-d"
+  #endif
   
   #include "TcpServer.hpp"
   
@@ -65,6 +71,52 @@
     }
   }
 
+  // reads entire file into String without using sempahore - it is expected that calling functions would provide it - returns success
+  bool __readEntireFileWithoutSemaphore__ (String *fileContent, char *fileName) {
+    *fileContent = "";
+    
+    File file;
+    if ((bool) (file = SPIFFS.open (fileName, "r")) && !file.isDirectory ()) {
+      while (file.available ()) *fileContent += String ((char) file.read ());
+      file.close ();
+      return true;
+    } else { 
+      Serial.printf ("[file_system] can't read %s\n", fileName);
+      file.close ();
+      return false;      
+    }
+  }  
+
+  // writes String into file file without using sempahore - it is expected that calling functions would provide it - returns success
+  bool __writeEntireFileWithoutSemaphore__ (String fileContent, char *fileName) {
+    File file;
+    if ((bool) (file = SPIFFS.open (fileName, "w")) && !file.isDirectory ()) {
+      if (file.printf (fileContent.c_str ()) != strlen (fileContent.c_str ())) { // can't write file
+        file.close ();
+        Serial.printf ("[file_system] can't write %s\n", fileName);
+        return false;                
+      } else {
+        file.close ();
+        return true;        
+      }
+    }
+  }  
+
+  // reads entire file into String, returns success
+  bool readEntireFile (String *fileContent, char *fileName) {
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+    bool b = __readEntireFileWithoutSemaphore__ (fileContent, fileName);
+    xSemaphoreGive (SPIFFSsemaphore);
+    return b;      
+  }
+
+  // writes String into file file, returns success
+  bool writeEntireFile (String& fileContent, char *fileName) {
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+    bool b = __writeEntireFileWithoutSemaphore__ (fileContent, fileName);
+    xSemaphoreGive (SPIFFSsemaphore);
+    return b;  
+  }  
   
   String readEntireTextFile (char *fileName) { // reads entire file into String (ignoring \r) - it is supposed to be used for small files
     String s = "";
