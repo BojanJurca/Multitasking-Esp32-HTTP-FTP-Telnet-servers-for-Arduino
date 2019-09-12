@@ -26,16 +26,16 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
 
 - **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. A few built-in commands are implemented so far:
 
-   - ls (<directoryName>) or dir (<directoryName>),
-   - cat <fileName> or type <fileName>,
-   - rm <fileName> or del <fileName>,
-   - ping <target>,
+   - ls ([directoryName]) or dir ([directoryName]),
+   - cat [fileName] or type [fileName],
+   - rm [fileName] or del [fileName],
+   - ping [target],
    - ifconfig or ipconfig,
    - arp /* synonym for "arp -a" as implemented here */,
    - iw /* synonym for "iw dev wlan1 station dump" as implemented here */,
-   - useradd -u <userId> -d <userHomeDirectory> <userName>,
-   - userdel <userName>,
-   - passwd (<userName>),
+   - useradd -u [userId] -d [userHomeDirectory] [userName],
+   - userdel [userName],
+   - passwd ([userName]),
    - dmesg (--follow),
    - uptime,
    - reboot,
@@ -53,7 +53,7 @@ Like webServer it also offers:
    - ls,
    - rm [esp32FileName],
    - put ([osFileName]) [esp32FileName],
-   - get [sp32FileName] ([osFileName]).
+   - get [esp32FileName] ([osFileName]).
 
 Like webServer and telentServer it also offers:
    - threaded FTP sessions,
@@ -190,7 +190,7 @@ Esp32_web_ftp_telnet_server_template is what its name says, just a working templ
 
 ## Building HTML user interface for your ESP32 project
 
-A series of examples will demonstrate how to create a neatly HTML user interface for your ESP32 project.
+A series of examples will demonstrate how to create a neat HTML user interface for your ESP32 project. This subject is covered at more detail level in  https://github.com/BojanJurca/Nice_web_GUI_controls_for_ESP_projects
 
 **Example 01 - dynamic HTML page**
 
