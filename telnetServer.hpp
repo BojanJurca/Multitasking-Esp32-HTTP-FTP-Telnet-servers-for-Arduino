@@ -22,19 +22,30 @@
  *          - telnetCommandHandler parameters are now easyer to access, 
  *            improved user management
  *            September 4th, Bojan Jurca     
+ *          - minor structural changes,
+ *            the use of dmesg
+ *            September 14, 2019, Bojan Jurca        
  *  
  */
 
 
 #ifndef __TELNET_SERVER__
   #define __TELNET_SERVER__
-   
+
+  void dmesg (String message);
+  
   #include "file_system.h"        // telnetServer.hpp needs file_system.h
   #include "user_management.h"    // telnetServer.hpp needs user_management.h
   #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp
 
-
-    void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler);
+  // TO DO: make the following function memeber functions
+  bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection);
+  void __trimCstring__ (char *cstring);
+  bool __ls__ (TcpConnection *connection, String directory);
+  bool __cat__ (TcpConnection *connection, String fileName);
+  bool __rm__ (TcpConnection *connection, String fileName);
+  bool __ping__ (TcpConnection *, char *, int, int, int, int);
+  bool __dmesg__ (TcpConnection *, bool);
   
   class telnetServer {                                             
   
@@ -54,29 +65,25 @@
                                                                                         serverIP,                       // accept incomming connections on on specified addresses
                                                                                         serverPort,                     // telnet port
                                                                                         firewallCallback);              // firewall callback function
-                                                  if (this->started ()) Serial.printf ("[telnet] server started\n");
-                                                  else                  Serial.printf ("[telnet] couldn't start telnet server\n");
+
+                                                  if (this->started ()) dmesg ("[TELNET] server started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else                  dmesg ("[TELNET] couldn't start Telnet server.");                                                                                        
                                                 }
       
-      ~telnetServer ()                          { if (this->__tcpServer__) delete (this->__tcpServer__); }
+      ~telnetServer ()                          { 
+                                                  if (this->__tcpServer__) {
+                                                    dmesg ("[TELNET] server stopped.");
+                                                    delete (this->__tcpServer__);
+                                                  }
+                                                }
       
       bool started ()                           { return this->__tcpServer__ && this->__tcpServer__->started (); } 
 
     private:
 
       TcpServer *__tcpServer__ = NULL;                                    // pointer to (threaded) TcpServer instance
-      
-  };
 
-      bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection);
-      void __trimCstring__ (char *cstring);
-      bool __ls__ (TcpConnection *connection, String directory);
-      bool __cat__ (TcpConnection *connection, String fileName);
-      bool __rm__ (TcpConnection *connection, String fileName);
-      bool __ping__ (TcpConnection *, char *, int, int, int, int);
-      bool __dmesg__ (TcpConnection *, bool);
-       
-      void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
+      static void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
         log_i ("[Thread:%i][Core:%i] connection started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
         char prompt1 [] = "\r\n# "; // root user's prompt
         char prompt2 [] = "\r\n$ "; // other users' prompt
@@ -93,6 +100,7 @@
           sprintf (cmdLine, "Hello %s%c%c%c! ", connection->getOtherSideIP (), IAC, DONT, ECHO); // say hello and tell telnet client not to echo, telnet server will do the echoing
           connection->sendData (cmdLine);
           if (*homeDir) { 
+            dmesg ("[TELNET] " + String (user) + " logged in.");
             sprintf (cmdLine, "\r\n\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.\r\n%s", homeDir, prompt);
             connection->sendData (cmdLine);
           } else { 
@@ -109,12 +117,14 @@
           if (!__readCommandLine__ (password, sizeof (password), false, connection)) goto closeTelnetConnection;
           if (checkUserNameAndPassword (user, password)) getUserHomeDirectory (homeDir, user);
           if (*homeDir) { 
+            dmesg ("[TELNET] " + String (user) + " logged in.");
             if (strcmp (user, "root")) prompt = prompt2;
             sprintf (cmdLine, "\r\n\nWelcome %s,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.\r\n%s", user, homeDir, prompt);
             connection->sendData (cmdLine);
           } else {
+            dmesg ("[TELNET] " + String (user) + " login attempt failed.");
             connection->sendData ("\r\n\nUser name or password incorrect.");
-            SPIFFSsafeDelay (100); // TODO: check why last message doesn't get to the client (without SPIFFSsafeDelay) if we close the connection immediatelly
+            SPIFFSsafeDelay (500); // TODO: check why last message doesn't get to the client (without SPIFFSsafeDelay) if we close the connection immediatelly
             goto closeTelnetConnection;
           }
         #endif
@@ -122,7 +132,7 @@
         while (__readCommandLine__ (cmdLine, sizeof (cmdLine), true, connection)) { // read and process comands in a loop
           if (*cmdLine) {
             
-            connection->sendData ("\r\n")
+            connection->sendData ("\r\n");
             log_i ("[Thread:%i][Core:%i] telnet command %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), cmdLine);
 
             // ----- prepare command line arguments (max 32 arguments) -----
@@ -147,7 +157,7 @@
             // ----- ask telnetCommandHandler (if it is provided by the calling program) if it is going to handle this command -----
     
             String telnetReply = ""; // get reply from telnetCommandHandler here
-            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TCP_SERVER_INFINITE_TIMEOUT); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
+            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE_TIMEOUT); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
             if (telnetCommandHandler && (telnetReply = ((String (*) (int, String [], String)) telnetCommandHandler) (telnetArgc, telnetArgv, String (homeDir))) != "") {
               connection->sendData (telnetReply); // send everything to the client
             }
@@ -404,139 +414,143 @@
         }
       
       closeTelnetConnection:
+          if (*homeDir) dmesg ("[TELNET] " + String (user) + " logged out.");
           log_i ("[Thread:%i][Core:%i] connection ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
       }
+            
+  };
 
-      // returns true if command line is read, false if connection is closed
-      bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection) {
-        unsigned char c;
-        int i = 0;
-        *buffer = 0; 
-        while (connection->recvData ((char *) &c, 1)) { // read and process incomming data in a loop
-          switch (c) {
-              case 3:   // Ctrl-C
-                        return false;
-              
-              case 127: // ignore
-              case 10:  // ignore
-                        break;
+       
+  // returns true if command line is read, false if connection is closed
+  bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection) {
+    unsigned char c;
+    int i = 0;
+    *buffer = 0; 
+    while (connection->recvData ((char *) &c, 1)) { // read and process incomming data in a loop
+      switch (c) {
+          case 3:   // Ctrl-C
+                    return false;
+          
+          case 127: // ignore
+          case 10:  // ignore
+                    break;
 
-              case 8:   // backspace - delete last character from the buffer and from the screen
-                        if (i) {
-                          buffer [i--] = 0; // delete last character from buffer
-                          if (echo) if (!connection->sendData ("\x08 \x08")) false; // delete the last character from the screen
-                        }
-                        break;                        
+          case 8:   // backspace - delete last character from the buffer and from the screen
+                    if (i) {
+                      buffer [i--] = 0; // delete last character from buffer
+                      if (echo) if (!connection->sendData ("\x08 \x08")) false; // delete the last character from the screen
+                    }
+                    break;                        
 
-              case 13:  // end of command line
-                        __trimCstring__ (buffer);
-                        return true;
-              
-              default:  // fill buffer if the character is a valid character and there is still space in a buffer
-                        if (c >= ' ' && c < 240 && i < bufferSize - 1) { // ignore control characters
-                          buffer [i++] = c; // insert character into buffer
-                          buffer [i] = 0;
-                          if (echo) if (!connection->sendData ((char *) &c, 1)) return false; // write character to the screen
-                        }
-                        break;
-          } // switch
-        } // while
-        return false;
+          case 13:  // end of command line
+                    __trimCstring__ (buffer);
+                    return true;
+          
+          default:  // fill buffer if the character is a valid character and there is still space in a buffer
+                    if (c >= ' ' && c < 240 && i < bufferSize - 1) { // ignore control characters
+                      buffer [i++] = c; // insert character into buffer
+                      buffer [i] = 0;
+                      if (echo) if (!connection->sendData ((char *) &c, 1)) return false; // write character to the screen
+                    }
+                    break;
+      } // switch
+    } // while
+    return false;
+  }
+
+  void __trimCstring__ (char *cstring) {
+    // ltrim
+    int i = 0;
+    while (cstring [i] == ' ' || cstring [i] == '\t') i++;
+    if (i) strcpy (cstring, cstring + i);
+    // rtrim
+    i = strlen (cstring) - 1;
+    while ((cstring [i] == ' ' || cstring [i] == '\t') && i >= 0) cstring [i--] = 0;
+  }
+
+  bool __ls__ (TcpConnection *connection, String directory) {
+    char d [33]; *d = 0; 
+    if (directory.length () < sizeof (d)) strcpy (d, directory.c_str ()); 
+    if (*d && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
+    if (!*d) *d = '/';
+    String s = "";
+
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+    File dir = SPIFFS.open (d);
+    if (!dir) { // TO DO: debug - this doesn't work like expected
+      xSemaphoreGive (SPIFFSsemaphore);
+      connection->sendData ("Failed to open directory.");
+      return false;
+    }
+    if (!dir.isDirectory ()) {
+      xSemaphoreGive (SPIFFSsemaphore);
+      connection->sendData (directory); connection->sendData (" is a file, not a directory."); 
+      return false;
+    }
+    File file = dir.openNextFile ();
+    while (file) {
+      if(!file.isDirectory ()) {
+        char c [10];
+        sprintf (c, "  %6i ", file.size ());
+        s += String (c) + String (file.name ()) + "\r\n";
       }
+      file = dir.openNextFile ();
+    }
+    xSemaphoreGive (SPIFFSsemaphore);
+    connection->sendData (s);
+    return true;
+  }
 
-      void __trimCstring__ (char *cstring) {
-        // ltrim
-        int i = 0;
-        while (cstring [i] == ' ' || cstring [i] == '\t') i++;
-        if (i) strcpy (cstring, cstring + i);
-        // rtrim
-        i = strlen (cstring) - 1;
-        while ((cstring [i] == ' ' || cstring [i] == '\t') && i >= 0) cstring [i--] = 0;
-      }
+  bool __cat__ (TcpConnection *connection, String fileName) {
+    bool retVal = false;
+    File file;
 
-      bool __ls__ (TcpConnection *connection, String directory) {
-        char d [33]; *d = 0; 
-        if (directory.length () < sizeof (d)) strcpy (d, directory.c_str ()); 
-        if (*d && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
-        if (!*d) *d = '/';
-        String s = "";
-
-        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-        File dir = SPIFFS.open (d);
-        if (!dir) { // TO DO: debug - this doesn't work like expected
-          xSemaphoreGive (SPIFFSsemaphore);
-          connection->sendData ("Failed to open directory.");
-          return false;
-        }
-        if (!dir.isDirectory ()) {
-          xSemaphoreGive (SPIFFSsemaphore);
-          connection->sendData (directory); connection->sendData (" is a file, not a directory."); 
-          return false;
-        }
-        File file = dir.openNextFile ();
-        while (file) {
-          if(!file.isDirectory ()) {
-            char c [10];
-            sprintf (c, "  %6i ", file.size ());
-            s += String (c) + String (file.name ()) + "\r\n";
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+    if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
+      if (!file.isDirectory ()) {
+        char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+        if (buff) {
+          *buff = 0;
+          int i = strlen (buff);
+          while (file.available ()) {
+            switch (*(buff + i) = file.read ()) {
+              case '\r':  // ignore
+                          break;
+              case '\n':  // crlf conversion
+                          *(buff + i ++) = '\r'; 
+                          *(buff + i ++) = '\n';
+                          break;
+              default:
+                          i ++;                  
+            }
+            if (i >= 2048 - 1) { connection->sendData ((char *) buff, i); i = 0; }
           }
-          file = dir.openNextFile ();
-        }
-        xSemaphoreGive (SPIFFSsemaphore);
-        connection->sendData (s);
-        return true;
-      }
-
-      bool __cat__ (TcpConnection *connection, String fileName) {
-        bool retVal = false;
-        File file;
-
-        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-        if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
-          if (!file.isDirectory ()) {
-            char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
-            if (buff) {
-              *buff = 0;
-              int i = strlen (buff);
-              while (file.available ()) {
-                switch (*(buff + i) = file.read ()) {
-                  case '\r':  // ignore
-                              break;
-                  case '\n':  // crlf conversion
-                              *(buff + i ++) = '\r'; 
-                              *(buff + i ++) = '\n';
-                              break;
-                  default:
-                              i ++;                  
-                }
-                if (i >= 2048 - 1) { connection->sendData ((char *) buff, i); i = 0; }
-              }
-              if (i) { connection->sendData ((char *) buff, i); }
-              free (buff);
-              retVal = true;
-            } 
-            file.close ();
-          } else {
-            connection->sendData ("Failed to open "); connection->sendData (fileName);
-          }
-          file.close ();
+          if (i) { connection->sendData ((char *) buff, i); }
+          free (buff);
+          retVal = true;
         } 
-        xSemaphoreGive (SPIFFSsemaphore);
-        return retVal;
+        file.close ();
+      } else {
+        connection->sendData ("Failed to open "); connection->sendData (fileName);
       }
+      file.close ();
+    } 
+    xSemaphoreGive (SPIFFSsemaphore);
+    return retVal;
+  }
 
-      bool __rm__ (TcpConnection *connection, String fileName) {
-        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-        if (SPIFFS.remove (fileName)) {
-          xSemaphoreGive (SPIFFSsemaphore);
-          connection->sendData (fileName); connection->sendData (" deleted.\r\n");
-          return true;
-        } else {
-          xSemaphoreGive (SPIFFSsemaphore);
-          connection->sendData ("Failed to delete "); connection->sendData (fileName);
-          return false;          
-        }
-      }
+  bool __rm__ (TcpConnection *connection, String fileName) {
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+    if (SPIFFS.remove (fileName)) {
+      xSemaphoreGive (SPIFFSsemaphore);
+      connection->sendData (fileName); connection->sendData (" deleted.\r\n");
+      return true;
+    } else {
+      xSemaphoreGive (SPIFFSsemaphore);
+      connection->sendData ("Failed to delete "); connection->sendData (fileName);
+      return false;          
+    }
+  }
 
   // ----- ping ----- according to: https://github.com/pbecchi/ESP32_ping
 
@@ -737,8 +751,8 @@
     String        message;
   };
 
-  #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 32
-  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String ("ESP32 started.")}}; // there is always at lease 1 message in the queue which makes things a little simper
+  #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 64
+  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String ("[ESP32] started.")}}; // there is always at lease 1 message in the queue which makes things a little simper
   byte __dmesgBeginning__ = 0; // first used location
   byte __dmesgEnd__ = 1;       // the location next to be used
   portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
@@ -794,4 +808,19 @@
     portEXIT_CRITICAL (&__csDmesg__);
   }
 
+  // redirect other moduls' dmesg here before setup () begins
+  bool __redirectDmesg__ () {
+    #ifdef __NETWORK__
+      networkDmesg = dmesg;
+    #endif
+    #ifdef __FTP_SERVER__
+      ftpDmesg = dmesg;
+    #endif    
+    #ifdef __WEB_SERVER__
+      webDmesg = dmesg;
+    #endif  
+    return true;
+  }
+  bool __redirectedDmesg__ = __redirectDmesg__ ();
+  
 #endif

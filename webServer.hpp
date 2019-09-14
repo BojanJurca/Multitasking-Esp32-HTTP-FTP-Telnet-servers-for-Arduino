@@ -24,11 +24,23 @@
  *          - added webClient function,
  *            added basic support for web sockets
  *            May, 19, 2019, Bojan Jurca
+ *          - minor structural changes,
+ *            the use of dmesg
+ *            September 14, 2019, Bojan Jurca
  *
  */
 
 #ifndef __WEB_SERVER__
   #define __WEB_SERVER__
+
+  void __webDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.println (message); 
+    #endif
+  }
+  void (* webDmesg) (String) = __webDmesg__; // use this pointer to display / record system messages  
 
   #include "file_system.h"        // webServer.hpp needs file_system.h
   #include "user_management.h"    // webServer.hpp needs user_management.h
@@ -391,11 +403,16 @@ readingPayload:
                                                   } else {
                                                     Serial.printf ("[web] home directory for webserver system account is not set\n");
                                                   }
-                                                  if (this->started ()) Serial.printf ("[web] server started\n");
-                                                  else                  Serial.printf ("[web] couldn't start web server\n");
+                                                  if (this->started ()) webDmesg ("[WEB] server started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else                  webDmesg ("[WEB] couldn't start web server.");
                                                 }
       
-      ~webServer ()                             { if (this->__tcpServer__) delete (this->__tcpServer__); }
+      ~webServer ()                             { 
+                                                  if (this->__tcpServer__) {
+                                                    webDmesg ("[WEB] server stopped.");
+                                                    delete (this->__tcpServer__); 
+                                                  }
+                                                }
       
       bool started ()                           { return this->__tcpServer__ && this->__tcpServer__->started (); } 
 
@@ -405,10 +422,8 @@ readingPayload:
 
       char __webHomeDirectory__ [33] = {};                                // webServer system account home directory
       TcpServer *__tcpServer__ = NULL;                                    // pointer to (threaded) TcpServer instance
-      
-  };
 
-      void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler) {  // connectionHandler callback function
+      static void __webConnectionHandler__ (TcpConnection *connection, void *httpRequestHandler) {  // connectionHandler callback function
         log_v ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
         char buffer [1024];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         int receivedTotal = buffer [0] = 0;
@@ -434,7 +449,7 @@ readingPayload:
 
             log_v ("[Thread:%i][Core:%i] trying to get a reply from calling program\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
             String httpReply;
-            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TCP_SERVER_INFINITE_TIMEOUT); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
+            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE_TIMEOUT); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
             if (httpRequestHandler && (httpReply = ((String (*) (String, WebSocket *)) httpRequestHandler) (httpRequest, NULL)) != "") {
               httpReply = "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:" + String (httpReply.length ()) + "\r\n\r\n" + httpReply; // add HTTP header
               connection->sendData ((char *) httpReply.c_str (), httpReply.length ()); // send everything to the client
@@ -511,6 +526,8 @@ reply404:
       closeWebConnection:
         log_v ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());    
       }
+      
+  };
 
 
   // webClient function doesn't really belong to webServer, but it may come handy every now and then

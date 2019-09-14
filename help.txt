@@ -1,5 +1,12 @@
 You can use the following commands:
 
+  start web server    /* added just as an example here */
+  stop web server     /* added just as an example here */
+  start ftp server    /* added just as an example here */
+  stop ftp server     /* added just as an example here */
+  start telnet server /* added just as an example here */
+  stop telnet server  /* added just as an example here */
+
   ls (<directoryName>) or dir (<directoryName>)
   cat <fileName> or type <fileName>
   rm <fileName> or del <fileName>

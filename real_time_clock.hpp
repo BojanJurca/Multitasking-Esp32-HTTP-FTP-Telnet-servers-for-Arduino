@@ -22,10 +22,10 @@
 
 // change this definitions according to your needs
 
-#define WET_TIMEZONE      0     // Western European Time (GMT + DST)
+#define WET_TIMEZONE      0     // Western European Time (GMT + DST from March to October)
 #define ICELAND_TIMEZONE  100   // same as WET_TIMEZONE but without DST (GMT, no DST)
-#define CET_TIMEZONE      1     // Central European Time (GMT + 1 + DST)
-#define EET_TIMEZONE      2     // Eastern European Time (GMT + 2 + DST)
+#define CET_TIMEZONE      1     // Central European Time (GMT + 1 + DST from March to October)
+#define EET_TIMEZONE      2     // Eastern European Time (GMT + 2 + DST from March to October)
 #define FET_TIMEZONE      3     // Further-Eastern European Time (GMT + 3, no DST)
 // ... add more time zones
 #define TIMEZONE          CET_TIMEZONE // one of the above

@@ -25,13 +25,16 @@
  *            April 13, 2019, Bojan Jurca
  *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
  *            April 21, 2019, Bojan Jurca
+ *          - added network event logging, 
+ *            the use of dmesg 
+ *            September 14, 2019, Bojan Jurca
  *            
  */
  
 
 #ifndef __NETWORK__
   #define __NETWORK__
-  #include "file_system.h"  // network.h needs file_system.h
+  #include "file_system.h"  // network.h needs file_system.h to read configurations files from
 
 
   #include <lwip/netif.h>
@@ -48,10 +51,18 @@
   String __compactNetworkConfiguration__ (String inp);
   String __insideBrackets__ (String inp, String opening, String closing);
   IPAddress IPAddressFromString (String ipAddress);
+  void __networkDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.println (message); 
+    #endif
+  }
+  void (* networkDmesg) (String) = __networkDmesg__; // use this pointer to display / record system messages
   
   
   void connectNetwork () {                                        // connect to the network by calling this function
-    if (!SPIFFSmounted) { Serial.printf ("[network] can't read or write network configuration from/to file system since file system is not mounted"); return; }
+    if (!SPIFFSmounted) { Serial.printf ("[network] can't read or write network configuration from/to file system since file system is not mounted."); return; }
   
     // it is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used
 
@@ -122,7 +133,65 @@
       if (writeEntireFile (fileContent, "/etc/hostapd/hostapd.conf")) Serial.printf ("created.\n");
       else                                                            Serial.printf ("error creating /etc/hostapd/hostapd.conf.\n");
     }
-      
+
+    // network event logging - see: https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/examples/WiFiClientEvents/WiFiClientEvents.ino
+    WiFi.onEvent ([] (WiFiEvent_t event, WiFiEventInfo_t info) {
+      switch (event) {
+          case SYSTEM_EVENT_WIFI_READY:           networkDmesg ("[network] WiFi interface ready.");
+                                                  break;
+          case SYSTEM_EVENT_SCAN_DONE:            networkDmesg ("[network] [STA] completed scan for access points.");
+                                                  break;
+          case SYSTEM_EVENT_STA_START:            networkDmesg ("[network] [STA] WiFi client started.");
+                                                  break;
+          case SYSTEM_EVENT_STA_STOP:             networkDmesg ("[network] [STA] WiFi clients stopped.");
+                                                  break;
+          case SYSTEM_EVENT_STA_CONNECTED:        networkDmesg ("[network] [STA] client connected to access point.");
+                                                  break;
+          case SYSTEM_EVENT_STA_DISCONNECTED:     networkDmesg ("[network] [STA] client disconnected from WiFi access point.");
+                                                  break;
+          case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:  networkDmesg ("[network] [STA] authentication mode of access point has changed.");
+                                                  break;
+          case SYSTEM_EVENT_STA_GOT_IP:           networkDmesg ("[network] [STA] client obtained IP address: " + WiFi.localIP ().toString ());
+                                                  break;
+          case SYSTEM_EVENT_STA_LOST_IP:          networkDmesg ("[network] [STA] client lost IP address and IP address is reset to 0.");
+                                                  break;
+          case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:   networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): succeeded in enrollee mode.");
+                                                  break;
+          case SYSTEM_EVENT_STA_WPS_ER_FAILED:    networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): failed in enrollee mode.");
+                                                  break;
+          case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:   networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): timeout in enrollee mode.");
+                                                  break;
+          case SYSTEM_EVENT_STA_WPS_ER_PIN:       networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): pin code in enrollee mode.");
+                                                  break;
+          case SYSTEM_EVENT_AP_START:             networkDmesg ("[network] [STA] WiFi access point started.");
+                                                  break;
+          case SYSTEM_EVENT_AP_STOP:              networkDmesg ("[network] [AP] WiFi access point stopped.");
+                                                  break;
+          case SYSTEM_EVENT_AP_STACONNECTED:      networkDmesg ("[network] [AP] client connected.");
+                                                  break;
+          case SYSTEM_EVENT_AP_STADISCONNECTED:   networkDmesg ("[network] [AP] client disconnected.");
+                                                  break;
+          case SYSTEM_EVENT_AP_STAIPASSIGNED:     networkDmesg ("[network] [AP] assigned IP address to client.");
+                                                  break;
+          case SYSTEM_EVENT_AP_PROBEREQRECVED:    networkDmesg ("[network] [AP] received probe request.");
+                                                  break;
+          case SYSTEM_EVENT_GOT_IP6:              networkDmesg ("[network] IPv6 is preferred.");
+                                                  break;
+          case SYSTEM_EVENT_ETH_START:            networkDmesg ("[network] ethernet started.");
+                                                  break;
+          case SYSTEM_EVENT_ETH_STOP:             networkDmesg ("[network] ethernet stopped.");
+                                                  break;
+          case SYSTEM_EVENT_ETH_CONNECTED:        networkDmesg ("[network] ethernet connected.");
+                                                  break;
+          case SYSTEM_EVENT_ETH_DISCONNECTED:     networkDmesg ("[network] ethernet disconnected.");
+                                                  break;
+          case SYSTEM_EVENT_ETH_GOT_IP:           networkDmesg ("[network] ethernet obtained IP address.");
+                                                  break;        
+          default:                                networkDmesg ("[network] event: " + String (event)); // shouldn't happen
+                                                  break;
+      }
+    });    
+
     // read network configuration from configuration files and set it accordingly
     String staSSID = "";
     String staPassword = "";

@@ -45,7 +45,7 @@ real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
 #define FTP_FILE_TIME rtc.getLocalTime()                  // define this if FTP is going to use current time to report file creation time 
 #include "ftpServer.hpp"                                  // SPIFFS doesn't record file creation time so this information will be false anyway
 
-// ----- add what this template needs for demonstration -----
+// ----- add what this template needs for demonstration purpose -----
 
 #include "measurements.hpp"
 measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
@@ -55,33 +55,25 @@ measurements connectionCount (60);          // measure how many web connections 
 
 // ----- use features in the project -----
 
-telnetServer *telnetSrv; // pointer to Telnet server
-String telnetCommandHandler (int argc, String argv [], String homeDirectory);
-
-String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
-  if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
-getBuiltInLed:
-    return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
-  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "on") {
-    digitalWrite (2, HIGH);
-    goto getBuiltInLed;
-  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "off") {
-    digitalWrite (2, LOW);
-    goto getBuiltInLed;
-  }
-  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
-}
-
-bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
-                                                // - has to be reentrant!
-  if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
-  else                          return true;    // ... but let every other client through
-}
-
-ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
-
 webServer *webSrv; // pointer to Web server
 String httpRequestHandler (String httpRequest, WebSocket *webSocket);
+String startWebServer () {
+  if (!webSrv) {
+    webSrv = new webServer (httpRequestHandler,         // a callback function tht will handle HTTP request that are not handled by webServer itself
+                            4096,                       // 4 KB stack size is usually enough, it httpRequestHandler uses more stack increase this value until server is stabile
+                            "0.0.0.0",                  // start web server on all available ip addresses
+                            80,                         // HTTP port
+                            NULL);                      // we won't use firewall callback function for web server
+    if (webSrv)
+      if (webSrv->started ())                                   return "Web server started.";  
+      else                    { delete (webSrv); webSrv = NULL; return "Could not start web server."; }
+    else                                                        return "Could not start web server.";  
+  } else                                                        return "Web server is already running.";    
+}
+String stopWebServer () {
+  if (webSrv) { delete (webSrv); webSrv = NULL; return "Web server stopped. Active connections will continue to run anyway."; } 
+  else                                          return "Web server is not running.";
+}
 
 String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
                                                                         // - for WebSocket httpRequest is WS request, webSocket pointer is set, whatever function returns will be discarded
@@ -91,7 +83,8 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                                                         
        connectionCount.increaseCounter ();                              // gether some statistics
 
-  // handle HTTP protocol requests
+  // ----- handle HTTP protocol requests -----
+  
        if (httpRequest.substring (0, 20) == "GET /example01.html ") { // used in Example 01
                                                                       return String ("<HTML>Example 01 - dynamic HTML page<br><br>") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("</HTML>");
                                                                     }
@@ -134,7 +127,8 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
   else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // used in index.html
                                                                       return connectionCount.measurements2json (5);
                                                                     }
-  // handle WS (WebSockets) protocol requests
+  // ----- handle WS (WebSockets) protocol requests -----
+  
   else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // used in Example 09
                                                                       example09_webSockets (webSocket);
                                                                       return ""; // it doesn't matter what the function returns in case of WebSockets
@@ -144,7 +138,113 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                                                       return ""; // it doesn't matter what the function returns in case of WebSockets
                                                                     }
 
-  else                                                              return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
+  // ----- HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself -----
+
+  else                                                              return ""; 
+}
+
+bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
+                                                // - has to be reentrant!
+  if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
+  else                          return true;    // ... but let every other client through
+}
+
+ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
+String startFtpServer () {
+  if (!ftpSrv) {
+    ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
+                            21,                         // controll connection FTP port
+                            telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
+    if (ftpSrv)
+      if (ftpSrv->started ())                                   return "FTP server started.";  
+      else                    { delete (webSrv); webSrv = NULL; return "Could not start FTP server."; }
+    else                                                        return "Could not start FTP server.";  
+  } else                                                        return "FTP server is already running.";    
+}
+String stopFtpServer () {
+  if (ftpSrv) { delete (ftpSrv); ftpSrv = NULL; return "FTP server stopped. Active connections will continue to run anyway."; } 
+  else                                          return "FTP server is not running.";
+}
+
+telnetServer *telnetSrv; // pointer to Telnet server
+String telnetCommandHandler (int argc, String argv [], String homeDirectory);
+String startTelnetServer () {
+  if (!telnetSrv) {
+    telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
+                                  8136,                 // 8 KB stack size is usually enough, it telnetCommandHanlder uses more stack increase this value until server is stabile
+                                  "0.0.0.0",            // start telnt server on all available ip addresses
+                                  23,                   // telnet port
+                                  telnetAndFtpFirewall);// use firewall callback function for telnet server or NULL
+    if (telnetSrv)
+      if (telnetSrv->started ())                                        return "Telnet server started.";  
+      else                      { delete (telnetSrv); telnetSrv = NULL; return "Could not start Telnet server."; }
+   else                                                                 return "Could not start Telnet server.";  
+  } else                                                                return "Telnet server is already running.";    
+}
+String stopTelnetServer () {
+  if (telnetSrv) { delete (telnetSrv); telnetSrv = NULL; return "Telnet server stopped. Active connections will continue to run anyway, includin this one.\r\n"
+                                                                "Once the connections are closed you won't be able to run Telnet server again."; }
+  else                                                   return "Telnet server is not running.";
+}
+
+
+
+String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
+  
+  // ----- start and stop servers -----
+  
+  if (argc == 3 && argv [0] == "start" && argv [1] == "web" && argv [2] == "server") {
+
+    if (homeDirectory == "/") return startWebServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to start web sever.\r\n";
+    
+  } else if (argc == 3 && argv [0] == "stop" && argv [1] == "web" && argv [2] == "server") {
+    
+    if (homeDirectory == "/") return stopWebServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to stop web sever.\r\n";
+
+  } else if (argc == 3 && argv [0] == "start" && argv [1] == "ftp" && argv [2] == "server") {
+
+    if (homeDirectory == "/") return startFtpServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to start FTP sever.\r\n";
+
+  } else if (argc == 3 && argv [0] == "stop" && argv [1] == "ftp" && argv [2] == "server") {
+    
+    if (homeDirectory == "/") return stopFtpServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to stop FTP sever.\r\n";
+
+  } else if (argc == 3 && argv [0] == "start" && argv [1] == "telnet" && argv [2] == "server") {
+
+    if (homeDirectory == "/") return startTelnetServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to start Telnet sever.\r\n";
+    
+  } else if (argc == 3 && argv [0] == "stop" && argv [1] == "telnet" && argv [2] == "server") {
+    
+    if (homeDirectory == "/") return stopTelnetServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to stop Telnet sever.\r\n";
+
+  // ---- led on ESP32 ----
+    
+  } else if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
+    
+getBuiltInLed:
+    return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
+    
+  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "on") {
+    
+    digitalWrite (2, HIGH);
+    goto getBuiltInLed;
+    
+  } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "off") {
+    
+    digitalWrite (2, LOW);
+    goto getBuiltInLed;
+    
+  }
+
+  // ----- telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself ----
+  
+  return ""; 
 }
 
 // setup (), loop () --------------------------------------------------------
@@ -158,46 +258,27 @@ void setup () {
   
   Serial.begin (115200);
 
-  if (mountSPIFFS ()) dmesg ("SPIFFS mounted.");      // this is the first thing that you should do
-  else                dmesg ("SPIFFS mount failed.");
+  if (mountSPIFFS ()) dmesg ("[SPIFFS] mounted.");      // this is the first thing that you should do
+  else                dmesg ("[SPIFFS] mount failed.");
 
   usersInitialization ();                             // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
 
   connectNetwork ();                                  // network should be connected after file system is mounted since it reads its configuration from file system
-  if (networkAccesPointWorking) dmesg ("wlan1 is working in Access Point mode.");
-  else                          dmesg ("wlan1 could not mount Access Point.");
-  if (networkStationWorking)    dmesg ("wlan2 is connected in Station mode.");
-  else                          dmesg ("wlan2 could not connect as a station.");
+  // if (networkAccesPointWorking) dmesg ("wlan1 is working in Access Point mode.");
+  // else                          dmesg ("wlan1 could not mount Access Point.");
+  // if (networkStationWorking)    dmesg ("wlan2 is connected in Station mode.");
+  // else                          dmesg ("wlan2 could not connect as a station.");
   
   writeProjectIdOnFlashDrive ();
   listFilesOnFlashDrive ();
 
-  webSrv = new webServer (httpRequestHandler,         // a callback function tht will handle HTTP request that are not handled by webServer itself
-                          4096,                       // 4 KB stack size is usually enough, it httpRequestHandler uses more stack increase this value until server is stabile
-                          "0.0.0.0",                  // start web server on all available ip addresses
-                          80,                         // HTTP port
-                          NULL);                      // we won't use firewall callback function for web server
-  if (webSrv->started ()) dmesg ("Web server has started on all available IP addresses on port 80.");
-  else                    dmesg ("Web server did not start due to error.");
-
-  ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
-                          21,                         // controll connection FTP port
-                          telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
-  if (ftpSrv->started ()) dmesg ("FTP server has started on all available IP addresses on port 21 with firewall.");
-  else                    dmesg ("FTP server did not start due to error.");                           
-
-  telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
-                                8136,                 // 8 KB stack size is usually enough, it telnetCommandHanlder uses more stack increase this value until server is stabile
-                                "0.0.0.0",            // start telnt server on all available ip addresses
-                                23,                   // telnet port
-                                telnetAndFtpFirewall);// use firewall callback function for telnet server or NULL
-  if (ftpSrv->started ()) dmesg ("Telnet server has started on all available IP addresses on port 23 with firewall.");
-  else                    dmesg ("Telnet server did not start due to error.");                                
-
-  pinMode (2, OUTPUT);                                // this is just for demonstration purpose - prepare built-in LED
-  digitalWrite (2, LOW);
+  startWebServer ();
+  startFtpServer ();
+  startTelnetServer ();
 
   // examples
+  pinMode (2, OUTPUT);                                // this is just for demonstration purpose - prepare built-in LED
+  digitalWrite (2, LOW);
   pinMode (22, INPUT_PULLUP);                         // this is just for demonstration purpose - oscilloscope
   if (pdPASS != xTaskCreate (examples, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[examples] couldn't start examples\n");
 }

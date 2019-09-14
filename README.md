@@ -1,6 +1,12 @@
-﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock. Web-based oscilloscope is attached as a demonstration project.
+﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock.
 
-Esp32_web_ftp_telnet_server_templat makes developing Web and Telnet user interfaces for ESP32 projects almost as easy as possible. 
+Very briefly why would you use Esp32_web_ftp_telnet_server_template:
+
+- **extremely fast and easy development of Telnet user interface for your project** 
+- **easy development of nice looking Web user interface for your project**
+- **working with files (uploading and downloading .html and other files)**
+- **run-time monitoring of ESP32 behaviour with built-in dmesg Telnet command**
+- **run-time monitoring of ESP32 signals with built-in Web-based oscilloscope**
 
 In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
@@ -26,6 +32,12 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
 
 - **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. A few built-in commands are implemented so far:
 
+   - start web server    /* added just as an example here */
+   - stop web server     /* added just as an example here */
+   - start ftp server    /* added just as an example here */
+   - stop ftp server     /* added just as an example here */
+   - start telnet server /* added just as an example here */
+   - stop telnet server  /* added just as an example here */
    - ls ([directoryName]) or dir ([directoryName]),
    - cat [fileName] or type [fileName],
    - rm [fileName] or del [fileName],
@@ -92,10 +104,10 @@ By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like 
 - **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Five European time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
 
    - GMT,   
-   - WET (Western European Time = GMT + DST - use #define TIMEZONE   WET_TIMEZONE), 
+   - WET (Western European Time = GMT + DST from March to October - use #define TIMEZONE   WET_TIMEZONE), 
    - ICELAND (Iceland Time = GMT - use #define TIMEZONE   ICELAND_TIMEZONE), 
-   - CET (Central European Time = GMT + 1 + DST - use #define TIMEZONE   CET_TIMEZONE), 
-   - EET (Eastern European Time = GMT + 2 + DST - use #define TIMEZONE   EET_TIMEZONE), 
+   - CET (Central European Time = GMT + 1 + DST from March to October - use #define TIMEZONE   CET_TIMEZONE), 
+   - EET (Eastern European Time = GMT + 2 + DST from March to October - use #define TIMEZONE   EET_TIMEZONE), 
    - FET (Further-Eastern European Time = GMT + 3 - use #define TIMEZONE   FET_TIMEZONE). 
 
 You may have to modify getLocalTime () function yourself to match your country and location.
