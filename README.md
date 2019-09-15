@@ -2,7 +2,7 @@
 
 Very briefly why would you use Esp32_web_ftp_telnet_server_template:
 
-- **extremely fast and easy development of Telnet user interface for your project** 
+- **extremely fast and easy development of Telnet command-line user interface for your project** 
 - **easy development of nice looking Web user interface for your project**
 - **working with files (uploading and downloading .html and other files)**
 - **run-time monitoring of ESP32 behaviour with built-in dmesg Telnet command**
@@ -747,7 +747,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
 }
 ```
 
-## Run-time monitoring your ESP32 behaviour
+## Run-time monitoring ESP32 behaviour
 
 **Example 11 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
 
@@ -755,9 +755,9 @@ Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue
 
 ![Screenshot](dmesg.png)
 
-## Demonstration project
+## Run-time monitoring ESP32 signals
 
-**ESP32 Oscilloscope - see the signals the way ESP32 sees them**
+**Example 12 - oscilloscope - see the signals the way ESP32 sees them through Web interface**
 
 ESP32 oscilloscope is web based application included in Esp32_web_ftp_telnet_server_template. It is accessible through web browser once oscilloscope.html is uploaded to ESP32 (with FTP). ESP32 Oscilloscope is using WebSockets to exchange measured signal values between ESP32 and web browser.
 
