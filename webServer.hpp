@@ -449,7 +449,7 @@ readingPayload:
 
             log_v ("[Thread:%i][Core:%i] trying to get a reply from calling program\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
             String httpReply;
-            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE_TIMEOUT); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
+            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE); // disable time-out checking while proessing httpRequestHandler to allow longer processing times
             if (httpRequestHandler && (httpReply = ((String (*) (String, WebSocket *)) httpRequestHandler) (httpRequest, NULL)) != "") {
               httpReply = "HTTP/1.0 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:" + String (httpReply.length ()) + "\r\n\r\n" + httpReply; // add HTTP header
               connection->sendData ((char *) httpReply.c_str (), httpReply.length ()); // send everything to the client

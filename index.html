@@ -6,69 +6,74 @@
 		<meta http-equiv='content-type' content='text/html;charset=utf-8' />
 
 		<title>Esp32_web_ftp_telnet_server_template</title>
+
+		<style>
+			/* nice page framework */
+			hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
+
+			h1 {font-family: verdana; font-size: 40px; text-align: center}
+
+			div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px}
+			div.d2 {position: relative; float: left; width: 41%; font-family: verdana; font-size: 30px; color: gray;}
+			div.d3 {position: relative; float: left; width: 26%; font-family: verdana; font-size: 30px; color: gray;}
+			div.d4 {position: relative; float: left; width: 25%; font-family: verdana; font-size: 30px; color: black;}
+			div.d5 {position: relative; float: left; width: 49%;}
+
+			/* nice switch control */
+			.switch {position: relative; display: inline-block; width: 60px; height: 34px}
+			.slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
+			.slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
+			input:checked+.slider {background-color: #2196F3}
+			input:focus+.slider {box-shadow: 0 0 1px #2196F3}
+			input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
+			.switch input {display: none}
+			.slider.round {border-radius: 34px}
+			.slider.round:before {border-radius: 50%}
+			input:disabled+.slider {background-color: #aaa}
+
+			/* nice button control */
+			.button {padding: 10px 15px; font-size: 22px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 42px}
+			button:disabled {background-color: #aaa}
+			button:disabled:hover {background-color: #aaa}
+			/* blue button */
+			.button1 {background-color: #2196F3}
+			.button1:hover {background-color: #0961aa}
+			.button1:active {background-color: #0961aa; transform: translateY(3px)}
+
+		</style>
 	</head>
-	<style>
-		hr{border:0;border-top:1px solid lightgray;border-bottom:1px solid lightgray}
-		h1{font-family:verdana;font-size:40px;text-align:center}
-
-		div.d1{position:relative;overflow:hidden;width:100%}
-		div.d2{position:relative;float:left;width:60}
-		div.d3{position:relative;float:left;width:220;font-family:verdana;font-size:30px;color:black}
-		div.d4{position:relative;float:left;font-family:verdana;font-size:30px;color:gray}
-
-		.switch{position:relative;display:inline-block;width:60px;height:34px}
-		.slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;-webkit-transition:.4s;transition:.4s}
-		.slider:before{position:absolute;content:'';height:26px;width:26px;left:4px;bottom:4px;background-color:white;-webkit-transition:.4s;transition:.4s}
-		input:checked+.slider{background-color:#2196F3}
-		input:focus+.slider{box-shadow: 0 0 1px #2196F3}
-		input:checked+.slider:before{-webkit-transform:translateX(26px);-ms-transform:translateX(26px);transform:translateX(26px);}
-		.switch input{display:none}
-		.slider.round{border-radius:34px}
-		.slider.round:before{border-radius:50%}
-		input:disabled+.slider{background-color:gray}
-
-		.button{padding:10px 15px; font-size:15px;text-align:center;cursor:pointer;outline:none;color:white;border:none;border-radius:12px;box-shadow:1px 1px #ccc;position:relative;top:0px;height:34px}
-		.button1{background-color:#2196F3;}
-		.button1:hover{background-color:#0961aa}
-		.button1:active{background-color:#0961aa; transform:translateY(3px);}
-	</style>
 	<body>
 		<br><h1>HTML demo</h1>
 		<hr />
 		<div class='d1'>
-			<div class='d2'>&nbsp</div>
-			<div class='d3'>
+			<div class='d2'>&nbspLed - REST/JSON demo</div>
+			<div class='d4'>
 				<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed(this.checked)'><div class='slider round'></div></label>
 			</div>
-			<div class='d4'>Led - REST / json demo</div>
 		</div>
 		<hr />
-		<div class='d1'>
-			<div class='d2'>&nbsp</div>
-			<div class='d3'>
+		<div class='d1' style='height: 48px;'>
+			<div class='d2'>&nbspDelayed execution demo</div>
+			<div class='d4'>
 				<button class='button button1' onclick='turnLedOnFor10s()'>Turn led on for 10 s</button>
 			</div>
-			<div class='d4'>Delayed execution demo</div>
 		</div>
 		<hr />
 		<div class='d1'>
-			<div class='d2'>&nbsp</div>
-			<div class='d3' id='upTime'>...</div>
-			<div class='d4'>Up time - stability testing</div>
+			<div class='d2'>&nbspUp time - stability testing</div>
+			<div class='d4' id='upTime'>...</div>
 		</div>
 		<hr />
-		<div class='d1'>
-			<div class='d2'>&nbsp</div>
-			<div class='d3' id='freeHeap'>...</div>
-			<div class='d4' style='width:180'>Free heap</div>
-			<div style='position:relative;width:480;float:left'><canvas id='freeHeapGraph' width='480' height='46';></canvas></div>
+		<div class='d1' style='height: 48px;'>
+			<div class='d3'>&nbspFree heap</div>
+			<div class='d4' id='freeHeap'>...</div>
+			<div class='d5'><canvas id='freeHeapGraph' width='480' height='46';></canvas></div>
 		</div>
 		<hr />
-		<div class='d1'>
-			<div class='d2'>&nbsp</div>
-			<div class='d3' id='connectionCount'>...</div>
-			<div class='d4' style='width:180'>Connections</div>
-			<div style='position:relative;width:480;float:left'><canvas id='connectionCountGraph' width='480' height='46';></canvas></div>	
+		<div class='d1' style='height: 48px;'>
+			<div class='d3'>&nbspConnections</div>
+			<div class='d4' id='connectionCount'>...</div>
+			<div class='d5'><canvas id='connectionCountGraph' width='480' height='46';></canvas></div>	
 		</div>
 		<hr />
 

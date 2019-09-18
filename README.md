@@ -194,7 +194,7 @@ ftp> put help.txt /var/telnet/help.txt
 ftp>
 ```
 
-7. Delete all the examples that are not needed and all the references to these examples in the code. They are included just to make the development easier for you.
+7. Delete all the examples and functionalities that are not needed and all the references to them in the code. They are included just to make the development easier for you.
 
 ## How to continue from here?
 
@@ -211,7 +211,7 @@ You can always use static HTML that can be uploaded (with FTP) as .html files in
 ```C++
 String httpRequestHandler (String httpRequest, WebSocket *webSocket) {
   if (httpRequest.substring (0, 20) == "GET /example01.html ") 
-    return String ("<HTML>Example 01 - dynamic HTML page<br><br>") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("</HTML>");
+    return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
                                                                    
   return ""; // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
 }
@@ -237,9 +237,9 @@ We do not have C++ compiler available in a browser, but Javascript will do the j
 ```HTML
 <html>
   Example 02 - static HTML page calling REST functions<br><br>
-
-  Led is <div id='ledState'>...</div>.
-
+  <hr />
+  Led is <span id='ledState'>...</span>.
+  <hr />
   <script type='text/javascript'>
 
     // mechanism that makes REST calls
@@ -293,9 +293,9 @@ In HTML we use input tag of checkbox type:
 ```HTML
 <html>
   Example 03 - HTML page interacting with ESP32<br><br>
-
+  <hr />
   Led: <input type='checkbox' disabled id='ledSwitch' onClick='turnLed (this.checked)'>
-
+  <hr />
   <script type='text/javascript'>
 
     // mechanism that makes REST calls
@@ -340,23 +340,38 @@ Style user interface with CSS:
 <html>
 
   <style>
-    .switch{position:relative;display:inline-block;width:60px;height:34px}
-    .slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background-color:#ccc;-webkit-transition:.4s;transition:.4s}
-    .slider:before{position:absolute;content:'';height:26px;width:26px;left:4px;bottom:4px;background-color:white;-webkit-transition:.4s;transition:.4s}
-    input:checked+.slider{background-color:#2196F3}
-    input:focus+.slider{box-shadow: 0 0 1px #2196F3}
-    input:checked+.slider:before{-webkit-transform:translateX(26px);-ms-transform:translateX(26px);transform:translateX(26px);}
-    .switch input{display:none}
-    .slider.round{border-radius:34px}
-    .slider.round:before{border-radius:50%}
-    input:disabled+.slider{background-color:gray}
+   /* nice page framework */
+   hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
+   h1 {font-family: verdana; font-size: 40px; text-align: center}
+   div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px}
+   div.d2 {position: relative; float: left; width: 15%; font-family: verdana; font-size: 30px; color: gray;}
+   div.d3 {position: relative; float: left; width: 85%; font-family: verdana; font-size: 30px; color: black;}
+
+   /* nice switch control */
+   .switch {position: relative; display: inline-block; width: 60px; height: 34px}
+   .slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
+   .slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
+   input:checked+.slider {background-color: #2196F3}
+   input:focus+.slider {box-shadow: 0 0 1px #2196F3}
+   input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
+   .switch input {display: none}
+   .slider.round {border-radius: 34px}
+   .slider.round:before {border-radius: 50%}
+   input:disabled+.slider {background-color: #aaa}
   </style>
 
   <body>
 
-    Example 04 - user interface with style<br><br>
+    <br><h1>Example 04 - user interface with style</h1>
 
-    Led: <label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed(this.checked)'><div class='slider round'></div></label>
+    <hr />
+    <div class='d1'>
+     <div class='d2'>&nbsp;Led</div>
+     <div class='d3'>
+      <label class='switch'><input type='checkbox' id='ledSwitch' disabled onClick='turnLed(this.checked)'><div class='slider round'></div></label>
+     </div>
+    </div>
+    <hr />
 
     <script type='text/javascript'>
 
@@ -383,7 +398,7 @@ Style user interface with CSS:
 
     function turnLed (switchIsOn) { // send desired led state to ESP and refresh ledSwitch state
       client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off' , 'PUT', function (json) {
-                                                              var obj = document.getElementById ('ledSwitch'); 
+                                                              var obj = document.getElementById ('ledSwitch');  
                                                               obj.checked = (JSON.parse (json).builtInLed == 'on');                                                           
                                                             });
     }
@@ -392,6 +407,8 @@ Style user interface with CSS:
   </body>
 </html>
 ```
+
+If you are interested also in other controls beside switch, such as sliders, radio buttons and buttons please check https://github.com/BojanJurca/Nice_web_GUI_controls_for_ESP_projects 
 
 ## Building Telnet user interface for your ESP32 project
 

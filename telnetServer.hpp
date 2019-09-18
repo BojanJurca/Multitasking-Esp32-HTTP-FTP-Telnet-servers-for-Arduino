@@ -157,7 +157,7 @@
             // ----- ask telnetCommandHandler (if it is provided by the calling program) if it is going to handle this command -----
     
             String telnetReply = ""; // get reply from telnetCommandHandler here
-            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE_TIMEOUT); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
+            unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
             if (telnetCommandHandler && (telnetReply = ((String (*) (int, String [], String)) telnetCommandHandler) (telnetArgc, telnetArgv, String (homeDir))) != "") {
               connection->sendData (telnetReply); // send everything to the client
             }

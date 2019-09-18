@@ -67,7 +67,7 @@
                                                   // start TCP server
                                                   this->__tcpServer__ = new TcpServer ( __ftpConnectionHandler__, // worker function
                                                                                         NULL,                     // we don't need additional paramater for __ftpConnectionHandler__
-                                                                                        4096,                     // 4 KB stack is enough for ftpConnectionHandler
+                                                                                        8192,                     // 8 KB stack is enough for ftpConnectionHandler
                                                                                         300000,                   // close connection if inactive for more than 5 minutes
                                                                                         serverIP,                 // accept incomming connections on on specified addresses
                                                                                         serverPort,               // FTP port

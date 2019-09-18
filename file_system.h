@@ -24,16 +24,13 @@
   #ifndef PROJECT_ID
     #define PROJECT_ID "PROJECT_ID is not #define-d"
   #endif
+
+  #include <SPIFFS.h>  
+  #include "TcpServer.hpp" // we'll need SPIFFSsemaphore defined in TcpServer.hpp 
   
-  #include "TcpServer.hpp"
-  
- 
+
   bool SPIFFSmounted = false;                                     // use this variable to check if file system has mounted before I/O operations  
 
-  #include <SPIFFS.h>
-
-  String readEntireTextFile (char *fileName);
-  
   bool mountSPIFFS () {                                           // mount file system by calling this function
     
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
@@ -105,7 +102,7 @@
   // reads entire file into String, returns success
   bool readEntireFile (String *fileContent, char *fileName) {
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    bool b = __readEntireFileWithoutSemaphore__ (fileContent, fileName);
+      bool b = __readEntireFileWithoutSemaphore__ (fileContent, fileName);
     xSemaphoreGive (SPIFFSsemaphore);
     return b;      
   }
@@ -113,7 +110,7 @@
   // writes String into file file, returns success
   bool writeEntireFile (String& fileContent, char *fileName) {
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    bool b = __writeEntireFileWithoutSemaphore__ (fileContent, fileName);
+      bool b = __writeEntireFileWithoutSemaphore__ (fileContent, fileName);
     xSemaphoreGive (SPIFFSsemaphore);
     return b;  
   }  
@@ -124,14 +121,12 @@
     File file;
     
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    
-    if ((bool) (file = SPIFFS.open (fileName, FILE_READ)) && !file.isDirectory ()) {
-      while (file.available ()) if ((c = file.read ()) != '\r') s += String (c);
-      file.close (); 
-    } else {
-      Serial.printf ("[file system] can't read %s\n", fileName);
-    }
-    
+      if ((bool) (file = SPIFFS.open (fileName, FILE_READ)) && !file.isDirectory ()) {
+        while (file.available ()) if ((c = file.read ()) != '\r') s += String (c);
+        file.close (); 
+      } else {
+        Serial.printf ("[file system] can't read %s\n", fileName);
+      }
     xSemaphoreGive (SPIFFSsemaphore);
     
     return s;  
@@ -141,34 +136,23 @@
     Serial.printf ("\r\nFiles present on built-in flash disk:\n\n");
   
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    
-    File dir = SPIFFS.open ("/");
-    if (!dir) {
-      Serial.printf ("\r\n\nFailed to open root directory /.\n");
-    } else {
-      if (!dir.isDirectory ()) {
-        Serial.printf ("\r\n\nInvalid directory.\n");
+      File dir = SPIFFS.open ("/");
+      if (!dir) {
+        Serial.printf ("\r\n\nFailed to open root directory /.\n");
       } else {
-        File file = dir.openNextFile ();
-        while (file) {
-          if(!file.isDirectory ()) Serial.printf ("  %6i bytes   %s\n", file.size (), file.name ());
-          file = dir.openNextFile ();
+        if (!dir.isDirectory ()) {
+          Serial.printf ("\r\n\nInvalid directory.\n");
+        } else {
+          File file = dir.openNextFile ();
+          while (file) {
+            if(!file.isDirectory ()) Serial.printf ("  %6i bytes   %s\n", file.size (), file.name ());
+            file = dir.openNextFile ();
+          }
         }
       }
-    }
-  
     xSemaphoreGive (SPIFFSsemaphore);
   
     Serial.printf ("\n");    
-  }
-
-  void writeProjectIdOnFlashDrive () {
-    if (readEntireTextFile ("/ID") != PROJECT_ID) {
-      if (File file = SPIFFS.open ("/ID", FILE_WRITE)) {
-        file.printf ("%s", PROJECT_ID);
-        file.close ();           
-      }
-    }          
   }
 
 #endif

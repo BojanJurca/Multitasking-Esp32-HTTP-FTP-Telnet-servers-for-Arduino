@@ -77,8 +77,8 @@
     public:
 
       // define time-out data type
-      enum TIME_OUT {
-        INFINITE_TIMEOUT = 0  // infinite time-out 
+      enum TIME_OUT_TYPE {
+        INFINITE = 0  // infinite time-out 
       };
     
       // threaded mode constructor
@@ -96,8 +96,9 @@
                                                   this->__socket__ = socket;
                                                   strcpy (this->__otherSideIP__, otherSideIP);
                                                   this->__timeOutMillis__ = timeOutMillis; 
-                                                  this->__listenerThreadStarted__ = true;
+
                                                   // start connection handler thread (threaded mode)
+                                                  this->__connectionState__ = TcpConnection::RUNNING;
                                                   if (connectionHandlerCallback) {
                                                     #define tskNORMAL_PRIORITY 1
                                                     if (pdPASS != xTaskCreate ( __connectionHandler__, 
@@ -106,7 +107,7 @@
                                                                                 this, // pass "this" pointer to static member function
                                                                                 tskNORMAL_PRIORITY,
                                                                                 NULL)) {
-                                                      this->__listenerThreadStarted__ = false;
+                                                      this->__connectionState__ == TcpConnection::NOT_STARTED;
                                                       log_e ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                       // TO DO: make constructor return NULL
                                                     } 
@@ -134,7 +135,7 @@
                                                   // __connectionHandlerCallback__ must finish regulary by itself and clean up ist memory before returning
                                                   this->closeConnection (); 
                                                   // wait for __connectionHandler__ to finish before releasing the memory occupied by this instance
-                                                  if (this->__listenerThreadStarted__) while (!this->__threadEnded__) SPIFFSsafeDelay (1);
+                                                  while (this->__connectionState__ < TcpConnection::FINISHED) SPIFFSsafeDelay (1);
                                                   // __connectionHandler__ thread will terminate itself
                                                   log_v ("[Thread:%lu][Core:%i][Socket:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                 }
@@ -146,7 +147,7 @@
                                                     connectionSocket = this->__socket__;
                                                     this->__socket__ = -1;
                                                   portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
-                                                  if (connectionSocket != -1) { // can not close socket inside of critical section
+                                                  if (connectionSocket != -1) { // can not close socket inside of critical section, close it now
                                                     // if (shutdown (connectionSocket, SHUT_RD) == -1) log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
                                                     if (close (connectionSocket) == -1)               log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno); 
                                                   }  
@@ -155,7 +156,7 @@
   
       char *getThisSideIP ()                    {
                                                   // we can not get this information from constructor since connection is not necessarily established when constructor is called
-                                                  // if this is a server then this we are looking for server side IP, if this is a client then we are looking for client side IP
+                                                  // if this is a server then we are looking for server side IP, if this is a client then we are looking for client side IP
                                                   struct sockaddr_in thisAddress = {};
                                                   socklen_t len = sizeof (thisAddress);
                                                   if (getsockname (this->__socket__, (struct sockaddr *) &thisAddress, &len) == -1) {
@@ -166,7 +167,7 @@
                                                       if (!*this->__thisSideIP__) strcpy (this->__thisSideIP__, inet_ntoa (thisAddress.sin_addr));
                                                     portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
                                                   }
-                                                  // port number can be found here: ntohs (thisAddress.sin_port);
+                                                  // port number can be found this way if needed: ntohs (thisAddress.sin_port);
                                                   return this->__thisSideIP__;
                                                 }
   
@@ -183,7 +184,7 @@
                                                                 #define EAGAIN 11
                                                                 #define ENAVAIL 119
                                                                 if (errno == EAGAIN || errno == ENAVAIL) {
-                                                                  if ((this->__timeOutMillis__ == TcpConnection::INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ < this->__timeOutMillis__)) { // non-blocking -----
+                                                                  if ((this->__timeOutMillis__ == TcpConnection::INFINITE) || (millis () - this->__lastActiveMillis__ < this->__timeOutMillis__)) { // non-blocking -----
                                                                     SPIFFSsafeDelay (1);
                                                                     break;
                                                                   }
@@ -213,19 +214,19 @@
                                                   if (-1 == recv (this->__socket__, &buffer, sizeof (buffer), MSG_PEEK)) {
                                                     #define EAGAIN 11
                                                     if (errno == EAGAIN || errno == EBADF) {
-                                                      if ((this->__timeOutMillis__ == TcpConnection::INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ >= this->__timeOutMillis__)) {
+                                                      if ((this->__timeOutMillis__ == TcpConnection::INFINITE) || (millis () - this->__lastActiveMillis__ >= this->__timeOutMillis__)) {
                                                         this->__timeOut__ = true;
                                                         this->closeConnection ();
                                                         log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
-                                                        return ERROR;
+                                                        return TcpConnection::ERROR;
                                                       }                                                      
-                                                      return NOT_AVAILABLE;
+                                                      return TcpConnection::NOT_AVAILABLE;
                                                     } else {
                                                       // Serial.printf ("recv (MSG_PEEK) error: %s: %i\n", strerror (errno), errno);
-                                                      return ERROR;
+                                                      return TcpConnection::ERROR;
                                                     }
                                                   } else {
-                                                    return AVAILABLE;
+                                                    return TcpConnection::AVAILABLE;
                                                   }
                                                 }
   
@@ -236,13 +237,14 @@
                                                   #define min(a,b) ((a)<(b)?(a):(b))
                                                   while (bufferSize) {
                                                     if (this->__socket__ == -1) return writtenTotal; 
-                                                    switch (int written = send (this->__socket__, buffer, min (bufferSize, 2048), 0)) { // ESP can send packets length of max 2 KB but let's go with MTU (default) size of 1500
+                                                    //switch (int written = send (this->__socket__, buffer, min (bufferSize, 2048), 0)) { // ESP can send packets length of max 2 KB but MTU (default) size of 1500
+                                                    switch (int written = send (this->__socket__, buffer, bufferSize, 0)) { // seems like ESP32 can send even larger packets
                                                       case -1:
                                                                 // Serial.printf ("sendData errno: %i timeout: %i\n", errno, millis () - this->__lastActiveMillis__);
                                                                 #define EAGAIN 11
                                                                 #define ENAVAIL 119
                                                                 if (errno == EAGAIN || errno == ENAVAIL) {
-                                                                  if ((this->__timeOutMillis__ == TcpConnection::INFINITE_TIMEOUT) || (millis () - this->__lastActiveMillis__ < this->__timeOutMillis__)) { 
+                                                                  if ((this->__timeOutMillis__ == TcpConnection::INFINITE) || (millis () - this->__lastActiveMillis__ < this->__timeOutMillis__)) { 
                                                                     SPIFFSsafeDelay (1);
                                                                     break;
                                                                   }
@@ -274,7 +276,7 @@
                                                   return (this->sendData ((char *) string.c_str (), strlen (string.c_str ())));
                                                 }
                                                 
-      bool started ()                           { return this->__listenerThreadStarted__; } // returns true if connection thread has already started - this flag is set before the constructor returns
+      bool started ()                           { return this->__connectionState__ == TcpConnection::RUNNING || !__connectionHandlerCallback__; } // returns true if connection thread has already started - this flag is set before the constructor returns - or if connection runs in non-threaded mode
   
       bool timeOut ()                           { return this->__timeOut__; } // returns true if time-out has occured
   
@@ -293,12 +295,17 @@
       int __socket__ = -1; 
       char __otherSideIP__ [16];
       unsigned long __timeOutMillis__;
-      
+
       unsigned long __lastActiveMillis__ = millis ();                   // needed for time-out detection
+      bool __timeOut__ = false;                                         // "time-out" flag      
       char __thisSideIP__ [16] = {};                                    // if this is a server socket then this is going to be a server IP, if this is a client socket then this is going to be client IP
-      bool __listenerThreadStarted__ = false;                                   // connection thread "started" flag
-      bool __threadEnded__ = false;                                     // connection thread "ended" flag
-      bool __timeOut__ = false;                                         // "time-out" flag
+
+      enum CONNECTION_THREAD_STATE_TYPE {
+        NOT_STARTED = 9,                                                // initial state
+        RUNNING = 1,                                                    // connection thread has started
+        FINISHED = 2                                                    // connection thread has finished, instance can unload
+      };
+      CONNECTION_THREAD_STATE_TYPE __connectionState__ = NOT_STARTED;          
       
       void __callConnectionHandlerCallback__ () {                                       // calls connection handler function (just one time from another thread)
                                                   log_i ("[Thread:%lu][Core:%i][Socket:%i] connection started\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
@@ -310,7 +317,7 @@
                                                   TcpConnection *ths = (TcpConnection *) threadParameters; // this is how you pass "this" pointer to static memeber function
                                                   log_v ("[Thread:%lu][Core:%i] __connectionHandler__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   ths->__callConnectionHandlerCallback__ ();
-                                                  ths->__threadEnded__ = true; // tell destructor it is OK to unload - from this point further we may no longer access instance memory (variables, functions, ...)
+                                                  ths->__connectionState__ = TcpConnection::FINISHED; 
                                                   delete (ths);
                                                   log_v ("[Thread:%lu][Core:%i] } __connectionHandler__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   vTaskDelete (NULL);
@@ -412,7 +419,7 @@
   
       bool timeOut ()                           {                   // returns true if time-out has occured while non-threaded TCP server is waiting for a connection (it makes no sense in threaded TCP servers)
                                                   if (this->__threadedMode__ ()) return false; // time-out makes no sense for threaded TcpServer
-                                                  if (this->__timeOutMillis__ == TcpConnection::INFINITE_TIMEOUT) return false;
+                                                  if (this->__timeOutMillis__ == TcpConnection::INFINITE) return false;
                                                   else if (millis () - this->__lastActiveMillis__ > this->__timeOutMillis__) {
                                                     log_e ("[Thread:%lu][Core:%i] time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                     return true;

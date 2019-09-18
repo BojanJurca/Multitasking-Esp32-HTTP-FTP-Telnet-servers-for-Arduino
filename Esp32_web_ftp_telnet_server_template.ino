@@ -23,7 +23,6 @@
 
 // ----- include project features - order may be important -----
 
-#define PROJECT_ID "Esp32_web_ftp_telnet_server_template" // change this definition for your project - it is going to be written into /ID file
 #include "file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
 
 #include "network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
@@ -60,7 +59,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket);
 String startWebServer () {
   if (!webSrv) {
     webSrv = new webServer (httpRequestHandler,         // a callback function tht will handle HTTP request that are not handled by webServer itself
-                            4096,                       // 4 KB stack size is usually enough, it httpRequestHandler uses more stack increase this value until server is stabile
+                            8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stabile
                             "0.0.0.0",                  // start web server on all available ip addresses
                             80,                         // HTTP port
                             NULL);                      // we won't use firewall callback function for web server
@@ -86,7 +85,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
   // ----- handle HTTP protocol requests -----
   
        if (httpRequest.substring (0, 20) == "GET /example01.html ") { // used in Example 01
-                                                                      return String ("<HTML>Example 01 - dynamic HTML page<br><br>") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("</HTML>");
+                                                                      return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
                                                                     }
   else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // used in Example 02, Example 03, Example 04, index.html
                                                                     getBuiltInLed:
@@ -171,7 +170,7 @@ String telnetCommandHandler (int argc, String argv [], String homeDirectory);
 String startTelnetServer () {
   if (!telnetSrv) {
     telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
-                                  8136,                 // 8 KB stack size is usually enough, it telnetCommandHanlder uses more stack increase this value until server is stabile
+                                  8192,                 // 8 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stabile
                                   "0.0.0.0",            // start telnt server on all available ip addresses
                                   23,                   // telnet port
                                   telnetAndFtpFirewall);// use firewall callback function for telnet server or NULL
@@ -255,9 +254,20 @@ getBuiltInLed:
 
 void setup () {
   WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
-  
+
   Serial.begin (115200);
 
+  esp_sleep_wakeup_cause_t wakeup_reason;
+  wakeup_reason = esp_sleep_get_wakeup_cause ();
+  switch (wakeup_reason){
+    case ESP_SLEEP_WAKEUP_EXT0:     dmesg ("[ESP32] Wakeup caused by external signal using RTC_IO."); break;
+    case ESP_SLEEP_WAKEUP_EXT1:     dmesg ("[ESP32] Wakeup caused by external signal using RTC_CNTL."); break;
+    case ESP_SLEEP_WAKEUP_TIMER:    dmesg ("[ESP32] Wakeup caused by timer."); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD: dmesg ("[ESP32] Wakeup caused by touchpad."); break;
+    case ESP_SLEEP_WAKEUP_ULP:      dmesg ("[ESP32] Wakeup caused by ULP program."); break;
+    default:                        dmesg ("[ESP32] Wakeup was not caused by deep sleep: " + String (wakeup_reason) + "."); break;
+  }
+  
   if (mountSPIFFS ()) dmesg ("[SPIFFS] mounted.");      // this is the first thing that you should do
   else                dmesg ("[SPIFFS] mount failed.");
 
@@ -269,7 +279,6 @@ void setup () {
   // if (networkStationWorking)    dmesg ("wlan2 is connected in Station mode.");
   // else                          dmesg ("wlan2 could not connect as a station.");
   
-  writeProjectIdOnFlashDrive ();
   listFilesOnFlashDrive ();
 
   startWebServer ();
