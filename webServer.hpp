@@ -27,6 +27,8 @@
  *          - minor structural changes,
  *            the use of dmesg
  *            September 14, 2019, Bojan Jurca
+ *          - added webClientCallMAC function
+ *            September, 27, Bojan Jurca
  *
  */
 
@@ -530,7 +532,7 @@ reply404:
   };
 
 
-  // webClient function doesn't really belong to webServer, but it may come handy every now and then
+  // webClient function doesn't really belong to webServer, but it may came handy every now and then
   
   String webClient (char *serverIP, int serverPort, unsigned int timeOutMillis, String httpRequest) {
     char buffer [256]; *buffer = 0; // reserve some space to hold the response
@@ -560,6 +562,35 @@ reply404:
       }
     }      
     return ""; // return String (buffer); // response arrived, it may evend be OK but it doesn't match content-length field
+  }
+
+  #define webClientCallIP webClient
+
+  // webClientCallMAC works like webClient with exception that it calls station connected to AP network interface by its 
+  // MAC address instead of IP (please note that only stations connected to AP are addressed this way and not the 
+  // devices that could be addressed by their MAC addresses through router - meaning through STA interface)
+  // since we do not have 100 % influence to which connecting MAC addresses which IP numbers are assigned
+  // this may be more reliable way to adress connected stations in some cases (for example if other ESPs connect
+  // to this ESP and you want to send a request to specitif ESP regardles which IP it has been assigned
+  // Thanks to: https://techtutorialsx.com/2019/09/22/esp32-arduino-soft-ap-obtaining-ip-address-of-connected-stations/
+  
+  String webClientCallMAC (char *serverMAC, int serverPort, unsigned int timeOutMillis, String httpRequest) {
+    // first scan through a list of connected stations, then call webClient if MAC address and its corresponding IP is found
+    wifi_sta_list_t wifi_sta_list = {};
+    tcpip_adapter_sta_list_t adapter_sta_list = {};
+   
+    esp_wifi_ap_get_sta_list (&wifi_sta_list);
+    tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
+    for (int i = 0; i < adapter_sta_list.num; i++) {
+        tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
+        if (!strcmp (serverMAC, (char *) (MacAddressAsString ((byte *) &station.mac, 6)).c_str ())) { // serverMAC found in adapter_sta_list
+          char ip [16];
+          strcpy (ip, ip4addr_ntoa (&(station.ip)));
+          // Serial.printf ("[webClient] connected device with MAC %s has IP %s\n", serverMAC, ip);
+          return webClientCallIP (ip, serverPort, timeOutMillis, httpRequest);
+        }
+      }
+      return ""; // serverMAC not found in adapter_sta_list
   }
 
 #endif
