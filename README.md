@@ -490,7 +490,7 @@ Example 08 shows how we can use TcpServer objects to make HTTP requests.
 void example08_makeRestCall () {
   String s = webClient ("127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
   // alternatively, you can use webClientCallMAC if you prefer to address stations connected to the AP network interface
-  // using MAC and then their IP addresses - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
+  // by MAC rather then IP addresse - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
   if (s > "")
     Serial.print ("[example 08] " + s);
   else
