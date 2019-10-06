@@ -12,23 +12,49 @@
  * History:
  *          - first release, 
  *            November 14, 2018, Bojan Jurca
- *          - changed delay () do SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *          - changed delay () to SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca          
- *          - added support for all European time zones (according to https://www.timeanddate.com/time/europe/)
+ *          - added support for all European time zones (see https://www.timeanddate.com/time/europe/)
  *            April 22, 2019, Bojan Jurca
+ *          - added support for USA timezones (see https://en.wikipedia.org/wiki/Time_in_the_United_States)
+ *            September 30, 2019, Bojan Jurca
  *  
  */
 
 
 // change this definitions according to your needs
 
-#define WET_TIMEZONE      0     // Western European Time (GMT + DST from March to October)
-#define ICELAND_TIMEZONE  100   // same as WET_TIMEZONE but without DST (GMT, no DST)
-#define CET_TIMEZONE      1     // Central European Time (GMT + 1 + DST from March to October)
-#define EET_TIMEZONE      2     // Eastern European Time (GMT + 2 + DST from March to October)
-#define FET_TIMEZONE      3     // Further-Eastern European Time (GMT + 3, no DST)
-// ... add more time zones
-#define TIMEZONE          CET_TIMEZONE // one of the above
+// ----- European time zones -----  https://www.timeanddate.com/time/europe/
+// The Daylight Saving Time (DST) period in Europe runs from 01:00 Coordinated Universal Time (UTC) 
+// on the last Sunday of March to 01:00 UTC on the last Sunday of October every year.
+#define WET_TIMEZONE      0                 // Western European Time (GMT + DST from March to October)
+#define ICELAND_TIMEZONE  1                 // same as WET_TIMEZONE but without DST (GMT, no DST)
+#define CET_TIMEZONE      2                 // Central European Time (GMT + 1 + DST from March to October)
+#define EET_TIMEZONE      3                 // Eastern European Time (GMT + 2 + DST from March to October)
+#define FET_TIMEZONE      4                 // Further-Eastern European Time (GMT + 3, no DST)
+
+// ----- USA time zones ---- https://en.wikipedia.org/wiki/Time_in_the_United_States
+// Daylight saving time (DST) begins on the second Sunday of March and ends on the first Sunday of November.
+// Clocks will be set ahead one hour at 2:00 AM on the start dates and set back one hour at 2:00 AM on ending.
+#define ATLANTIC_TIMEZONE 5                 // GMT - 4, no DST
+#define EASTERN_TIMEZONE 6                  // GMT - 5 + DST from March to November
+#define CNTRAL_TIMEZONE 7                   // GMT - 6 + DST from March to November
+#define MOUNTAIN_TIMEZONE 8                 // GMT - 7 + DST from March to November
+#define PACIFIC_TIMEZONE 9                  // GMT - 8 + DST from March to November
+#define ALASKA_TIMEZNE 10                   // GMT - 9 + DST from March to November
+#define HAWAII_ALEUTIAN_TIMEZONE 11         // GMT - 10 + DST from March to November
+#define HAWAII_ALEUTIAN_NO_DST_TIMEZONE 12  // GMT - 10
+#define AMERICAN_SAMOA_TIMEZONE 13          // GMT - 11
+#define BAKER_HOWLAND_ISLANDS_TIMEZONE 14   // GMT - 12
+#define WAKE_ISLAND_TIMEZONE 15             // GMT + 12
+#define CHAMORRO_TIMEZONE 16                // GMT + 10               
+
+// ... add more time zones or change getLocalTime function yourself
+
+#ifndef TIMEZONE
+  #define TIMEZONE          CET_TIMEZONE // one of the above
+#endif
+
 
 #define INTERNAL_NTP_PORT 2390  // internal UDP port number used for NTP - you can choose a different port number if you wish
 #define NTP_TIME_OUT 100        // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
@@ -41,8 +67,16 @@
  
   #include <WiFi.h>
   #include "TcpServer.hpp"
-  
-  
+
+  void __rtcDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.println (message); 
+    #endif
+  }
+  void (* rtcDmesg) (String) = __rtcDmesg__; // use this pointer to display / record system messages
+ 
   class real_time_clock {                                             
   
     public:
@@ -79,11 +113,14 @@
                                                         char s [30];
                                                         strftime (s, 30, "%a, %d %b %Y %T", gmtime (&newTime.tv_sec));
                                                         Serial.printf ("[real_time_clock] got GMT: %s\n", s);
+                                                        rtcDmesg ("[RTC] got GMT from NTP server: " + String (newTime.tv_sec) + ": " + s + ".");
                                                         newTime.tv_sec = this->getLocalTime ();
-                                                        strftime (s, 30, "%d.%m.%y %H:%M:%S", gmtime (&newTime.tv_sec));
+                                                        strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&newTime.tv_sec));
                                                         Serial.printf ("[real_time_clock] if (your local time != %s) change TIMEZONE definition or modify getLocalTime () function for your country and location;\n", s);
+                                                        rtcDmesg ("[RTC] local time (according to TIMEZONE definition): " + String (s) + ".");
                                                       } else {
                                                         Serial.printf ("[real_time_clock] time corrected for %li seconds\n", newTime.tv_sec - oldTime.tv_sec);
+                                                        rtcDmesg ("[RTC] time corrected for: " + String (newTime.tv_sec - oldTime.tv_sec) + " s.");
                                                       }
   
                                                       this->__gmtTimeSet__ = true;
@@ -193,87 +230,223 @@
                                                       return localTime (getGmtTime ());     
                                                     }
 #if TIMEZONE == WET_TIMEZONE 
-      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
-                                                      // TO DO: modify this function according to your location - it is difficult to
-                                                      //        write a generic function since different countries use different time rules
-                                                      // the following example is for Westeren European time zone
-     
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
                                                       time_t now = gmtTime; // time in GMT
   
+                                                      // check if now is inside DST interval
                                                       struct tm *nowStr = gmtime (&now); 
-                                                      bool insideDst = false;
-                                                      if (nowStr->tm_mon + 1 == 3) // if it is March ...
-                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
-                                                          insideDst = (nowStr->tm_wday > 0 || nowStr->tm_hour >= 1); // if it is a latter day or it is Sunday past 1:00
-                                                      if (nowStr->tm_mon + 1 > 3 && nowStr->tm_mon + 1 <= 10) insideDst = true; // let's do similar check for October
-                                                      if (nowStr->tm_mon + 1 == 10) // if it is October ...
-                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
-                                                          insideDst = !(nowStr->tm_wday > 0 || nowStr->tm_hour >= 1); // if it is a latter day or it is Sunday past 1:00
-                                                          
-                                                      if (insideDst) now += 3600; // time in GMT + 1
+                                                      
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 23                  //                      && last Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 1))     //                                               && GMT == 1 or more
+                                                        if (!(nowStr->tm_mon > 9 || nowStr->tm_mon == 9                                       // NOT November .. December || October 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 23                //                             && last Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                             && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                                      && GMT == 1 or more
+                                                          now += 3600;                                                                          // DST
+
                                                       return now;
                                                     }
 #endif
 #if TIMEZONE == ICELAND_TIMEZONE 
-      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
-                                                      // TO DO: modify this function according to your location - it is difficult to
-                                                      //        write a generic function since different countries use different time rules
-                                                      // the following example is for Westeren European time zone
-     
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
                                                       return gmtTime; // time in GMT
                                                     }
 #endif
 #if TIMEZONE == CET_TIMEZONE 
-      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
-                                                      // TO DO: modify this function according to your location - it is difficult to
-                                                      //        write a generic function since different countries use different time rules
-                                                      // the following example is for Central European time zone
-     
-                                                      time_t now = gmtTime + 3600; // time in GMT + 1
-  
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime + 3600; // GMT + 1
+                                                      
+                                                      // check if now is inside DST interval
                                                       struct tm *nowStr = gmtime (&now); 
-                                                      bool insideDst = false;
-                                                      if (nowStr->tm_mon + 1 == 3) // if it is March ...
-                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
-                                                          insideDst = (nowStr->tm_wday > 0 || nowStr->tm_hour >= 2); // if it is a latter day or it is Sunday past 2:00
-                                                      if (nowStr->tm_mon + 1 > 3 && nowStr->tm_mon + 1 <= 10) insideDst = true; // let's do similar check for October
-                                                      if (nowStr->tm_mon + 1 == 10) // if it is October ...
-                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
-                                                          insideDst = !(nowStr->tm_wday > 0 || nowStr->tm_hour >= 2); // if it is a latter day or it is Sunday past 2:00
-                                                          
-                                                      if (insideDst) now += 3600; // time in GMT + 2
+                                                      
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 23                  //                      && last Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT + 1 == 2 or more
+                                                        if (!(nowStr->tm_mon > 9 || nowStr->tm_mon == 9                                       // NOT November .. December || October 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 23                //                             && last Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                             && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 2)))  //                                                      && GMT + 1 == 2 or more
+                                                          now += 3600;                                                                          // DST
+
                                                       return now;
                                                     }
 #endif
 #if TIMEZONE == EET_TIMEZONE 
-      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
-                                                      // TO DO: modify this function according to your location - it is difficult to
-                                                      //        write a generic function since different countries use different time rules
-                                                      // the following example is for Eastern European time zone
-     
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT 
                                                       time_t now = gmtTime + 2 * 3600; // time in GMT + 2
   
+                                                      // check if now is inside DST interval
                                                       struct tm *nowStr = gmtime (&now); 
-                                                      bool insideDst = false;
-                                                      if (nowStr->tm_mon + 1 == 3) // if it is March ...
-                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
-                                                          insideDst = (nowStr->tm_wday > 0 || nowStr->tm_hour >= 3); // if it is a latter day or it is Sunday past 3:00
-                                                      if (nowStr->tm_mon + 1 > 3 && nowStr->tm_mon + 1 <= 10) insideDst = true; // let's do similar check for October
-                                                      if (nowStr->tm_mon + 1 == 10) // if it is October ...
-                                                        if (nowStr->tm_mday - nowStr->tm_wday >= 25) // if it is the last Sunday or a latter day ...
-                                                          insideDst = !(nowStr->tm_wday > 0 || nowStr->tm_hour >= 3); // if it is a latter day or it is Sunday past 3:00
-                                                          
-                                                      if (insideDst) now += 3600; // time in GMT + 3
+                                                      
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 23                  //                      && last Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 3))     //                                               && GMT + 2 == 3 or more
+                                                        if (!(nowStr->tm_mon > 9 || nowStr->tm_mon == 9                                       // NOT November .. December || October 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 23                //                             && last Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                             && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 3)))  //                                                      && GMT + 2 == 3 or more
+                                                          now += 3600;                                                                          // DST
+
                                                       return now;
                                                     }
 #endif
 #if TIMEZONE == FET_TIMEZONE 
-      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT time
-                                                      // TO DO: modify this function according to your location - it is difficult to
-                                                      //        write a generic function since different countries use different time rules
-                                                      // the following example is for Further Eastern European time zone
-     
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
                                                       return gmtTime + 3 * 3600; // time in GMT + 3
+                                                    }
+#endif
+#if TIMEZONE == ATLANTIC_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      return gmtTime - 4 * 3600; // GMT - 4
+                                                    }
+#endif
+#if TIMEZONE == EASTERN_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime - 5 * 3600; // GMT - 5
+
+                                                      // check if now is inside DST interval
+                                                      struct tm *nowStr = gmtime (&now); 
+
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 8                   //                      && second Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT - 5 == 2 or more
+                                                        if (!(nowStr->tm_mon > 10 || nowStr->tm_mon == 10                                     // NOT December || November 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 1                 //                 && first Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                 && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                          && GMT - 5 == 1 or more (equals GMT - 4 == 2 or more)
+                                                          now += 3600;                                                                          // DST
+
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == CENTRAL_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime - 6 * 3600; // time in GMT - 6
+  
+                                                      // check if now is inside DST interval
+                                                      struct tm *nowStr = gmtime (&now); 
+
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 8                   //                      && second Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT - 6 == 2 or more
+                                                        if (!(nowStr->tm_mon > 10 || nowStr->tm_mon == 10                                     // NOT December || November 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 1                 //                 && first Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                 && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                          && GMT - 6 == 1 or more (equals GMT - 5 == 2 or more)
+                                                          now += 3600;                                                                          // DST
+
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == MOUNTAIN_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime - 7 * 3600; // time in GMT - 7
+  
+                                                      // check if now is inside DST interval
+                                                      struct tm *nowStr = gmtime (&now); 
+
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 8                   //                      && second Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT - 7 == 2 or more
+                                                        if (!(nowStr->tm_mon > 10 || nowStr->tm_mon == 10                                     // NOT December || November 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 1                 //                 && first Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                 && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                          && GMT - 7 == 1 or more (equals GMT - 6 == 2 or more)
+                                                          now += 3600;                                                                          // DST
+
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == PACIFIC_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime - 8 * 3600; // time in GMT - 8
+  
+                                                      // check if now is inside DST interval
+                                                      struct tm *nowStr = gmtime (&now); 
+
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 8                   //                      && second Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT - 8 == 2 or more
+                                                        if (!(nowStr->tm_mon > 10 || nowStr->tm_mon == 10                                     // NOT December || November 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 1                 //                 && first Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                 && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                          && GMT - 8 == 1 or more (equals GMT - 7 == 2 or more)
+                                                          now += 3600;                                                                          // DST
+
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == ALASKA_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime - 9 * 3600; // time in GMT - 9
+  
+                                                      // check if now is inside DST interval
+                                                      struct tm *nowStr = gmtime (&now); 
+
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 8                   //                      && second Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT - 9 == 2 or more
+                                                        if (!(nowStr->tm_mon > 10 || nowStr->tm_mon == 10                                     // NOT December || November 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 1                 //                 && first Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                 && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                          && GMT - 9 == 1 or more (equals GMT - 8 == 2 or more)
+                                                          now += 3600;                                                                          // DST
+
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == HAWAII_ALEUTIAN_TIMEZONE 
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      time_t now = gmtTime - 10 * 3600; // time in GMT - 10
+  
+                                                      // check if now is inside DST interval
+                                                      struct tm *nowStr = gmtime (&now); 
+
+                                                      if (nowStr->tm_mon > 2 || nowStr->tm_mon == 2                                         // April .. December || March 
+                                                                                && nowStr->tm_mday - nowStr->tm_wday >= 8                   //                      && second Sunday or latter
+                                                                                   && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0          //                      && Monday .. Saturday || Sunday
+                                                                                                              && nowStr->tm_hour >= 2))     //                                               && GMT - 10 == 2 or more
+                                                        if (!(nowStr->tm_mon > 10 || nowStr->tm_mon == 10                                     // NOT December || November 
+                                                                                    && nowStr->tm_mday - nowStr->tm_wday >= 1                 //                 && first Sunday or latter
+                                                                                       && (nowStr->tm_wday > 0 || nowStr->tm_wday == 0        //                 && Monday .. Saturday || Sunday
+                                                                                                                  && nowStr->tm_hour >= 1)))  //                                          && GMT - 10 == 1 or more (equals GMT - 9 == 2 or more)
+                                                          now += 3600;                                                                          // DST
+
+                                                      return now;
+                                                    }
+#endif
+#if TIMEZONE == HAWAII_ALEUTIAN_NO_DST_TIMEZONE
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      return gmtTime - 10 * 3600; // time in GMT - 10
+                                                    }
+#endif
+#if TIMEZONE == AMERICAN_SAMOA_TIMEZONE
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      return gmtTime - 11 * 3600; // time in GMT - 11
+                                                    }
+#endif
+#if TIMEZONE == BAKER_HOWLAND_ISLANDS_TIMEZONE
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      return gmtTime - 12 * 3600; // time in GMT - 12
+                                                    }
+#endif
+#if TIMEZONE == WAKE_ISLAND_TIMEZONE
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      return gmtTime + 12 * 3600; // time in GMT + 12
+                                                    }
+#endif
+#if TIMEZONE == CHAMORRO_TIMEZONE
+      time_t localTime (time_t gmtTime)             { // returns local time for a given GMT
+                                                      return gmtTime + 10 * 3600; // time in GMT + 10
                                                     }
 #endif
 
@@ -306,5 +479,75 @@
       time_t __startupTime__ = 0;
     
   };
+
+ 
+  // DEBUG - use this function only for testing purposes
+  void __testLocalTime__ () {
+    real_time_clock testRtc ( "1.si.pool.ntp.org", "2.si.pool.ntp.org", "3.si.pool.ntp.org");
+
+    // check European start of DST interval
+    Serial.printf ("\n      Testing start of DST interval in Europe - one of European time zones has to be #define-d for testing\n");
+    Serial.printf ("      GMT (UNIX) | GMT               | Local             | Local - GMT [s]\n");
+    Serial.printf ("      ----------------------------------------------------------------\n");
+    for (time_t testTime = 1553994000 - 2; testTime < 1553994000 + 2; testTime ++) {
+      testRtc.setGmtTime (testTime);
+      time_t localTestTime = testRtc.getLocalTime ();
+      Serial.printf ("      %i | ", (unsigned long long) testTime);
+      char s [30];
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      Serial.printf ("%s | ", s);
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      Serial.printf ("%s | ", s);
+      Serial.printf ("%i\n", localTestTime - testTime);
+    }
+
+    // check European end of DST interval
+    Serial.printf ("\n      Testing end of DST interval in Europe - one of European time zones has to be #define-d for testing\n");
+    Serial.printf ("      GMT (UNIX) | GMT               | Local             | Local - GMT [s]\n");
+    Serial.printf ("      ----------------------------------------------------------------\n");
+    for (time_t testTime = 1572138000 - 2; testTime < 1572138000 + 2; testTime ++) {
+      testRtc.setGmtTime (testTime);
+      time_t localTestTime = testRtc.getLocalTime ();
+      Serial.printf ("      %i | ", (unsigned long long) testTime);
+      char s [30];
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      Serial.printf ("%s | ", s);
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      Serial.printf ("%s | ", s);
+      Serial.printf ("%i\n", localTestTime - testTime);
+    }
+
+    // check Eastern start of DST interval
+    Serial.printf ("\n      Testing Eastern start of DST interval - Eastern time zones has to be #define-d for testing\n");
+    Serial.printf ("      GMT (UNIX) | GMT               | Local             | Local - GMT [s]\n");
+    Serial.printf ("      ----------------------------------------------------------------\n");
+    for (time_t testTime = 1552201200 - 2; testTime < 1552201200 + 2; testTime ++) {
+      testRtc.setGmtTime (testTime);
+      time_t localTestTime = testRtc.getLocalTime ();
+      Serial.printf ("      %i | ", (unsigned long long) testTime);
+      char s [30];
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      Serial.printf ("%s | ", s);
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      Serial.printf ("%s | ", s);
+      Serial.printf ("%i\n", localTestTime - testTime);
+    }
+
+    // check Eastern end of DST interval
+    Serial.printf ("\n      Testing Eastern end of DST interval - Eastern time zones has to be #define-d for testing\n");
+    Serial.printf ("      GMT (UNIX) | GMT               | Local             | Local - GMT [s]\n");
+    Serial.printf ("      ----------------------------------------------------------------\n");
+    for (time_t testTime = 1572760800 - 2; testTime < 1572760800 + 2; testTime ++) {
+      testRtc.setGmtTime (testTime);
+      time_t localTestTime = testRtc.getLocalTime ();
+      Serial.printf ("      %i | ", (unsigned long long) testTime);
+      char s [30];
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&testTime));
+      Serial.printf ("%s | ", s);
+      strftime (s, 30, "%y/%m/%d %H:%M:%S", gmtime (&localTestTime));
+      Serial.printf ("%s | ", s);
+      Serial.printf ("%i\n", localTestTime - testTime);
+    }    
+  }  
 
 #endif

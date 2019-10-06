@@ -44,10 +44,11 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
    - ping [target],
    - ifconfig or ipconfig,
    - arp /* synonym for "arp -a" as implemented here */,
-   - iw /* synonym for "iw dev wlan1 station dump" as implemented here */,
+   - iw,
    - useradd -u [userId] -d [userHomeDirectory] [userName],
    - userdel [userName],
    - passwd ([userName]),
+   - free (-s [n]),
    - dmesg (--follow),
    - uptime,
    - reboot,
@@ -101,7 +102,7 @@ By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like 
       - /etc/passwd
       - /etc/shadow
 
-- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Five European time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
+- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Six European and twelve USA time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
 
    - GMT,   
    - WET (Western European Time = GMT + DST from March to October - use #define TIMEZONE   WET_TIMEZONE), 
@@ -110,7 +111,20 @@ By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like 
    - EET (Eastern European Time = GMT + 2 + DST from March to October - use #define TIMEZONE   EET_TIMEZONE), 
    - FET (Further-Eastern European Time = GMT + 3 - use #define TIMEZONE   FET_TIMEZONE). 
 
-You may have to modify getLocalTime () function yourself to match your country and location.
+   - Atlantic time zone (GMT - 4) - use #define TIMEZONE   ATLANTIC_TIMEZONE
+   - Eastern time zone (GMT - 5 + DST from March to November) - use #define TIMEZONE   EASTERN_TIMEZONE
+   - Central time zone (GMT - 6 + DST from March to November) - use #define TIMEZONE   CNTRAL_TIMEZONE
+   - Mountain time zone (GMT - 7 + DST from March to November) - use #define TIMEZONE   MOUNTAIN_TIMEZONE
+   - Pacific time zone (GMT - 8 + DST from March to November) - use #define TIMEZONE   PACIFIC_TIMEZONE
+   - Alaska time zone (GMT - 9 + DST from March to November) - use #define TIMEZONE   ALASKA_TIMEZNE
+   - Hawai-Aleutian time zone (GMT - 10 + DST from March to November) - use #define TIMEZONE   HAWAII_ALEUTIAN_TIMEZONE
+   - Hawai-Aleutian time zone without DST (GMT - 10) - use #define TIMEZONE   HAWAII_ALEUTIAN_NO_DST_TIMEZONE
+   - American Samoa time zone () - use #define TIMEZONE   AMERICAN_SAMOA_TIMEZONE
+   - Baker Island, Howland Island time zone (GMT - 11) - use #define TIMEZONE   BAKER_HOWLAND_ISLANDS_TIMEZONE
+   - Wake Island time zone (GMT + 12) - use #define TIMEZONE   WAKE_ISLAND_TIMEZONE
+   - Chamorro time zone (GMT + 10) - use #define TIMEZONE   CHAMORRO_TIMEZONE
+
+Please do additional testing yourself. I cannot be 100 % sure that local time works as it should for every time zone. You may have to modify getLocalTime () function yourself to match your country and location.
 
 ## Setup instructions
 
@@ -490,7 +504,7 @@ Example 08 shows how we can use TcpServer objects to make HTTP requests.
 void example08_makeRestCall () {
   String s = webClient ("127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
   // alternatively, you can use webClientCallMAC if you prefer to address stations connected to the AP network interface
-  // by MAC rather then IP addresse - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
+  // by MAC rather then IP addresses - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
   if (s > "")
     Serial.print ("[example 08] " + s);
   else

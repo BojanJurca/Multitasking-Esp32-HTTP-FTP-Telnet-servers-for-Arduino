@@ -91,7 +91,7 @@
       TcpServer *__tcpServer__ = NULL;
 
       static void __ftpConnectionHandler__ (TcpConnection *connection, void *notUsed) {  // connectionHandler callback function
-        log_i ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+        // log_i ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
         char buffer [80];                   // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         TcpClient *activeDataClient = NULL; // non-threaded TCP client will be used for handling active data connections
         TcpServer *pasiveDataServer = NULL; // non-threaded TCP server will be used for handling pasive data connections
@@ -118,7 +118,7 @@
             if (!received) goto closeFtpConnection;
           } while (!(endOfCmd = strstr (buffer, "\r\n")));
           *endOfCmd = 0; // mark the end of received command
-          log_v ("[Thread:%lu][Core:%i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
+          // log_v ("[Thread:%lu][Core:%i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
           if (ftpParam = strstr (buffer, " ")) *ftpParam++ = 0; else ftpParam = endOfCmd; // mark the end of command and the beginning of parameter
           
           if (!strcmp        (ftpCmd, "USER")) {  // ---------- USER ----------
@@ -210,11 +210,11 @@
                   xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
                   File dir = SPIFFS.open (d);
                   if (!dir) {
-                    log_e ("failed to open directory %s\n", homeDir);
+                    // log_e ("failed to open directory %s\n", homeDir);
                     s = "\r\n";
                   } else {
                     if (!dir.isDirectory ()) {
-                      log_e ("%s is not a directory\n", homeDir);
+                      // log_e ("%s is not a directory\n", homeDir);
                       s = "\r\n";
                     } else {
                       File file = dir.openNextFile ();
@@ -347,7 +347,7 @@
           }
         }
       closeFtpConnection:
-        log_i ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+        // log_i ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
         if (loggedIn) ftpDmesg ("[FTP] " + String (user) + " logged out.");
       }
       

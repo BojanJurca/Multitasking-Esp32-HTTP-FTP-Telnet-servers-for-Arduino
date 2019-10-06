@@ -13,18 +13,20 @@
  * History:
  *          - first release, 
  *            November 29, 2018, Bojan Jurca
- *          - added ifconfig, arp -a, 
+ *          - added ifconfig and arp (-a) commands, 
  *            December 9, 2018, Bojan Jurca
- *          - added iw dev wlan1 station dump, 
+ *          - added iw (dev wlan1 station dump) command, 
  *            December 11, 2018, Bojan Jurca          
  *          - added SPIFFSsemaphore and SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
  *          - telnetCommandHandler parameters are now easyer to access, 
- *            improved user management
+ *            improved user management,
  *            September 4th, Bojan Jurca     
  *          - minor structural changes,
- *            the use of dmesg
+ *            added dmesg (--follow) command,
  *            September 14, 2019, Bojan Jurca        
+ *          - added free (-s <n>) command,
+ *            October 2, 2019, Bojan Jurca
  *  
  */
 
@@ -45,7 +47,9 @@
   bool __cat__ (TcpConnection *connection, String fileName);
   bool __rm__ (TcpConnection *connection, String fileName);
   bool __ping__ (TcpConnection *, char *, int, int, int, int);
+  bool __free__ (TcpConnection *connection, int delaySeconds);
   bool __dmesg__ (TcpConnection *, bool);
+  void __iw__ (TcpConnection *connection);
   
   class telnetServer {                                             
   
@@ -84,7 +88,7 @@
       TcpServer *__tcpServer__ = NULL;                                    // pointer to (threaded) TcpServer instance
 
       static void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
-        log_i ("[Thread:%i][Core:%i] connection started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
+        // log_i ("[Thread:%i][Core:%i] connection started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
         char prompt1 [] = "\r\n# "; // root user's prompt
         char prompt2 [] = "\r\n$ "; // other users' prompt
         char *prompt = prompt1;
@@ -133,7 +137,7 @@
           if (*cmdLine) {
             
             connection->sendData ("\r\n");
-            log_i ("[Thread:%i][Core:%i] telnet command %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), cmdLine);
+            // log_i ("[Thread:%i][Core:%i] telnet command %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), cmdLine);
 
             // ----- prepare command line arguments (max 32 arguments) -----
             
@@ -209,13 +213,12 @@
                 else if ((telnetArgc == 2 && telnetArgv [1] == "-a")) connection->sendData (arp_a ());
                 else                                                  connection->sendData ("Only option -a is supported.");
 
-              // ----- iw dev wlan1 station dump -----
+              // ----- iw -----
 
               } else if (telnetArgv [0] == "iw") {
 
-                     if (telnetArgc == 1)                                                                                                 connection->sendData (iw_dev_wlan1_station_dump ());
-                else if ((telnetArgc == 5 && telnetArgv [1] + telnetArgv [2] + telnetArgv [3] + telnetArgv [4] == "devwlan1stationdump")) connection->sendData (iw_dev_wlan1_station_dump ());
-                else                                                                                                                      connection->sendData ("Unknown option.");
+                     if (telnetArgc == 1) __iw__ (connection);
+                     else                 connection->sendData ("Unknown option.");
                 
               // ----- ping -----
 
@@ -392,10 +395,18 @@
                    
                 #endif
 
+                // ----- free -----
+
+
+                  } else if (telnetArgv [0] == "free") {
+                    int n;
+                         if (telnetArgc == 1)                                                                           __free__ (connection, 0);
+                    else if (telnetArgc == 3 && telnetArgv [1] == "-s" && (n = telnetArgv [2].toInt ()) > 0 && n < 300) __free__ (connection, n);
+                    else                                                                                                connection->sendData ("The only free syntax supported is free (-s <n>   where 0 < n < 300).");
+                
                 // ----- dmesg  -----
 
                   } else if (telnetArgv [0] == "dmesg") {
-
                          if (telnetArgc == 1)                                 __dmesg__ (connection, false);
                     else if (telnetArgc == 2 && telnetArgv [1] == "--follow") __dmesg__ (connection, true);
                     else                                                      connection->sendData ("The only dmesg syntax supported is dmesg (--follow).");
@@ -415,7 +426,7 @@
       
       closeTelnetConnection:
           if (*homeDir) dmesg ("[TELNET] " + String (user) + " logged out.");
-          log_i ("[Thread:%i][Core:%i] connection ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
+          // log_i ("[Thread:%i][Core:%i] connection ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
       }
             
   };
@@ -744,6 +755,29 @@
     return false;
   }
 
+  // ----- free -----
+
+  // displays free heap memory
+  bool __free__ (TcpConnection *connection, int delaySeconds) {
+    String s = "free memory: " + String (ESP.getFreeHeap ()) + " bytes\r\n";
+    if (!connection->sendData (s)) return false;
+
+    // - s?
+    while (delaySeconds) {
+      for (int i = 0; i < 880; i++) { // 880 instead of 1000 - a correction for more precise timing
+        while (connection->available () == TcpConnection::AVAILABLE) {
+          char c;
+          if (!connection->recvData (&c, sizeof (c))) return false;
+          if (c == 3 || c >= ' ') return true; // return if user pressed Ctrl-C or any key
+        }
+        SPIFFSsafeDelay (delaySeconds); // / 1000
+      }
+      s = "free memory: " + String (ESP.getFreeHeap ()) + " bytes\r\n";
+      if (!connection->sendData (s)) return false;
+    }
+    return true;
+  }
+  
   // ----- dmesg data structure and functions -----
   
   typedef struct __dmesgType__ {
@@ -773,7 +807,7 @@
     // send everything to the client
     if (!connection->sendData (s + "\r\n")) return false;
 
-    // -- follow?
+    // --follow?
     while (follow) {
       while (i == __dmesgEnd__) {
         while (connection->available () == TcpConnection::AVAILABLE) {
@@ -819,8 +853,126 @@
     #ifdef __WEB_SERVER__
       webDmesg = dmesg;
     #endif  
+    #ifdef __REAL_TIME_CLOCK__
+      rtcDmesg = dmesg;
+    #endif      
     return true;
   }
   bool __redirectedDmesg__ = __redirectDmesg__ ();
+
+  // ----- iw ----- output doesn't really correspond to any iw command form but displays some usefull information about WiFi interfaces
+
+  SemaphoreHandle_t __createWiFiSnifferSemaphore__ () {
+    SemaphoreHandle_t s;
+    vSemaphoreCreateBinary (s);  
+    return s;
+  }
+  SemaphoreHandle_t WiFiSnifferSemaphore = __createWiFiSnifferSemaphore__ (); // create sempahore during initialization while ESP32 still runs in a single thread
+  
+  typedef struct {
+    unsigned frame_ctrl:16;
+    unsigned duration_id:16;
+    uint8_t addr1[6]; /* receiver address */
+    uint8_t addr2[6]; /* sender address */
+    uint8_t addr3[6]; /* filtering address */
+    unsigned sequence_ctrl:16;
+    uint8_t addr4[6]; /* optional */
+  } wifi_ieee80211_mac_hdr_t;
+  
+  typedef struct {
+    wifi_ieee80211_mac_hdr_t hdr;
+    uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
+  } wifi_ieee80211_packet_t;      
+
+  String __macToFindRssiFor__;
+  int __rssiForMac__;
+
+  int __sniffWiFiForRssi__ (String stationMac) {  // sniff WiFi trafic for station RSSI - since we are sniffing connected stations we can stay on AP WiFi channel
+                                                  // sniffing WiFi is not well documented, there are some working examples on internet however:
+                                                  // https://www.hackster.io/p99will/esp32-wifi-mac-scanner-sniffer-promiscuous-4c12f4
+                                                  // https://esp32.com/viewtopic.php?t=1314
+                                                  // https://blog.podkalicki.com/esp32-wifi-sniffer/
+    int rssi;                                          
+    xSemaphoreTake (WiFiSnifferSemaphore, portMAX_DELAY);
+
+      __macToFindRssiFor__ = stationMac;
+      __rssiForMac__ = 0;
+      esp_wifi_set_promiscuous (true);
+      const wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};      
+      esp_wifi_set_promiscuous_filter (&filter);
+      // esp_wifi_set_promiscuous_rx_cb (&__WiFiSniffer__);
+      esp_wifi_set_promiscuous_rx_cb ([] (void* buf, wifi_promiscuous_pkt_type_t type) {
+                                                                                          const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *) buf;
+                                                                                          const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *) ppkt->payload;
+                                                                                          const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
+                                                                                          // TO DO: I'm not 100% sure that this works in all cases since sourc mac address may not be
+                                                                                          //        always in the same place for all types and subtypes of frame
+                                                                                          if (__macToFindRssiFor__ == MacAddressAsString ((byte *) hdr->addr2, 6)) __rssiForMac__ = ppkt->rx_ctrl.rssi;
+                                                                                          return;
+                                                                                        });
+        unsigned long startTime = millis ();
+        while (__rssiForMac__ == 0 && millis () - startTime < 5000) SPIFFSsafeDelay (1); // sniff max 5 second, it should be enough
+        // Serial.printf ("RSSI obtained in %i milliseconds\n", millis () - startTime);
+        rssi = __rssiForMac__;
+
+      esp_wifi_set_promiscuous (false);
+
+    xSemaphoreGive (WiFiSnifferSemaphore);
+    return rssi;
+  }
+
+  void __iw__ (TcpConnection *connection) {
+    String s = "";
+    struct netif *netif;
+    for (netif = netif_list; netif->next; netif = netif->next) {
+      if (netif_is_up (netif)) {
+        if (s != "") s += "\r\n";
+        byte n = 0; if (netif->name [0] == 's') n = 0; if (netif->name [0] == 'a') n = 1;
+        // display following information for STA and AP interface (similar to ifconfig)
+        s += "wlan" + String (n) + "   name: " + String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "\r\n" + 
+             "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
+             "        inet addr: " + String (inet_ntoa (netif->ip_addr)) + "\r\n";
+                // display following information for STA interface
+                if (n == 0) {
+                  if (WiFi.status () == WL_CONNECTED) {
+                    int rssi = WiFi.RSSI ();
+                    String rssiDescription = ""; if (rssi == 0) rssiDescription = "not availabla"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+                    s += String ("           STAtion is connected to router:\r\n\r\n") + 
+                                 "              inet addr: " + WiFi.gatewayIP ().toString () + "\r\n" +
+                                 "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
+                  } else {
+                    s += "           STAtion is disconnected from router\r\n";
+                  }
+                }
+                // display following information for AP interface
+                if (n == 1) {
+                  wifi_sta_list_t wifi_sta_list = {};
+                  tcpip_adapter_sta_list_t adapter_sta_list = {};
+                  esp_wifi_ap_get_sta_list (&wifi_sta_list);
+                  tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
+                  if (adapter_sta_list.num) {
+                    s += "           stations connected to Access Point (" + String (adapter_sta_list.num) + "):\r\n";
+                    for (int i = 0; i < adapter_sta_list.num; i++) {
+                      tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
+                      s += String ("\r\n") + 
+                                   "              hwaddr: " + MacAddressAsString ((byte *) &station.mac, 6).c_str () + "\r\n" + 
+                                   "              inet addr: " + String (ip4addr_ntoa (&(station.ip))) + "\r\n";
+
+                                   connection->sendData (s);
+                                   s = "";
+                                   int rssi = __sniffWiFiForRssi__ (MacAddressAsString ((byte *) &station.mac, 6));
+                                   String rssiDescription = ""; if (rssi == 0) rssiDescription = "not availabla"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+                                   s = "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
+                                   
+                    }
+                  } else {
+                    s += "           there are no stations connected to Access Point\r\n";
+                  }
+                }
+      }
+    }
+    connection->sendData (s);
+    return;
+  }
   
 #endif

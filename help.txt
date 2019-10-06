@@ -14,12 +14,13 @@ You can use the following commands:
   ping <target>
   ifconfig or ipconfig
   arp /* synonym for "arp -a" as implemented here */
-  iw /* synonym for "iw dev wlan1 station dump" as implemented here */
+  iw
 
   useradd -u <userId> -d <userHomeDirectory> <userName>
   userdel <userName>
   passwd (<userName>)
 
+  free (-s <n>)
   dmesg (--follow)
 
   uptime

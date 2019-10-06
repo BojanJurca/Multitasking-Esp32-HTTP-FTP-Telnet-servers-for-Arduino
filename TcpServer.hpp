@@ -89,7 +89,7 @@
                       char *otherSideIP,                            // IP address of the other side of connection - 15 characters at most!
                       unsigned long timeOutMillis)                  // connection time-out in milli seconds
                                                 {             
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                   // copy constructor parameters to local structure
                                                   this->__connectionHandlerCallback__ = connectionHandlerCallback;
                                                   this->__connectionHandlerCallbackParamater__ = connectionHandlerCallbackParamater;
@@ -108,11 +108,11 @@
                                                                                 tskNORMAL_PRIORITY,
                                                                                 NULL)) {
                                                       this->__connectionState__ == TcpConnection::NOT_STARTED;
-                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                      // log_e ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                       // TO DO: make constructor return NULL
                                                     } 
                                                   } 
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                 }
   
       // non-threaded mode constructor
@@ -120,16 +120,16 @@
                       char *otherSideIP,                            // IP address of the other side of connection - 15 characters at most!
                       unsigned long timeOutMillis)                  // connection time-out in milli seconds
                                                 {             
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                   // copy constructor parameters to local structure
                                                   this->__socket__ = socket;
                                                   strcpy (this->__otherSideIP__, otherSideIP);
                                                   this->__timeOutMillis__ = timeOutMillis; 
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                 }
                                               
       ~TcpConnection ()                         {
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                   // close connection socket if it is still opened - this will, in consequence, cause __connectionHandlerCallback__ to finish - 
                                                   // we may not use vTaskDelete here since __connectionHandlerCallback__ variables would still remain in memory which would cause memory leaks - 
                                                   // __connectionHandlerCallback__ must finish regulary by itself and clean up ist memory before returning
@@ -137,11 +137,11 @@
                                                   // wait for __connectionHandler__ to finish before releasing the memory occupied by this instance
                                                   while (this->__connectionState__ < TcpConnection::FINISHED) SPIFFSsafeDelay (1);
                                                   // __connectionHandler__ thread will terminate itself
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                 }
   
       void closeConnection ()                   {
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] closeConnection {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] closeConnection {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                   int connectionSocket;
                                                   portENTER_CRITICAL (&csTcpConnectionInternalStructure);
                                                     connectionSocket = this->__socket__;
@@ -149,9 +149,9 @@
                                                   portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
                                                   if (connectionSocket != -1) { // can not close socket inside of critical section, close it now
                                                     // if (shutdown (connectionSocket, SHUT_RD) == -1) log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
-                                                    if (close (connectionSocket) == -1)               log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno); 
+                                                    if (close (connectionSocket) == -1);            // log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno); 
                                                   }  
-                                                  log_v ("[Thread:%lu][Core:%i][Socket:%i] } closeConnection\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);  
+                                                  // log_v ("[Thread:%lu][Core:%i][Socket:%i] } closeConnection\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);  
                                                 }
   
       char *getThisSideIP ()                    {
@@ -160,7 +160,7 @@
                                                   struct sockaddr_in thisAddress = {};
                                                   socklen_t len = sizeof (thisAddress);
                                                   if (getsockname (this->__socket__, (struct sockaddr *) &thisAddress, &len) == -1) {
-                                                    log_e ("[Thread:%lu][Core:%i][Socket:%i] getThisSideIP: getsockname () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
+                                                    // log_e ("[Thread:%lu][Core:%i][Socket:%i] getThisSideIP: getsockname () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, errno);
                                                     *this->__thisSideIP__ = 0; // return empty string rather than NULL (error handling is easier - you can sscanf () from "" but not from NULL)
                                                   } else {
                                                     portENTER_CRITICAL (&csTcpConnectionInternalStructure);
@@ -192,12 +192,12 @@
                                                                 // else close and continue to case 0
                                                                 this->__timeOut__ = true;
                                                                 this->closeConnection ();
-                                                                log_e ("[Thread:%lu][Core:%i][Socket:%i] recvData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                                // log_e ("[Thread:%lu][Core:%i][Socket:%i] recvData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                       case 0:   // connection is already closed
                                                                 return 0;
                                                       default:  
                                                                 this->__lastActiveMillis__ = millis ();
-                                                                log_i ("[Thread:%lu][Core:%i][Socket:%i] recvData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, recvTotal);
+                                                                // log_i ("[Thread:%lu][Core:%i][Socket:%i] recvData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, recvTotal);
                                                                 return recvTotal;
                                                     }
                                                   }
@@ -217,7 +217,7 @@
                                                       if ((this->__timeOutMillis__ == TcpConnection::INFINITE) || (millis () - this->__lastActiveMillis__ >= this->__timeOutMillis__)) {
                                                         this->__timeOut__ = true;
                                                         this->closeConnection ();
-                                                        log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                        // log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                         return TcpConnection::ERROR;
                                                       }                                                      
                                                       return TcpConnection::NOT_AVAILABLE;
@@ -252,7 +252,7 @@
                                                                 // else close and continue to case 0
                                                                 this->__timeOut__ = true;
                                                                 this->closeConnection ();
-                                                                log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                                // log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                       case 0:   // socket is already closed
                                                                 return writtenTotal;
                                                       default:
@@ -263,7 +263,7 @@
                                                                 break;
                                                     }
                                                   }  
-                                                  log_i ("[Thread:%lu][Core:%i][Socket:%i] sendData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, writtenTotal);
+                                                  // log_i ("[Thread:%lu][Core:%i][Socket:%i] sendData: %i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__, writtenTotal);
                                                   return writtenTotal;
                                                 }
 
@@ -308,18 +308,18 @@
       CONNECTION_THREAD_STATE_TYPE __connectionState__ = NOT_STARTED;          
       
       void __callConnectionHandlerCallback__ () {                                       // calls connection handler function (just one time from another thread)
-                                                  log_i ("[Thread:%lu][Core:%i][Socket:%i] connection started\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  // log_i ("[Thread:%lu][Core:%i][Socket:%i] connection started\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                   if (this->__connectionHandlerCallback__) this->__connectionHandlerCallback__ (this, this->__connectionHandlerCallbackParamater__);
-                                                  log_i ("[Thread:%lu][Core:%i][Socket:%i] connection ended\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
+                                                  // log_i ("[Thread:%lu][Core:%i][Socket:%i] connection ended\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), this->__socket__);
                                                 }
 
       static void __connectionHandler__ (void *threadParameters) {                                         // envelope for connection handler callback function
                                                   TcpConnection *ths = (TcpConnection *) threadParameters; // this is how you pass "this" pointer to static memeber function
-                                                  log_v ("[Thread:%lu][Core:%i] __connectionHandler__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] __connectionHandler__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   ths->__callConnectionHandlerCallback__ ();
                                                   ths->__connectionState__ = TcpConnection::FINISHED; 
                                                   delete (ths);
-                                                  log_v ("[Thread:%lu][Core:%i] } __connectionHandler__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] } __connectionHandler__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   vTaskDelete (NULL);
                                                 }
                                                       
@@ -349,7 +349,7 @@
                       int serverPort,                                       // server port
                       bool (* firewallCallback) (char *)                    // a reference to callback function that will be celled when new connection arrives 
                      )                          {
-                                                  log_v ("[Thread:%lu][Core:%i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   // copy constructor parameters to local structure
                                                   this->__connectionHandlerCallback__ = connectionHandlerCallback;
                                                   this->__connectionHandlerCallbackParameter__ = connectionHandlerCallbackParameter;
@@ -368,11 +368,11 @@
                                                                              this, // pass "this" pointer to static member function
                                                                              tskNORMAL_PRIORITY,
                                                                              NULL)) {
-                                                    log_e ("[Thread:%lu][Core:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+                                                    // log_e ("[Thread:%lu][Core:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
                                                     // TO DO: make constructor return NULL
                                                   } 
                                                   while (this->__listenerState__ == TcpServer::NOT_RUNNING) SPIFFSsafeDelay (1); // listener thread has started successfully and will change listener state soon
-                                                  log_v ("[Thread:%lu][Core:%i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] } threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
                                                 
       // constructor of a non-threaded TCP server
@@ -381,7 +381,7 @@
                       int serverPort,                               // server port
                       bool (* firewallCallback) (char *)            // a reference to callback function that will be celled when new connection arrives 
                      )                          {
-                                                  log_v ("[Thread:%lu][Core:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   // copy constructor parameters to local structure
                                                   this->__timeOutMillis__ = timeOutMillis;
                                                   strcpy (this->__serverIP__, serverIP);  
@@ -396,19 +396,19 @@
                                                                              this, // pass "this" pointer to static member function
                                                                              tskNORMAL_PRIORITY,
                                                                              NULL)) {
-                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
+                                                    // log_e ("[Thread:%lu][Core:%i] non-threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
                                                     // TO DO: make constructor return NULL
                                                   } 
                                                   while (this->__listenerState__ == TcpServer::NOT_RUNNING) SPIFFSsafeDelay (1); // listener thread has started successfully and will change listener state soon
-                                                  log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
       ~TcpServer ()                             {
-                                                  log_v ("[Thread:%lu] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   if (this->__connection__) delete (this->__connection__); // close non-threaded mode connection if it has been established
                                                   this->__instanceUnloading__ = true; // signal __listener__ to stop
                                                   while (this->__listenerState__ < TcpServer::FINISHED) SPIFFSsafeDelay (1); // wait for __listener__ to finish before releasing the memory occupied by this instance
-                                                  log_v ("[Thread:%lu][Core:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] } destructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
       char *getServerIP ()                      { return this->__serverIP__; } // information from constructor
@@ -421,7 +421,7 @@
                                                   if (this->__threadedMode__ ()) return false; // time-out makes no sense for threaded TcpServer
                                                   if (this->__timeOutMillis__ == TcpConnection::INFINITE) return false;
                                                   else if (millis () - this->__lastActiveMillis__ > this->__timeOutMillis__) {
-                                                    log_e ("[Thread:%lu][Core:%i] time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                    // log_e ("[Thread:%lu][Core:%i] time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                     return true;
                                                   } else return false;
                                                 }      
@@ -467,7 +467,7 @@
                                                     if (newConnection) {
                                                       if (!newConnection->started ()) {delete (newConnection);} // also closes the connection
                                                     } else {
-                                                      log_e ("[Thread:%lu][Core:%i][Socket:%i] new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket);
+                                                      // log_e ("[Thread:%lu][Core:%i][Socket:%i] new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket);
                                                       close (connectionSocket); // close the connection 
                                                     }
                                                   } else { // in non-threaded mode create non-threaded TcpConnection instance
@@ -478,7 +478,7 @@
 
       static void __listener__ (void *taskParameters) {                                        // listener running in its own thread imlemented as static memeber function
                                                 TcpServer *ths = (TcpServer *) taskParameters; // this is how you pass "this" pointer to static memeber function
-                                                log_v ("[Thread:%lu][Core:%i] __listener__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                // log_v ("[Thread:%lu][Core:%i] __listener__ {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 ths->__listenerState__ = TcpServer::RUNNING;
                                                 int listenerSocket = -1;
                                                 while (!ths->__instanceUnloading__) { // prepare listener socket - repeat this in a loop in case something goes wrong 
@@ -486,7 +486,7 @@
                                                   // Protocol Family and Address Family are connected (PF__INET protokol and AF_INET)
                                                   listenerSocket = socket (PF_INET, SOCK_STREAM, 0);
                                                   if (listenerSocket == -1) {
-                                                    log_e ("[Thread:%lu][Core:%i] __listener__: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                    // log_e ("[Thread:%lu][Core:%i] __listener__: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                     SPIFFSsafeDelay (1000); // try again after 1 s
                                                     continue;
                                                   }
@@ -500,7 +500,7 @@
                                                   serverAddress.sin_addr.s_addr = inet_addr (ths->getServerIP ());
                                                   serverAddress.sin_port = htons (ths->getServerPort ());
                                                   if (bind (listenerSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                                                    log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: bind () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
+                                                    // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: bind () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                     goto terminateListener;
                                                     //close (listenerSocket);
                                                     //SPIFFSsafeDelay (1000); // try again after 1 s
@@ -509,7 +509,7 @@
                                                   // mark socket as listening socket
                                                   #define BACKLOG 5 // queue lengthe of (simultaneously) arrived connections - actual active connection number might me larger 
                                                   if (listen (listenerSocket, BACKLOG) == -1) {
-                                                    log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listen () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
+                                                    // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listen () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                     goto terminateListener;                                                    
                                                     //close (listenerSocket);
                                                     //SPIFFSsafeDelay (1000); // try again after 1 s
@@ -517,13 +517,13 @@
                                                   }
                                                   // make socket non-blocking
                                                   if (fcntl (listenerSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                    log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listener socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
+                                                    // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: listener socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), listenerSocket, errno);
                                                     goto terminateListener;                                                    
                                                     //close (listenerSocket);
                                                     //SPIFFSsafeDelay (1000); // try again after 1 s
                                                     //continue;
                                                   }
-                                                  log_i ("[Thread:%lu][Core:%i] __listener__: started accepting connections on %s : %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), ths->getServerIP (), ths->getServerPort ());
+                                                  // log_i ("[Thread:%lu][Core:%i] __listener__: started accepting connections on %s : %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), ths->getServerIP (), ths->getServerPort ());
 
                                                   while (!ths->__instanceUnloading__) { // handle incomming connections
                                                     SPIFFSsafeDelay (1);
@@ -537,16 +537,16 @@
                                                     socklen_t connectingAddressSize = sizeof (connectingAddress);
                                                     connectionSocket = accept (listenerSocket, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                                                     if (connectionSocket != -1) { // non-blocking socket keeps returning -1 until new connection arrives
-                                                      log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: new connection from %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                      // log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: new connection from %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
                                                       if (!ths->__callFirewallCallback__ (inet_ntoa (connectingAddress.sin_addr))) {
                                                         close (connectionSocket);
-                                                        log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: %s was rejected by firewall\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                        // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: %s was rejected by firewall\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
                                                         continue;
                                                       } else {
-                                                        log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: firewall let %s through\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
+                                                        // log_i ("[Thread:%lu][Core:%i][Socket:%i] __listener__: firewall let %s through\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, inet_ntoa (connectingAddress.sin_addr));
                                                       }
                                                       if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                        log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: connection socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, errno);
+                                                        // log_e ("[Thread:%lu][Core:%i][Socket:%i] __listener__: connection socket fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, errno);
                                                         close (connectionSocket);
                                                         continue;
                                                       }
@@ -558,7 +558,7 @@
 terminateListener:
                                                 ths->__listenerState__ = TcpServer::STOPPED;
                                                 close (listenerSocket);
-                                                log_v ("[Thread:%lu][Core:%i] } __listener__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                // log_v ("[Thread:%lu][Core:%i] } __listener__\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 ths->__listenerState__ = TcpServer::FINISHED;
                                                 vTaskDelete (NULL); // terminate this thread                    
                                               }
@@ -580,18 +580,18 @@ terminateListener:
                       int serverPort,                               // server port
                       unsigned long timeOutMillis                   // connection time-out in milli seconds
                      )                          {
-                                                  log_v ("[Thread:%lu][Core:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] non-threaded constructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   // make TCP socket (SOCK_STREAM) for Internet Protocol Family (PF_INET)
                                                   // Protocol Family and Address Family are connected (PF__INET protokol and AF__INET)
                                                   int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
                                                   if (connectionSocket == -1) {
-                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                    // log_e ("[Thread:%lu][Core:%i] non-threaded constructor: socket () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                     return;
                                                   }
                                                   // make the socket non-blocking - needed for time-out detection
                                                   if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
                                                     close (connectionSocket);
-                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                    // log_e ("[Thread:%lu][Core:%i] non-threaded constructor: fcntl () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                     return;
                                                   }
                                                   // connect to server
@@ -604,7 +604,7 @@ terminateListener:
                                                     #define EINPROGRESS 119
                                                     if (errno != EINPROGRESS) {
                                                       close (connectionSocket);
-                                                      log_e ("[Thread:%lu][Core:%i] non-threaded constructor: connect () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
+                                                      // log_e ("[Thread:%lu][Core:%i] non-threaded constructor: connect () error %i\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), errno);
                                                       return;
                                                     }
                                                   } // it is likely that socket is not opened yet at this point
@@ -612,16 +612,16 @@ terminateListener:
                                                   this->__connection__ = new TcpConnection (connectionSocket, serverIP, timeOutMillis);
                                                   if (!this->__connection__) {
                                                     close (connectionSocket);
-                                                    log_e ("[Thread:%lu][Core:%i] non-threaded constructor: new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                    // log_e ("[Thread:%lu][Core:%i] non-threaded constructor: new () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                     return;                                                  
                                                   }
-                                                  log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
       ~TcpClient ()                             {
-                                                  log_v ("[Thread:%lu][Core:%i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
+                                                  // log_v ("[Thread:%lu][Core:%i] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   delete (this->__connection__);
-                                                  log_v ("[Thread:%lu][Core:%i] } destructor \n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());      
+                                                  // log_v ("[Thread:%lu][Core:%i] } destructor \n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());      
                                                 }
   
       TcpConnection *connection ()              { return this->__connection__; } // calling program will handle the connection through this reference - connection is set, before constructor returns but TCP connection may not be established (yet) at this time or possibly even not at all

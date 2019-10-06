@@ -77,6 +77,13 @@
 		</div>
 		<hr />
 
+		<div class='d1' style='height: 48px;'>
+			<div class='d3'>&nbspRSSI</div>
+			<div class='d4' id='rssi'>...</div>
+			<div class='d5'><canvas id='rssiGraph' width='480' height='46';></canvas></div>	
+		</div>
+		<hr />
+
 		<script type='text/javascript'>
 			var httpClient=function(){
 				this.request=function(url,method,callback){
@@ -170,6 +177,10 @@
 
 			setInterval(function(){
 				client.request('/connectionCount','GET',function(json){document.getElementById('connectionCount').innerText=lineGraph(json,'connectionCountGraph','#2597f4') + ' / min';});
+			}, 60000);
+
+			setInterval(function(){
+				client.request('/rssi','GET',function(json){document.getElementById('rssi').innerText=lineGraph(json,'rssiGraph','#2597f4') + ' dBm';});
 			}, 60000);
 		</script>
 	</body>

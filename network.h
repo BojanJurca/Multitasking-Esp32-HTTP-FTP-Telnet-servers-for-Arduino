@@ -73,13 +73,13 @@
     if (fileContent == "") {
       Serial.printf ("[network] /network/interfaces does noes exist, creating new one ... ");
       
-      fileContent =  "# only wlan2 can be used to connect to your WiFi\r\n"
+      fileContent =  "# only wlan0 can be used to connect to your WiFi\r\n"
                      "\r\n"
                      "# get IP address from DHCP\r\n"
-                     "   iface wlan2 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
+                     "   iface wlan0 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
                      "\r\n"
                      "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
-                     "#   iface wlan2 inet static\r\n"
+                     "#   iface wlan0 inet static\r\n"
                      "#      address 10.0.0.3\r\n"                   // change 10.0.0.3 to the IP you want to assigne to your ESP32 in static mode
                      "#      netmask 255.255.255.0\r\n"              // change 255.255.255.0 to subnet mask you want to assigne to your ESP32 in static mode
                      "#      gateway 10.0.0.1\r\n";                  // change 10.0.0.1 to your router's IP
@@ -214,7 +214,8 @@
     // Serial.print ("staPassword "); Serial.println (staPassword);    
   
     s = __compactNetworkConfiguration__ (readEntireTextFile ("/network/interfaces") + "\n"); 
-    i = s.indexOf ("iface wlan2 inet static");
+    i = s.indexOf ("iface wlan0 inet static");
+          if (!i) i = s.indexOf ("iface wlan2 inet static"); // bacwards compatibility
     if (i >= 0) {
       s = s.substring (i);
       staIP         = __insideBrackets__ (s, "address ", "\n");
@@ -364,11 +365,9 @@
     for (netif = netif_list; netif->next; netif = netif->next) {
       if (netif_is_up (netif)) {
         if (s != "") s += "\r\n";
-        int i = 0;
-        if (netif->name [0] == 'a') i = 1; // ap
-        if (netif->name [0] == 's') i = 2; // st
-        s += "wlan" + String (i) + "     " + String (netif->name [0]) + String (netif->name [1]) + " hwaddr " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
-             "          inet addr:" + String (inet_ntoa (netif->ip_addr)) + "\r\n          mtu:" + String (netif->mtu) + "\r\n";
+        byte n = 0; if (netif->name [0] == 's') n = 0; if (netif->name [0] == 'a') n = 1;
+        s += "wlan" + String (n) + "     " + String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + " hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
+             "          inet addr: " + String (inet_ntoa (netif->ip_addr)) + "\r\n          mtu: " + String (netif->mtu) + "\r\n";
       }
     }
     return s;    
@@ -433,11 +432,9 @@
     for (netif = netif_list; netif->next; netif = netif->next) {
       if (netif_is_up (netif)) {
         if (s != "") s += "\r\n";
-        int i = 0;
-        if (netif->name [0] == 'a') i = 1; // ap
-        if (netif->name [0] == 's') i = 2; // st
-        s += "wlan" + String (i) + ": " + String (inet_ntoa (netif->ip_addr)) + "\r\n  Internet Address      Physical Address      Type\r\n";
-        for (i = 0; i < ARP_TABLE_SIZE; i++) {
+        byte n = 0; if (netif->name [0] == 's') n = 0; if (netif->name [0] == 'a') n = 1;
+        s += "wlan" + String (n) + ": " + String (inet_ntoa (netif->ip_addr)) + "\r\n  Internet Address      Physical Address      Type\r\n";
+        for (int i = 0; i < ARP_TABLE_SIZE; i++) {
           if (pat->state != ETHARP_STATE_EMPTY) {
             struct netif *arp_table_netif = pat->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
             if (arp_table_netif && arp_table_netif->num == netif->num) { // if ARP entry is for the same that netif we are just displaying
@@ -454,8 +451,9 @@
     return s;
   }  
 
-  // ----- iw -----
+  // ----- iw ----- output doesn't really correspond to any iw command form but displays some usefull information about WiFi interfaces
 
+  /*
   String iw_dev_wlan1_station_dump () {
     String s = "";
     wifi_sta_list_t stationList;
@@ -466,5 +464,6 @@
     }
     return s;
   }
-    
+  */
+
 #endif

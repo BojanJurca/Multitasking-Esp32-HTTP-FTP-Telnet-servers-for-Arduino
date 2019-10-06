@@ -25,16 +25,20 @@
 
 #include "file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
 
+
 #include "network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
+
                                                           
 // #define USER_MANAGEMENT NO_USER_MANAGEMENT             // Telnet and FTP servers use user management, Web server uses it only to get its home directory
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT      // define the kind of user management project is going to use
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
 #include "user_management.h"
-                    
+
+
+#define TIMEZONE  CET_TIMEZONE                            // choose your time zone or modify getLocalTime function
 #include "real_time_clock.hpp"                            // Telnet server needs rtc to execute certain commands such as uptime
 real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
-                      "3.si.pool.ntp.org",  // second NTP server if the first one is not accessible
+                      "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
                       "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
 
 #include "telnetServer.hpp"                               // Telnet server - if other server are going to use dmesg telnetServer.hpp has to be defined priorly
@@ -49,8 +53,12 @@ real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
 #include "measurements.hpp"
 measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
 measurements connectionCount (60);          // measure how many web connections arrive each minute
+measurements rssi (60);                     // measure WiFi signal quality
+// ...
 
-#include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10, Oscilloscope
+#include "oscilloscope.h"
+
+#include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10
 
 // ----- use features in the project -----
 
@@ -84,56 +92,58 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
 
   // ----- handle HTTP protocol requests -----
   
-       if (httpRequest.substring (0, 20) == "GET /example01.html ") { // used in Example 01
+       if (httpRequest.substring (0, 20) == "GET /example01.html ") { // used by Example 01
                                                                       return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
                                                                     }
-  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // used in Example 02, Example 03, Example 04, index.html
+  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // used by Example 02, Example 03, Example 04, index.html
                                                                     getBuiltInLed:
                                                                       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
                                                                     }                                                                    
-  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  { // used in Example 03, Example 04
+  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  { // used by Example 03, Example 04
                                                                       digitalWrite (2, HIGH);
                                                                       goto getBuiltInLed;
                                                                     }
-  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") { // used in Example 03, Example 04, index.html
+  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") { // used by Example 03, Example 04, index.html
                                                                       digitalWrite (2, LOW);
                                                                       goto getBuiltInLed;
                                                                     }
-  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") { // used in index.html
+  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") { // used by index.html
                                                                         digitalWrite (2, HIGH);
                                                                         SPIFFSsafeDelay (10000);
                                                                         digitalWrite (2, LOW);
                                                                         goto getBuiltInLed;
                                                                       }
-  else if (httpRequest.substring (0, 12) == "GET /upTime ")         { // used in index.html
-                                                                      if (rtc.isGmtTimeSet ()) {
-                                                                        unsigned long long l = rtc.getGmtTime () - rtc.getGmtStartupTime ();
-                                                                        // int s = l % 60;
-                                                                        // l /= 60;
-                                                                        // int m = l % 60;
-                                                                        // l /= 60;
-                                                                        // int h = l % 60;
-                                                                        // l /= 24;
-                                                                        // return "{\"id\":\"esp32\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
-                                                                        return "{\"id\":\"esp32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
-                                                                      } else {
-                                                                        return "{\"id\":\"esp32\",\"upTime\":\"unknown\"}\r\n";
-                                                                      }
+  else if (httpRequest.substring (0, 12) == "GET /upTime ")         { // used by index.html
+                                                                      unsigned long long l = millis () / 1000; // counts up to 50 days
+                                                                      if (rtc.isGmtTimeSet ()) l = rtc.getGmtTime () - rtc.getGmtStartupTime (); // correct timing
+                                                                      // int s = l % 60;
+                                                                      // l /= 60;
+                                                                      // int m = l % 60;
+                                                                      // l /= 60;
+                                                                      // int h = l % 60;
+                                                                      // l /= 24;
+                                                                      // return "{\"id\":\"esp32\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
+                                                                      return "{\"id\":\"esp32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
                                                                     }                                                                    
-  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       { // used in index.html
+  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       { // used by index.html
                                                                       return freeHeap.measurements2json (5);
                                                                     }
-  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // used in index.html
+  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // used by index.html
                                                                       return connectionCount.measurements2json (5);
                                                                     }
-  // ----- handle WS (WebSockets) protocol requests -----
-  
-  else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // used in Example 09
-                                                                      example09_webSockets (webSocket);
-                                                                      return ""; // it doesn't matter what the function returns in case of WebSockets
+  else if (httpRequest.substring (0, 10) == "GET /rssi ")           { // used by index.html
+                                                                      return rssi.measurements2json (5);
                                                                     }
-  else if (httpRequest.substring (0, 21) == "GET /runOscilloscope " && webSocket){ // used in oscilloscope.html
-                                                                      example_oscilloscope (webSocket);
+                                                                    
+  // ----- handle WS (WebSockets) protocol requests -----
+
+  else if (httpRequest.substring (0, 21) == "GET /runOscilloscope " && webSocket){ // used by oscilloscope.html
+                                                                      runOscilloscope (webSocket);
+                                                                      return ""; // it doesn't matter what the function returns in case of WebSockets
+                                                                    }  
+  
+  else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // used by Example 09
+                                                                      example09_webSockets (webSocket);
                                                                       return ""; // it doesn't matter what the function returns in case of WebSockets
                                                                     }
 
@@ -185,8 +195,6 @@ String stopTelnetServer () {
                                                                 "Once the connections are closed you won't be able to run Telnet server again."; }
   else                                                   return "Telnet server is not running.";
 }
-
-
 
 String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
   
@@ -246,9 +254,10 @@ getBuiltInLed:
   return ""; 
 }
 
+
 // setup (), loop () --------------------------------------------------------
 
-  //disable brownout detector - if power asupply is rather poor
+  //disable brownout detector - if power supply is rather poor
   #include "soc/soc.h"
   #include "soc/rtc_cntl_reg.h"
 
@@ -256,6 +265,8 @@ void setup () {
   WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
 
   Serial.begin (115200);
+
+   // __testLocalTime__ ();
 
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause ();
@@ -276,10 +287,10 @@ void setup () {
   connectNetwork ();                                  // network should be connected after file system is mounted since it reads its configuration from file system
   // if (networkAccesPointWorking) dmesg ("wlan1 is working in Access Point mode.");
   // else                          dmesg ("wlan1 could not mount Access Point.");
-  // if (networkStationWorking)    dmesg ("wlan2 is connected in Station mode.");
-  // else                          dmesg ("wlan2 could not connect as a station.");
+  // if (networkStationWorking)    dmesg ("wlan0 is connected in Station mode.");
+  // else                          dmesg ("wlan0 could not connect as a station.");
   
-  listFilesOnFlashDrive ();
+  // listFilesOnFlashDrive ();
 
   startWebServer ();
   startFtpServer ();
@@ -289,14 +300,20 @@ void setup () {
   pinMode (2, OUTPUT);                                // this is just for demonstration purpose - prepare built-in LED
   digitalWrite (2, LOW);
   pinMode (22, INPUT_PULLUP);                         // this is just for demonstration purpose - oscilloscope
-  if (pdPASS != xTaskCreate (examples, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[examples] couldn't start examples\n");
+  if (pdPASS != xTaskCreate ([] (void *) {            // start examples in separate thread
+                                            example06_filesAndDelays ();
+                                            example07_realTimeClock ();
+                                            example08_makeRestCall ();
+                                            example10_morseEchoServer ();
+                                            vTaskDelete (NULL); // end this thread
+                                         }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[examples] couldn't start examples\n");
 }
 
 void loop () {
   SPIFFSsafeDelay (1);  
 
   rtc.doThings ();                                  // automatically synchronize real_time_clock with NTP server(s) once a day
-
+  
   if (rtc.isGmtTimeSet ()) {                        // this is just for demonstration purpose - how to use real time clock
     static bool messageAlreadyDispalyed = false;
     time_t now = rtc.getLocalTime ();
@@ -306,14 +323,22 @@ void loop () {
     if (strcmp (s, "06:00:00") <= 0) messageAlreadyDispalyed = false;
   }
 
-  static unsigned long lastFreeHeapSampleTime = -60000;
+  static unsigned long lastMeasurementTime = -60000; 
   static int lastScale = -1;
-  if (millis () - lastFreeHeapSampleTime > 60000) {
-    lastFreeHeapSampleTime = millis ();
+  if (millis () - lastMeasurementTime > 60000) {
+    lastMeasurementTime = millis ();
     lastScale = (lastScale + 1) % 60;
-    freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s asmple of free heap in KB each minute 
+    freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB each minute 
+    Serial.printf ("[loop ()] free heap:    %6i bytes\n", ESP.getFreeHeap ());
+    // dmesg ("Free heap:  " + String (ESP.getFreeHeap () / 1024) + " KB.");    
     connectionCount.addCounterToMeasurements (lastScale);           // take sample of number of web connections that arrived last minute
-    Serial.printf ("[loop ()][Thread:%lu][Core:%i] free heap:   %6i bytes\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), ESP.getFreeHeap ());
-    dmesg ("Free heap: " + String (ESP.getFreeHeap () / 1024) + " KB.");    
+    rssi.addMeasurement (lastScale, WiFi.RSSI ());                  // take RSSI sample each minute 
+    // int rssi = WiFi.RSSI ();
+    // char *rssiDescription = ""; // see https://www.metageek.com/training/resources/understanding-rssi.html
+    // if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+    // Serial.printf ("[loop ()] RSSI:   %6i dBm (%s)\n", rssi, rssiDescription);
+    // dmesg ("RSSI: " + String (rssi) + " dBm (" + String (rssiDescription) + ").");
   }  
 }
+
+   
