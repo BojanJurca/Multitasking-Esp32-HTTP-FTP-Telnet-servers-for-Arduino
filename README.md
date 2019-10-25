@@ -1,4 +1,4 @@
-﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock.
+﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock, ...
 
 Very briefly why would you use Esp32_web_ftp_telnet_server_template:
 
@@ -8,10 +8,18 @@ Very briefly why would you use Esp32_web_ftp_telnet_server_template:
 - **run-time monitoring of ESP32 behaviour with built-in dmesg Telnet command**
 - **run-time monitoring of ESP32 signals with built-in Web-based oscilloscope**
 
+![Screenshot](presentation.png)
+
 In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
 In case of Telnet all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
-![Screenshot](presentation.png)
+
+I have ported a slightly simplified version of Esp32_web_ftp_telnet_server_template also to ESP8266 controllers. You can find it here:  https://github.com/BojanJurca/Esp8266_web_ftp_telnet_server_template
+## Understanding different versions of ESP...server_template
+
+![Screenshot](versions.png)
+
+If you are using ESP8266 then you only have one choice which version to use. If you have ESP32, on the other hand, you can choose between both versions. If Esp8266_web_ftp_telnet_server_template is all you need then my guess is you should go with it since multi-threading, beside benefits, also brings additional complexity that you would have to handle in your code.
 
 You can go directly to Setup instructions and examples now or continue reading the rest of this text.
 
@@ -102,29 +110,16 @@ By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like 
       - /etc/passwd
       - /etc/shadow
 
-- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Six European and twelve USA time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you:
+- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Six European and twelve USA time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you. List of 35 already supported time zones from east to west:
 
-   - GMT,   
-   - WET (Western European Time = GMT + DST from March to October - use #define TIMEZONE   WET_TIMEZONE), 
-   - ICELAND (Iceland Time = GMT - use #define TIMEZONE   ICELAND_TIMEZONE), 
-   - CET (Central European Time = GMT + 1 + DST from March to October - use #define TIMEZONE   CET_TIMEZONE), 
-   - EET (Eastern European Time = GMT + 2 + DST from March to October - use #define TIMEZONE   EET_TIMEZONE), 
-   - FET (Further-Eastern European Time = GMT + 3 - use #define TIMEZONE   FET_TIMEZONE). 
+   - Russia time zones (KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE)
+   - Japan time zone (JAPAN_TIMEZONE)
+   - China time zone (CHINA_TIMEZONE)
+   - Europe time zones (WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE)
+   - Canada time zones (NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE)
+   - USA time zones (ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE)
 
-   - Atlantic time zone (GMT - 4) - use #define TIMEZONE   ATLANTIC_TIMEZONE
-   - Eastern time zone (GMT - 5 + DST from March to November) - use #define TIMEZONE   EASTERN_TIMEZONE
-   - Central time zone (GMT - 6 + DST from March to November) - use #define TIMEZONE   CNTRAL_TIMEZONE
-   - Mountain time zone (GMT - 7 + DST from March to November) - use #define TIMEZONE   MOUNTAIN_TIMEZONE
-   - Pacific time zone (GMT - 8 + DST from March to November) - use #define TIMEZONE   PACIFIC_TIMEZONE
-   - Alaska time zone (GMT - 9 + DST from March to November) - use #define TIMEZONE   ALASKA_TIMEZNE
-   - Hawai-Aleutian time zone (GMT - 10 + DST from March to November) - use #define TIMEZONE   HAWAII_ALEUTIAN_TIMEZONE
-   - Hawai-Aleutian time zone without DST (GMT - 10) - use #define TIMEZONE   HAWAII_ALEUTIAN_NO_DST_TIMEZONE
-   - American Samoa time zone () - use #define TIMEZONE   AMERICAN_SAMOA_TIMEZONE
-   - Baker Island, Howland Island time zone (GMT - 11) - use #define TIMEZONE   BAKER_HOWLAND_ISLANDS_TIMEZONE
-   - Wake Island time zone (GMT + 12) - use #define TIMEZONE   WAKE_ISLAND_TIMEZONE
-   - Chamorro time zone (GMT + 10) - use #define TIMEZONE   CHAMORRO_TIMEZONE
-
-Please do additional testing yourself. I cannot be 100 % sure that local time works as it should for every time zone. You may have to modify getLocalTime () function yourself to match your country and location.
+Please do additional testing yourself. I cannot be 100 % sure that local time works as it should for every time zone. If you need support for another time zone, please let me know. You can also modify getLocalTime () function yourself to match your country and location.
 
 ## Setup instructions
 
@@ -246,7 +241,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {
 }
 ```
 
-We do not have C++ compiler available in a browser, but Javascript will do the job as well:
+We do not have C++ compiler available in a browser, but Javascript will do the job as well. See example02.html:
 
 ```HTML
 <html>
@@ -302,7 +297,7 @@ getBuiltInLed:
 }
 ```
 
-In HTML we use input tag of checkbox type:
+In HTML we use input tag of checkbox type. See example03.html:
 
 ```HTML
 <html>
@@ -348,7 +343,7 @@ Everything works fine now but it looks awful.
 
 **Example 04 - user interface with style**
    
-Style user interface with CSS:
+Style user interface with CSS like in example04.html:
 
 ```HTML
 <html>
@@ -571,7 +566,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
 }
 ```
 
-On the browser side Javascript program could look something like this:
+On the browser side Javascript program could look something like example09.html:
 
 ```HTML
 <html>
