@@ -40,12 +40,15 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
 
 - **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. A few built-in commands are implemented so far:
 
-   - start web server    /* added just as an example here */
-   - stop web server     /* added just as an example here */
-   - start ftp server    /* added just as an example here */
-   - stop ftp server     /* added just as an example here */
-   - start telnet server /* added just as an example here */
-   - stop telnet server  /* added just as an example here */
+   - start web server         /* added just as an example here */
+   - stop web server          /* added just as an example here */
+   - start ftp server         /* added just as an example here */
+   - stop ftp server          /* added just as an example here */
+   - start telnet server      /* added just as an example here */
+   - stop telnet server       /* added just as an example here */
+   - digitalRead [pinNumber]  /* added just as an example here */
+   - analogRead [pinNumber]   /* added just as an example here */
+   - mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
    - ls ([directoryName]) or dir ([directoryName]),
    - cat [fileName] or type [fileName],
    - rm [fileName] or del [fileName],
@@ -156,6 +159,7 @@ At this point, you can already test if everything goes on as planned by Www, FTP
    - example02.html,
    - example03.html,
    - example04.html,
+   - example05.html,
    - example09.html,
    - oscilloscope.html.
 
@@ -179,6 +183,8 @@ ftp> put example03.html
 226 /var/www/html/example03.html transfer complete
 ftp> put example04.html
 226 /var/www/html/example04.html transfer complete
+ftp> put example05.html
+226 /var/www/html/example05.html transfer complete
 ftp> put example09.html
 226 /var/www/html/example09.html transfer complete
 ftp> put oscilloscope.html oscilloscope.html
@@ -417,11 +423,11 @@ Style user interface with CSS like in example04.html:
 </html>
 ```
 
-If you are interested also in other controls beside switch, such as sliders, radio buttons and buttons please check https://github.com/BojanJurca/Nice_web_GUI_controls_for_ESP_projects 
+More controls with style can be found in example05.html.
 
 ## Building Telnet user interface for your ESP32 project
 
-**Example 05 - processing Telnet command line**
+**Example 06 - processing Telnet command line**
 
 Compared to HTML user interface Telnet user interface is a piece of cake. Modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
@@ -443,7 +449,7 @@ getBuiltInLed:
 
 ## Examples
 
-**Example 06 - SPIFFS file system and delays**
+**Example 07 - SPIFFS file system and delays**
 
 Example shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() and vTaskResumeAll()). The assertion failure you see is vTaskDelay() checking if it was called whilst the scheduler is disabled." Some SPIFFS functions internally call vTaskSuspendAll() hence no other thread should call delay()  (which internally calls vTaskDelay()) since we cannot predict if this would happen while the scheduler is disabled.
 
@@ -470,7 +476,7 @@ for (int i = 0; i < 3; i++) {
 }
 ```
 
-**Example 07 - reading time**
+**Example 08 - reading time**
 
 Example 07 demonstrates the use of rtc (real time clock) instance built into Esp32_web_ftp_telnet_server_template.
 
@@ -478,14 +484,14 @@ Example 07 demonstrates the use of rtc (real time clock) instance built into Esp
 if (rtc.isGmtTimeSet ()) {
   time_t now;
   now = rtc.getGmtTime ();
-  Serial.printf ("[example 07] current UNIX time is %lu\n", (unsigned long) now);
+  Serial.printf ("[example 08] current UNIX time is %lu\n", (unsigned long) now);
 
   char str [30];
   now = rtc.getLocalTime ();
   strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&now));
-  Serial.printf ("[example 07] current local time is %s\n", str);
+  Serial.printf ("[example 08] current local time is %s\n", str);
 } else {
-  Serial.printf ("[example 07] rtc has not obtained time from NTP server yet\n");
+  Serial.printf ("[example 08] rtc has not obtained time from NTP server yet\n");
 }
 ```
 
@@ -496,14 +502,14 @@ Up to now, we have only made REST calls from within Javascript (from browser). H
 Example 08 shows how we can use TcpServer objects to make HTTP requests.
 
 ```C++
-void example08_makeRestCall () {
+void example09_makeRestCall () {
   String s = webClient ("127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
   // alternatively, you can use webClientCallMAC if you prefer to address stations connected to the AP network interface
   // by MAC rather then IP addresses - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
   if (s > "")
-    Serial.print ("[example 08] " + s);
+    Serial.print ("[example 09] " + s);
   else
-    Serial.printf ("[example 08] the reply didn't arrive (in time) or it is corrupt or too long\n");
+    Serial.printf ("[example 09] the reply didn't arrive (in time) or it is corrupt or too long\n");
 
   return;
 }
@@ -511,7 +517,7 @@ void example08_makeRestCall () {
 
 ## WebSockets
 
-**Example 09 - WebSockets**
+**Example 10 - WebSockets**
 
 A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 – little endian so they understand each other without doing byte reordering. TCP suggests using network byte order, for sending binary data over network, which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
 
@@ -536,14 +542,14 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
         case WebSocket::BINARY:       { // binary data received
                                         char buffer [256];
                                         int bytesRead = webSocket->readBinary (buffer, sizeof (buffer));
-                                        Serial.printf ("[example 09] got %i bytes of binary data from browser over webSocket\n"
-                                                       "[example 09]", bytesRead);
+                                        Serial.printf ("[example 10] got %i bytes of binary data from browser over webSocket\n"
+                                                       "[example 10]", bytesRead);
                                         // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 16 bit integers
                                         // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
                                         int16_t *i = (int16_t *) buffer;
                                         while ((char *) (i + 1) <= buffer + bytesRead) Serial.printf (" %i", *i ++);
-                                        Serial.printf ("\n[example 09] Looks like this is the Fibonacci sequence,\n"
-                                                         "[example 09] which means that both, endianness and complements are compatible with javascript client.\n");
+                                        Serial.printf ("\n[example 10] Looks like this is the Fibonacci sequence,\n"
+                                                         "[example 10] which means that both, endianness and complements are compatible with javascript client.\n");
                                         
                                         // send text data
                                         if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
@@ -572,7 +578,7 @@ On the browser side Javascript program could look something like example09.html:
 <html>
   <body>
 
-    Example 09 - using WebSockets<br><br>
+    Example 10 - using WebSockets<br><br>
 
     <script type='text/javascript'>
 
@@ -615,14 +621,14 @@ On the browser side Javascript program could look something like example09.html:
               myArrayBuffer = event.target.result;
               myFloat32Array = new Float32Array (myArrayBuffer); // <= our data is now here, in the array of 32 bit floating point numbers
 
-              var myMessage = "[example 09] got " + myArrayBuffer.byteLength + " bytes of binary data from server over webSocket\n[example 09]";
+              var myMessage = "[example 10] got " + myArrayBuffer.byteLength + " bytes of binary data from server over webSocket\n[example 09]";
               for (var i = 0; i < myFloat32Array.length; i++) myMessage += " " + myFloat32Array [i];
                 alert (myMessage);
                 // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 32 bit floating point numbers
                 // (I know they are 32 bit floating point numbers because I have written server C++ example myself but this information can not be obtained from webSocket)
 
-                alert ("[example 09] Looks like this is the geometric sequence,\n" + 
-                       "[example 09] which means that 32 bit floating point format is compatible with ESP32 C++ server.\n");
+                alert ("[example 10] Looks like this is the geometric sequence,\n" + 
+                       "[example 10] which means that 32 bit floating point format is compatible with ESP32 C++ server.\n");
 
                 ws.close (); // this is where webSocket connection ends - in our simple "protocol" browser closes the connection but it could be the server as well
 
@@ -647,9 +653,9 @@ On the browser side Javascript program could look something like example09.html:
 
 ## Writing your own server using TCP protocol
 
-**Example 10 - Morse server**
+**Example 11 - Morse server**
 
-In example 10 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
+In example 11 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
 Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
 While starting and stopping the server is quite straightforward, more attention has to be put to routine that handles the connection. Make sure it is re-entrant for it can run in many threads simultaneously.
 
@@ -671,13 +677,13 @@ if (myServer->started ()) {
 
   // shut down the server - is any connection is still active it will continue to run anyway
   delete (myServer);
-  Serial.printf ("[example 10] Morse echo server stopped, already active connections will continue to run anyway\n");
+  Serial.printf ("[example 11] Morse echo server stopped, already active connections will continue to run anyway\n");
 } else {
-  Serial.printf ("[example 10] unable to start Morse echo server\n");
+  Serial.printf ("[example 11] unable to start Morse echo server\n");
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[example 10] new connection arrived from %s\n", connection->getOtherSideIP ());
+  Serial.printf ("[example 11] new connection arrived from %s\n", connection->getOtherSideIP ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
@@ -777,7 +783,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
 
 ## Run-time monitoring ESP32 behaviour
 
-**Example 11 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
+**Example 12 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
 
 Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it connect to your ESP32 with telnet and type dmesg command.
 
@@ -785,7 +791,7 @@ Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue
 
 ## Run-time monitoring ESP32 signals
 
-**Example 12 - oscilloscope - see the signals the way ESP32 sees them through Web interface**
+**Oscilloscope - see the signals the way ESP32 sees them through Web interface**
 
 ESP32 oscilloscope is web based application included in Esp32_web_ftp_telnet_server_template. It is accessible through web browser once oscilloscope.html is uploaded to ESP32 (with FTP). ESP32 Oscilloscope is using WebSockets to exchange measured signal values between ESP32 and web browser.
 

@@ -13,7 +13,7 @@
  */
 
 
-// Example 06 shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. 
+// Example 07 shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. 
 // Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: 
 // "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() 
 // and vTaskResumeAll()). The assertion failure you see is vTaskDelay() checking if it was called whilst the scheduler 
@@ -23,19 +23,19 @@
 // functions simultaneously from different threads. Calling a delay() function is not thread (when used together with 
 // SPIFFS) safe and would crash ESP32 occasionally. Use SPIFFSsafeDelay() instead.
 
-void example06_filesAndDelays () {
+void example07_filesAndDelays () {
   for (int i = 0; i < 3; i++) {
     String s = "";
     File file;
   
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY); // always take SPIFFSsemaphore before any SPIFSS operations
     
-    if ((bool) (file = SPIFFS.open ("/ID", FILE_READ)) && !file.isDirectory ()) {
+    if ((bool) (file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_READ)) && !file.isDirectory ()) {
       while (file.available ()) s += String ((char) file.read ());
       file.close (); 
-      Serial.printf ("[example 06] the content of file /ID is %s\n", s.c_str ());
+      Serial.printf ("[%10d] [example 07] the content of file /etc/wpa_supplicant.conf is\r\n%s\n", millis (), s.c_str ());
     } else {
-      Serial.printf ("[example 06] can't read file /ID\n");
+      Serial.printf ("[%10d] [example 07] can't read file /etc/wpa_supplicant.conf\n", millis ());
     }
     
     xSemaphoreGive (SPIFFSsemaphore); // always give SPIFFSsemaphore when SPIFSS operation completes
@@ -45,61 +45,63 @@ void example06_filesAndDelays () {
 }
 
 
-// Example 07 demonstrates the use of rtc instance (real time clock) built into Esp32_web_ftp_telnet_server_template
+// Example 08 demonstrates the use of rtc instance (real time clock) built into Esp32_web_ftp_telnet_server_template
 
-void example07_realTimeClock () {
-  if (rtc.isGmtTimeSet ()) {
+void example08_realTimeClock () {
+  // since we are running this example at the very start of ESP we have to give it time to connect
+  // and get current time from NTP server first - wait max 10 seconds
+  unsigned long startTime = millis ();
+  while (millis () - startTime < 10000 && !rtc.isGmtTimeSet ()) SPIFFSsafeDelay (1);
+  
+  if (rtc.isGmtTimeSet ()) { // success, got time
     time_t now;
     now = rtc.getGmtTime ();
-    Serial.printf ("[example 07] current UNIX time is %lu\n", (unsigned long) now);
+    Serial.printf ("[%10d] [example 08] current UNIX time is %lu\n", millis (), (unsigned long) now);
   
-    char str [30];
-    now = rtc.getLocalTime ();
-    strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&now));
-    Serial.printf ("[example 07] current local time is %s\n", str);
-  } else {
-    Serial.printf ("[example 07] rtc has not obtained time from NTP server yet\n");
+    struct tm nowStr = rtc.getLocalStructTime ();
+    Serial.printf ("[%10d] [example 08] current local time is %02i.%02i.%02i %02i:%02i:%02i\n", millis (), 1900 + nowStr.tm_year, 1 + nowStr.tm_mon, nowStr.tm_mday, nowStr.tm_hour, nowStr.tm_min, nowStr.tm_sec);
+  } else { // faild to get current time so far
+    Serial.printf ("[%10d] [example 08] rtc has not obtained time from NTP server yet\n", millis ());
   }
 }
 
 
-// Example 08 shows how we can use TcpServer objects to make HTTP requests
+// Example 09 shows how we can use TcpServer objects to make HTTP requests
 
-void example08_makeRestCall () {
+void example09_makeRestCall () {
   String s = webClient ("127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
   // alternatively, you can use webClientCallMAC if you prefer to address stations connected to the AP network interface
   // by MAC rather then IP addresses - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
   if (s > "")
-    Serial.print ("[example 08] " + s);
+    Serial.printf ("[%10d] [example 09] %s\r\n", millis (), s.c_str ());
   else
-    Serial.printf ("[example 08] the reply didn't arrive (in time) or it is corrupt or too long\n");
+    Serial.printf ("[%10d] [example 09] the reply didn't arrive (in time) or it is corrupt or too long\n", millis ());
   return;
 }
  
 
-// Example 09 - basic WebSockets demonstration
+// Example 10 - basic WebSockets demonstration
 
-void example09_webSockets (WebSocket *webSocket) {
+void example10_webSockets (WebSocket *webSocket) {
   while (true) {
     switch (webSocket->available ()) {
       case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
                                       break;
       case WebSocket::STRING:       { // text received
                                       String s = webSocket->readString ();
-                                      Serial.printf ("[example 09] got text from browser over webSocket: %s\n", s.c_str ());
+                                      Serial.printf ("[%10d] [example 09] got text from browser over webSocket: %s\n", millis (), s.c_str ());
                                       break;
                                     }
       case WebSocket::BINARY:       { // binary data received
                                       byte buffer [256];
                                       int bytesRead = webSocket->readBinary (buffer, sizeof (buffer));
-                                      Serial.printf ("[example 09] got %i bytes of binary data from browser over webSocket\n"
-                                                     "[example 09]", bytesRead);
+                                      Serial.printf ("[%10d] [example 10] got %i bytes of binary data from browser over webSocket\n", millis (), bytesRead);
                                       // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 16 bit integers
                                       // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
                                       int16_t *i = (int16_t *) buffer;
                                       while ((byte *) (i + 1) <= buffer + bytesRead) Serial.printf (" %i", *i ++);
-                                      Serial.printf ("\n[example 09] if the sequence is -21 13 -8 5 -3 2 -1 1 0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946 17711 28657\n"
-                                                       "             it means that both, endianness and complements are compatible with javascript client.\n");
+                                      Serial.printf ("\n[%10d] [example 10] if the sequence is -21 13 -8 5 -3 2 -1 1 0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946 17711 28657\n"
+                                                       "             it means that both, endianness and complements are compatible with javascript client.\n", millis ());
                                       // send text data
                                       if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
 
@@ -112,18 +114,18 @@ void example09_webSockets (WebSocket *webSocket) {
                                     }
       case WebSocket::ERROR:          
 errorInCommunication:     
-                                      Serial.printf ("[example 09] error in communication, closing connection\n");
+                                      Serial.printf ("[%10d] [example 10] error in communication, closing connection\n", millis ());
                                       return; // close this connection
     }
   }
 }
 
 
-// Example 10 - a simple echo server except that it echos Morse code back to the client
+// Example 11 - a simple echo server except that it echos Morse code back to the client
     
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameter); // connection handler callback function
 
-void example10_morseEchoServer () {
+void example11_morseEchoServer () {
   // start new TCP server
   TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler, // function that is going to handle the connections
                                        NULL,      // no additional parameter will be passed to morseEchoServerConnectionHandler function
@@ -134,21 +136,21 @@ void example10_morseEchoServer () {
                                        NULL);     // don't use firewall in this example
   // check success
   if (myServer->started ()) {
-    Serial.printf ("[example 10] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
+    Serial.printf ("[%10d] [example 11] Morse echo server started, try \"telnet <server IP> 24\" to try it\n", millis ());
   
     // let the server run for 30 seconds - this much time you have to connect to it to test how it works
     SPIFFSsafeDelay (30000);
   
     // shut down the server - is any connection is still active it will continue to run anyway
     delete (myServer);
-    Serial.printf ("[example 10] Morse echo server stopped, already active connections will continue to run anyway\n");
+    Serial.printf ("[%10d] [example 11] Morse echo server stopped, already active connections will continue to run anyway\n", millis ());
   } else {
-    Serial.printf ("[example 10] unable to start Morse echo server\n");
+    Serial.printf ("[%10d] [example 11] unable to start Morse echo server\n", millis ());
   }
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[example 10] new connection arrived from %s\n", connection->getOtherSideIP ());
+  Serial.printf ("[%10d] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
@@ -177,7 +179,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   bytesToSend = strlen (outputBuffer);
   if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
     *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[example 10] error while sending response\n");
+    Serial.printf ("[%10d] [example 11] error while sending response\n", millis ());
     goto endThisConnection;
   }
   *outputBuffer = 0; // mark outputBuffer as empty
@@ -200,7 +202,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         bytesToSend = strlen (outputBuffer);
         if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
           *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[example 10] error while sending response\n");
+          Serial.printf ("[%10d] [example 11] error while sending response\n", millis ());
           goto endThisConnection;
         }
         strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
@@ -230,7 +232,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
       *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[example 10] error while sending response\n");
+      Serial.printf ("[%10d] [example 11] error while sending response\n", millis ());
       goto endThisConnection;
     }    
     *outputBuffer = 0; // mark outputBuffer as empty
@@ -240,7 +242,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   if (*outputBuffer) {
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[example 10] error while sending response\n");
+      Serial.printf ("[%10d] [example 11] error while sending response\n", millis ());
   }
-  Serial.printf ("[example 10] connection has just ended\n");
+  Serial.printf ("[%10d] [example 11] connection has just ended\n", millis ());
 }

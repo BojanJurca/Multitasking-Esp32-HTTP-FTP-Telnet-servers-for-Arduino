@@ -14,60 +14,54 @@
  *          - added SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            April 13, 2019, Bojan Jurca
  *          - telnetCommandHandler parameters are now easyer to access 
- *            September 4th, Bojan Jurca   
+ *            September 4, Bojan Jurca   
  *  
  */
 
 
 #include <WiFi.h>
 
-// ----- include project features - order may be important -----
+// ----- include project features -----
 
-#include "file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
+#include "./servers/file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
 
-
-#include "network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
-
+#include "./servers/network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
                                                           
 // #define USER_MANAGEMENT NO_USER_MANAGEMENT             // Telnet and FTP servers use user management, Web server uses it only to get its home directory
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT      // define the kind of user management project is going to use
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
-#include "user_management.h"
+#include "./servers/user_management.h"
 
-
-#define TIMEZONE  CET_TIMEZONE                            // choose your time zone or modify getLocalTime function
-#include "real_time_clock.hpp"                            // Telnet server needs rtc to execute certain commands such as uptime
+// define TIMEZONE  KAL_TIMEZONE
+// ...
+// #define TIMEZONE  CHAMORRO_TIMEZONE
+// (default) #define TIMEZONE  CET_TIMEZONE               // choose your time zone or modify timeToLocalTime function
+#include "./servers/real_time_clock.hpp"                  // Telnet server needs rtc to execute certain commands such as uptime
 real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
                       "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
                       "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
 
-#include "telnetServer.hpp"                               // Telnet server - if other server are going to use dmesg telnetServer.hpp has to be defined priorly
+#include "./servers/oscilloscope.h"
 
-#include "webServer.hpp"                                  // Web server
-
-#define FTP_FILE_TIME rtc.getLocalTime()                  // define this if FTP is going to use current time to report file creation time 
-#include "ftpServer.hpp"                                  // SPIFFS doesn't record file creation time so this information will be false anyway
-
-// ----- add what this template needs for demonstration purpose -----
-
+// ----- measurements are not necessary, they are here just for demonstration  -----
 #include "measurements.hpp"
 measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
-measurements connectionCount (60);          // measure how many web connections arrive each minute
+measurements httpRequestCount (60);         // measure how many web connections arrive each minute
 measurements rssi (60);                     // measure WiFi signal quality
 // ...
 
-#include "oscilloscope.h"
+#include "examples.h" // Example 07, Example 08, Example 09, Example 10, Example 11
 
-#include "examples.h" // Example 06, Example 07, Example 08, Example 09, Example 10
 
-// ----- use features in the project -----
-
+#include "./servers/webServer.hpp"                      // Web server
 webServer *webSrv; // pointer to Web server
-String httpRequestHandler (String httpRequest, WebSocket *webSocket);
+String httpRequestHandler (String httpRequest);
+void wsRequestHandler (String wsRequest, WebSocket *webSocket);
 String startWebServer () {
   if (!webSrv) {
-    webSrv = new webServer (httpRequestHandler,         // a callback function tht will handle HTTP request that are not handled by webServer itself
-                            8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stabile
+    webSrv = new webServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
+                            wsRequestHandler,           // a callback function that will handle WS requests, NULL if WS requests are to be ignored
+                            8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stable
                             "0.0.0.0",                  // start web server on all available ip addresses
                             80,                         // HTTP port
                             NULL);                      // we won't use firewall callback function for web server
@@ -81,76 +75,111 @@ String stopWebServer () {
   if (webSrv) { delete (webSrv); webSrv = NULL; return "Web server stopped. Active connections will continue to run anyway."; } 
   else                                          return "Web server is not running.";
 }
+String httpRequestHandler (String httpRequest) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
+                                                  // httpRequestHandler is supposed to be used with smaller replies,
+                                                  // if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (/var/www/html/ by default)
+                                                  // - has to be reentrant!
 
-String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
-                                                                        // - for WebSocket httpRequest is WS request, webSocket pointer is set, whatever function returns will be discarded
-                                                                        // httpRequestHandler is supposed to be used with smaller replies,
-                                                                        // if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (/var/www/html/ by default)
-                                                                        // - has to be reentrant!
-                                                                        
-       connectionCount.increaseCounter ();                              // gether some statistics
+  // ----- just a demonstration - delete this code if it is not needed -----
+
+  httpRequestCount.increaseCounter ();                            // gether some statistics
+
+  // example05 variables
+  static String niceSwitch1 = "false";  
+  static int niceSlider3 = 3;
+  static String niceRadio5 = "fm";
 
   // ----- handle HTTP protocol requests -----
   
-       if (httpRequest.substring (0, 20) == "GET /example01.html ") { // used by Example 01
-                                                                      return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
-                                                                    }
-  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")     { // used by Example 02, Example 03, Example 04, index.html
-                                                                    getBuiltInLed:
-                                                                      return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
-                                                                    }                                                                    
-  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")  { // used by Example 03, Example 04
-                                                                      digitalWrite (2, HIGH);
-                                                                      goto getBuiltInLed;
-                                                                    }
-  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") { // used by Example 03, Example 04, index.html
-                                                                      digitalWrite (2, LOW);
-                                                                      goto getBuiltInLed;
-                                                                    }
-  else if (httpRequest.substring (0, 22) == "PUT /builtInLed/on10s ") { // used by index.html
-                                                                        digitalWrite (2, HIGH);
-                                                                        SPIFFSsafeDelay (10000);
-                                                                        digitalWrite (2, LOW);
-                                                                        goto getBuiltInLed;
-                                                                      }
-  else if (httpRequest.substring (0, 12) == "GET /upTime ")         { // used by index.html
-                                                                      unsigned long long l = millis () / 1000; // counts up to 50 days
-                                                                      if (rtc.isGmtTimeSet ()) l = rtc.getGmtTime () - rtc.getGmtStartupTime (); // correct timing
-                                                                      // int s = l % 60;
-                                                                      // l /= 60;
-                                                                      // int m = l % 60;
-                                                                      // l /= 60;
-                                                                      // int h = l % 60;
-                                                                      // l /= 24;
-                                                                      // return "{\"id\":\"esp32\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
-                                                                      return "{\"id\":\"esp32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
-                                                                    }                                                                    
-  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")       { // used by index.html
-                                                                      return freeHeap.measurements2json (5);
-                                                                    }
-  else if (httpRequest.substring (0, 21) == "GET /connectionCount "){ // used by index.html
-                                                                      return connectionCount.measurements2json (5);
-                                                                    }
-  else if (httpRequest.substring (0, 10) == "GET /rssi ")           { // used by index.html
-                                                                      return rssi.measurements2json (5);
-                                                                    }
+       if (httpRequest.substring (0, 20) == "GET /example01.html ")       { // used by Example 01
+                                                                            return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
+                                                                          }
+  else if (httpRequest.substring (0, 16) == "GET /builtInLed ")           { // used by Example 02, Example 03, Example 04, index.html
+                                                                          getBuiltInLed:
+                                                                            return "{\"id\":\"ESP32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+                                                                          }                                                                    
+  else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")        { // used by Example 03, Example 04
+                                                                            digitalWrite (2, HIGH);
+                                                                            goto getBuiltInLed;
+                                                                          }
+  else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ")       { // used by Example 03, Example 04, index.html
+                                                                            digitalWrite (2, LOW);
+                                                                            goto getBuiltInLed;
+                                                                          }
+  else if (httpRequest.substring (0, 12) == "GET /upTime ")               { // used by index.html
+                                                                            unsigned long long l = millis () / 1000; // counts up to 50 days
+                                                                            if (rtc.isGmtTimeSet ()) l = rtc.getGmtTime () - rtc.getGmtStartupTime (); // correct timing
+                                                                            // int s = l % 60;
+                                                                            // l /= 60;
+                                                                            // int m = l % 60;
+                                                                            // l /= 60;
+                                                                            // int h = l % 60;
+                                                                            // l /= 24;
+                                                                            // return "{\"id\":\"" + ESP_NAME_FOR_JSON + "\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
+                                                                            return "{\"id\":\"ESP32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
+                                                                          }                                                                    
+  else if (httpRequest.substring (0, 14) == "GET /freeHeap ")             { // used by index.html
+                                                                            return freeHeap.toJson (5);
+                                                                          }
+  else if (httpRequest.substring (0, 22) == "GET /httpRequestCount ")     { // used by index.html
+                                                                            return httpRequestCount.toJson (5);
+                                                                          }
+  else if (httpRequest.substring (0, 10) == "GET /rssi ")                 { // used by index.html
+                                                                            return rssi.toJson (5);
+                                                                          }
+  else if (httpRequest.substring (0, 17) == "GET /niceSwitch1 ")          { // used by example05.html
+                                                                          returnNiceSwitch1State:
+                                                                            return "{\"id\":\"niceSwitch1\",\"value\":\"" + niceSwitch1 + "\"}"; // read switch state from variable or in some other way
+                                                                          }
+  else if (httpRequest.substring (0, 17) == "PUT /niceSwitch1/")          { // used by example05.html
+                                                                            niceSwitch1 = httpRequest.substring (17, 22); // "true " or "false"
+                                                                            niceSwitch1.trim ();
+                                                                            Serial.println ("[Got request from web browser for niceSwitch1]: " + niceSwitch1 + "\n");
+                                                                            goto returnNiceSwitch1State; // return success (or possible failure) back to the client
+                                                                          }
+  else if (httpRequest.substring (0, 25) == "PUT /niceButton2/pressed ")  { // used by example05.html
+                                                                            Serial.printf ("[Got request from web browser for niceButton2]: pressed\n");
+                                                                            return "{\"id\":\"niceButton2\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                          }
+  else if (httpRequest.substring (0, 17) == "GET /niceSlider3 ")          { // used by example05.html
+                                                                          returnNiceSlider3Value:
+                                                                            return "{\"id\":\"niceSlider3\",\"value\":\"" + String (niceSlider3) + "\"}"; // read slider value from variable or in some other way
+                                                                          }
+  else if (httpRequest.substring (0, 17) == "PUT /niceSlider3/")          { // used by example05.html
+                                                                          niceSlider3 = httpRequest.substring (17, 19).toInt (); // 0 .. 10
+                                                                            Serial.printf ("[Got request from web browser for niceSlider3]: %i\n", niceSlider3);
+                                                                            goto returnNiceSlider3Value; // return success (or possible failure) back to the client
+                                                                          }
+  else if (httpRequest.substring (0, 25) == "PUT /niceButton4/pressed ")  { // used by example05.html
+                                                                            Serial.printf ("[Got request from web browser for niceButton4]: pressed\n");
+                                                                            return "{\"id\":\"niceButton4\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                          }
+  else if (httpRequest.substring (0, 16) == "GET /niceRadio5 ")           { // used by example05.html
+                                                                          returnNiceRadio5Value:
+                                                                            return "{\"id\":\"niceRadio5\",\"modulation\":\"" + niceRadio5 + "\"}"; // read radio button selection from variable or in some other way
+                                                                          }
+  else if (httpRequest.substring (0, 16) == "PUT /niceRadio5/")           { // used by example05.html
+                                                                            niceRadio5 = httpRequest.substring (16, 18); // "am", "fm"
+                                                                            Serial.printf ("[Got request from web browser for niceRadio5]: %s\n", niceRadio5.c_str ());
+                                                                            goto returnNiceRadio5Value; // return success (or possible failure) back to the client
+                                                                          }
+  else if (httpRequest.substring (0, 25) == "PUT /niceButton6/pressed ")  { // used by example05.html
+                                                                            Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
+                                                                            return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                          }
+
+  // ----- HTTP request has not been handled by httpRequestHandler - let the webServer try to handle it itself -----
+
+  else                                                                    return ""; 
+}
+void wsRequestHandler (String wsRequest, WebSocket *webSocket) { //     // - has to be reentrant!
                                                                     
   // ----- handle WS (WebSockets) protocol requests -----
 
-  else if (httpRequest.substring (0, 21) == "GET /runOscilloscope " && webSocket){ // used by oscilloscope.html
-                                                                      runOscilloscope (webSocket);
-                                                                      return ""; // it doesn't matter what the function returns in case of WebSockets
-                                                                    }  
-  
-  else if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket){ // used by Example 09
-                                                                      example09_webSockets (webSocket);
-                                                                      return ""; // it doesn't matter what the function returns in case of WebSockets
-                                                                    }
-
-  // ----- HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself -----
-
-  else                                                              return ""; 
+       if (wsRequest.substring (0, 21) == "GET /runOscilloscope ")      runOscilloscope (webSocket);      // used by oscilloscope.html
+  else if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") example10_webSockets (webSocket); // used by Example 10
 }
+
 
 bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
                                                 // - has to be reentrant!
@@ -158,29 +187,15 @@ bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, r
   else                          return true;    // ... but let every other client through
 }
 
-ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
-String startFtpServer () {
-  if (!ftpSrv) {
-    ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
-                            21,                         // controll connection FTP port
-                            telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
-    if (ftpSrv)
-      if (ftpSrv->started ())                                   return "FTP server started.";  
-      else                    { delete (webSrv); webSrv = NULL; return "Could not start FTP server."; }
-    else                                                        return "Could not start FTP server.";  
-  } else                                                        return "FTP server is already running.";    
-}
-String stopFtpServer () {
-  if (ftpSrv) { delete (ftpSrv); ftpSrv = NULL; return "FTP server stopped. Active connections will continue to run anyway."; } 
-  else                                          return "FTP server is not running.";
-}
 
+#define TELNET_RTC rtc                                    // tell Telnet server functions (like uptime, ...) where to get time from
+#include "./servers/telnetServer.hpp"                     // Telnet server - if other server are going to use dmesg telnetServer.hpp has to be defined priorly
 telnetServer *telnetSrv; // pointer to Telnet server
 String telnetCommandHandler (int argc, String argv [], String homeDirectory);
 String startTelnetServer () {
   if (!telnetSrv) {
     telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
-                                  8192,                 // 8 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stabile
+                                  8192,                 // 8 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
                                   "0.0.0.0",            // start telnt server on all available ip addresses
                                   23,                   // telnet port
                                   telnetAndFtpFirewall);// use firewall callback function for telnet server or NULL
@@ -195,63 +210,76 @@ String stopTelnetServer () {
                                                                 "Once the connections are closed you won't be able to run Telnet server again."; }
   else                                                   return "Telnet server is not running.";
 }
-
 String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
   
   // ----- start and stop servers -----
   
   if (argc == 3 && argv [0] == "start" && argv [1] == "web" && argv [2] == "server") {
-
-    if (homeDirectory == "/") return startWebServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
-    else                      return "You must have root rights to start web sever.\r\n";
-    
+    if (homeDirectory == "/") return startWebServer (); // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to start web sever.";
   } else if (argc == 3 && argv [0] == "stop" && argv [1] == "web" && argv [2] == "server") {
-    
-    if (homeDirectory == "/") return stopWebServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
-    else                      return "You must have root rights to stop web sever.\r\n";
-
+    if (homeDirectory == "/") return stopWebServer (); // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to stop web sever.";
   } else if (argc == 3 && argv [0] == "start" && argv [1] == "ftp" && argv [2] == "server") {
-
-    if (homeDirectory == "/") return startFtpServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
-    else                      return "You must have root rights to start FTP sever.\r\n";
-
+    if (homeDirectory == "/") return startFtpServer (); // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to start FTP sever.";
   } else if (argc == 3 && argv [0] == "stop" && argv [1] == "ftp" && argv [2] == "server") {
-    
-    if (homeDirectory == "/") return stopFtpServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
-    else                      return "You must have root rights to stop FTP sever.\r\n";
-
+    if (homeDirectory == "/") return stopFtpServer (); // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to stop FTP sever.";
   } else if (argc == 3 && argv [0] == "start" && argv [1] == "telnet" && argv [2] == "server") {
-
-    if (homeDirectory == "/") return startTelnetServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
-    else                      return "You must have root rights to start Telnet sever.\r\n";
-    
+    if (homeDirectory == "/") return startTelnetServer (); // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to start Telnet sever.";
   } else if (argc == 3 && argv [0] == "stop" && argv [1] == "telnet" && argv [2] == "server") {
-    
-    if (homeDirectory == "/") return stopTelnetServer () + "\r\n"; // note that the level of rights is determined by homeDirecory
-    else                      return "You must have root rights to stop Telnet sever.\r\n";
+    if (homeDirectory == "/") return stopTelnetServer (); // note that the level of rights is determined by homeDirecory
+    else                      return "You must have root rights to stop Telnet sever.";
 
   // ---- led on ESP32 ----
     
   } else if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
-    
-getBuiltInLed:
-    return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
-    
+  getBuiltInLed:
+    return "Led is " + (digitalRead (2) ? String ("on.") : String ("off."));
   } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "on") {
-    
     digitalWrite (2, HIGH);
     goto getBuiltInLed;
-    
   } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "off") {
-    
     digitalWrite (2, LOW);
     goto getBuiltInLed;
-    
-  }
+
+  // ----- digitalRead, analogRead -----
+  
+  } else if (argc == 2 && argv [0] == "digitalRead") { // digitalRead example
+    int pin = argv [1].toInt ();
+    if ((!pin && argv [1] != "0") || pin < 0 || pin > 39) return "Invalid pin number";
+    else                                                  return "digitalRead (" + String (pin) + ") = " + String (digitalRead (pin));
+  } else if (argc == 2 && argv [0] == "analogRead") { // analogRead example
+    int pin = argv [1].toInt ();
+    if ((!pin && argv [1] != "0") || pin < 0 || pin > 39) return "Invalid pin number";
+    else                                                  return "analogRead (" + String (pin) + ") = " + String (analogRead (pin));
+  }  
 
   // ----- telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself ----
   
   return ""; 
+}
+
+
+#define FTP_RTC rtc                                     // tell FTP server where to get time from to report file time
+#include "./servers/ftpServer.hpp"                      // SPIFFS doesn't record file creation time so this information will be false anyway
+ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
+String startFtpServer () {
+  if (!ftpSrv) {
+    ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
+                            21,                         // controll connection FTP port
+                            telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
+    if (ftpSrv)
+      if (ftpSrv->started ())                                   return "FTP server started.";  
+      else                    { delete (ftpSrv); ftpSrv = NULL; return "Could not start FTP server."; }
+    else                                                        return "Could not start FTP server.";  
+  } else                                                        return "FTP server is already running.";    
+}
+String stopFtpServer () {
+  if (ftpSrv) { delete (ftpSrv); ftpSrv = NULL; return "FTP server stopped. Active connections will continue to run anyway."; } 
+  else                                          return "FTP server is not running.";
 }
 
 
@@ -265,62 +293,63 @@ void setup () {
   WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
 
   Serial.begin (115200);
-
-   // __testLocalTime__ ();
+  
+  // __testLocalTime__ ();
 
   esp_sleep_wakeup_cause_t wakeup_reason;
   wakeup_reason = esp_sleep_get_wakeup_cause ();
   switch (wakeup_reason){
-    case ESP_SLEEP_WAKEUP_EXT0:     dmesg ("[ESP32] Wakeup caused by external signal using RTC_IO."); break;
-    case ESP_SLEEP_WAKEUP_EXT1:     dmesg ("[ESP32] Wakeup caused by external signal using RTC_CNTL."); break;
-    case ESP_SLEEP_WAKEUP_TIMER:    dmesg ("[ESP32] Wakeup caused by timer."); break;
-    case ESP_SLEEP_WAKEUP_TOUCHPAD: dmesg ("[ESP32] Wakeup caused by touchpad."); break;
-    case ESP_SLEEP_WAKEUP_ULP:      dmesg ("[ESP32] Wakeup caused by ULP program."); break;
-    default:                        dmesg ("[ESP32] Wakeup was not caused by deep sleep: " + String (wakeup_reason) + "."); break;
+    case ESP_SLEEP_WAKEUP_EXT0:     dmesg ("[ESP32] wakeup caused by external signal using RTC_IO."); break;
+    case ESP_SLEEP_WAKEUP_EXT1:     dmesg ("[ESP32] wakeup caused by external signal using RTC_CNTL."); break;
+    case ESP_SLEEP_WAKEUP_TIMER:    dmesg ("[ESP32] wakeup caused by timer."); break;
+    case ESP_SLEEP_WAKEUP_TOUCHPAD: dmesg ("[ESP32] wakeup caused by touchpad."); break;
+    case ESP_SLEEP_WAKEUP_ULP:      dmesg ("[ESP32] wakeup caused by ULP program."); break;
+    default:                        dmesg ("[ESP32] wakeup was not caused by deep sleep: " + String (wakeup_reason) + "."); break;
   }
   
-  if (mountSPIFFS ()) dmesg ("[SPIFFS] mounted.");      // this is the first thing that you should do
+  if (mountSPIFFS ()) dmesg ("[SPIFFS] mounted.");    // this is the first thing that you should do
   else                dmesg ("[SPIFFS] mount failed.");
 
   usersInitialization ();                             // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
 
   connectNetwork ();                                  // network should be connected after file system is mounted since it reads its configuration from file system
-  // if (networkAccesPointWorking) dmesg ("wlan1 is working in Access Point mode.");
-  // else                          dmesg ("wlan1 could not mount Access Point.");
-  // if (networkStationWorking)    dmesg ("wlan0 is connected in Station mode.");
-  // else                          dmesg ("wlan0 could not connect as a station.");
-  
+
   // listFilesOnFlashDrive ();
 
   startWebServer ();
-  startFtpServer ();
   startTelnetServer ();
+  startFtpServer ();
 
-  // examples
+  // ----- examples -----
+  
   pinMode (2, OUTPUT);                                // this is just for demonstration purpose - prepare built-in LED
   digitalWrite (2, LOW);
   pinMode (22, INPUT_PULLUP);                         // this is just for demonstration purpose - oscilloscope
   if (pdPASS != xTaskCreate ([] (void *) {            // start examples in separate thread
-                                            example06_filesAndDelays ();
-                                            example07_realTimeClock ();
-                                            example08_makeRestCall ();
-                                            example10_morseEchoServer ();
+                                            example07_filesAndDelays ();
+                                            example08_realTimeClock ();
+                                            example09_makeRestCall ();
+                                            example11_morseEchoServer ();
                                             vTaskDelete (NULL); // end this thread
-                                         }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[examples] couldn't start examples\n");
+                                         }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10d] [examples] couldn't start examples\n", millis ());
 }
 
 void loop () {
   SPIFFSsafeDelay (1);  
 
-  rtc.doThings ();                                  // automatically synchronize real_time_clock with NTP server(s) once a day
+  // periodicly check network status and reconnect if neccessary
+  network_doThings ();
+  // give RTC its processing time - clock synchronization
+  rtc.doThings ();
+
+  // ----- just a demonstration from now on -----
   
-  if (rtc.isGmtTimeSet ()) {                        // this is just for demonstration purpose - how to use real time clock
+  if (rtc.isGmtTimeSet ()) {                        
     static bool messageAlreadyDispalyed = false;
-    time_t now = rtc.getLocalTime ();
-    char s [9];
-    strftime (s, 9, "%H:%M:%S", gmtime (&now));
-    if (strcmp (s, "23:05:00") >= 0 && !messageAlreadyDispalyed && (messageAlreadyDispalyed = true)) Serial.printf ("Working late again?\n");
-    if (strcmp (s, "06:00:00") <= 0) messageAlreadyDispalyed = false;
+    if (timeToString (rtc.getLocalTime ()).substring (11) >= "23:05:00" && !messageAlreadyDispalyed) {
+      messageAlreadyDispalyed = true;
+      Serial.printf ("[%10d] Working late again?\n", millis ());
+    }
   }
 
   static unsigned long lastMeasurementTime = -60000; 
@@ -329,16 +358,12 @@ void loop () {
     lastMeasurementTime = millis ();
     lastScale = (lastScale + 1) % 60;
     freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB each minute 
-    Serial.printf ("[loop ()] free heap:    %6i bytes\n", ESP.getFreeHeap ());
-    // dmesg ("Free heap:  " + String (ESP.getFreeHeap () / 1024) + " KB.");    
-    connectionCount.addCounterToMeasurements (lastScale);           // take sample of number of web connections that arrived last minute
+    httpRequestCount.addCounterToMeasurements (lastScale);          // take sample of number of web connections that arrived last minute
     rssi.addMeasurement (lastScale, WiFi.RSSI ());                  // take RSSI sample each minute 
-    // int rssi = WiFi.RSSI ();
-    // char *rssiDescription = ""; // see https://www.metageek.com/training/resources/understanding-rssi.html
-    // if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
-    // Serial.printf ("[loop ()] RSSI:   %6i dBm (%s)\n", rssi, rssiDescription);
-    // dmesg ("RSSI: " + String (rssi) + " dBm (" + String (rssiDescription) + ").");
+    Serial.printf ("[%10d] [loop ()] %s, free heap: %6i bytes, RSSI: %3i dBm\n",  millis (), 
+                                                                                  rtc.isGmtTimeSet () ? timeToString (rtc.getLocalTime ()).c_str () : "                   ",
+                                                                                  ESP.getFreeHeap (),
+                                                                                  WiFi.RSSI ()
+                                                                                );
   }  
 }
-
-   
