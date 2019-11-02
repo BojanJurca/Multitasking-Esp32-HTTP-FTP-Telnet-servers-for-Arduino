@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+
+ <head>
+  <title>Nice controls</title>
+
+  <link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
+  <link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
+  <link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
+  <meta http-equiv='content-type' content='text/html;charset=utf-8' />
+
+  <style>
+
+   /* nice page framework */
+   hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
+
+   h1 {font-family: verdana; font-size: 40px; text-align: center}
+
+   div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px}
+   div.d2 {position: relative; float: left; width: 42%; font-family: verdana; font-size: 30px; color: gray;}
+   div.d3 {position: relative; float: left; width: 58%; font-family: verdana; font-size: 30px; color: black;}
+
+   /* nice switch control */
+   .switch {position: relative; display: inline-block; width: 60px; height: 34px}
+   .slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
+   .slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
+   input:checked+.slider {background-color: #2196F3}
+   input:focus+.slider {box-shadow: 0 0 1px #2196F3}
+   input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
+   .switch input {display: none}
+   .slider.round {border-radius: 34px}
+   .slider.round:before {border-radius: 50%}
+   input:disabled+.slider {background-color: #aaa}
+
+   /* nice slider control */
+   input[type='range'] {-webkit-appearance: none; -webkit-tap-highlight-color: rgba(255,255,255,0); width: 250px; height: 28px; margin: 0; border: none; padding: 4px 4px; border-radius: 28px; background: #2196F3; outline: none}
+   input[type='range']::-moz-range-track {border: inherit; background: transparent}
+   input[type='range']::-ms-track {border: inherit; color: transparent; background: transparent}
+   input[type='range']::-ms-fill-lower
+   input[type='range']::-ms-fill-upper {background: transparent}
+   input[type='range']::-ms-tooltip {display: none}
+   input[type='range']::-webkit-slider-thumb {-webkit-appearance: none; width: 38px; height: 26px; border: none; border-radius: 13px; background-color: white}
+   input[type='range']::-moz-range-thumb {width: 38px; height: 26px; border: none; border-radius: 13px; background-color: white}
+   input[type='range']::-ms-thumb {width: 38px; height: 26px; border-radius: 13px; border: 0; background-color: white}
+   input:disabled+.slider {background-color: #aaa}
+   input[type='range']:disabled {background: #aaa}
+
+   /* nice radio button control */
+   .container {display: black; position: relative; padding-left: 222px; margin-bottom: 14px; cursor: pointer; font-family: verdana; font-size: 30px; color: gray; -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none}
+   .container input {position: absolute; opacity: 0; cursor: pointer; height: 0; width: 0}
+   .checkmark {position: absolute; top: 0; left: 0; height: 34px; width: 34px; background-color: #ddd; border-radius: 50%} 
+   .container:hover input ~ .checkmark {background-color: #ccc}
+   .container input:checked ~ .checkmark {background-color: #2196F3}
+   .checkmark:after {content: ''; position: absolute; display: none}
+   .container input:checked ~ .checkmark:after {display: block}
+   .container .checkmark:after {top: 9px; left: 9px; width: 15px; height: 15px; border-radius: 50%; background: white}
+   .container input:disabled ~ .checkmark {background-color: gray} 
+   .container input:disabled ~ .checkmark {background-color: #aaa}
+
+   /* nice button control */
+   .button {padding: 10px 15px; font-size: 22px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 42px}
+   button:disabled {background-color: #aaa}
+   button:disabled:hover {background-color: #aaa}
+   /* blue button */
+   .button1 {background-color: #2196F3}
+   .button1:hover {background-color: #0961aa}
+   .button1:active {background-color: #0961aa; transform: translateY(3px)}
+   /* green button */
+   .button2 {background-color: green}
+   .button2:hover {background-color: darkgreen}
+   .button2:active {background-color: darkgreen; transform: translateY(3px)}
+   /* red button */
+   .button3 {background-color: red}
+   .button3:hover {background-color: darkred}
+   .button3:active {background-color: darkred; transform: translateY(3px)}
+
+  </style>
+ </head>
+
+ <body>
+  <br><h1>Example 05 - nice web GUI controls</h1>
+
+  <hr />
+  <div class='d1'>
+   <div class='d2'>&nbsp;Nice switch</div>
+   <div class='d3'>
+    <label class='switch'><input type='checkbox' id='niceSwitch1' disabled onClick='syncSwitchWithEsp (this.id, this.checked)'><div class='slider round'></div></label>
+   </div>
+  </div>
+
+  <hr />
+  <div class='d1'>
+   <div class='d2'>&nbsp;Nice slider</div>
+   <div class='d3'> 
+    <div class='slider'><input id='niceSlider3' type='range' min='0' max='10' value='0' step='1' disabled onchange="
+
+     // do not react on every change since there may be too many of them - react only every 1/3 of second
+     clearTimeout (sliderTimeout);
+     sliderTimeout = setTimeout (function () {
+      client.request ('/niceSlider3/' + document.getElementById ('niceSlider3').value, 'PUT', function (json) {;});
+     },333);
+
+    "/></div>
+   </div>
+  </div>
+
+  <hr />
+  <div class='d1'>
+   <div class='d2'>&nbsp;Nice radio 1</div>
+   <div class='d3'>
+    <label class='container'>&nbsp;<input type='radio' checked='checked' name='niceRadio5' id='am' disabled onchange="
+
+     client.request ('/' + this.name + '/' + this.id, 'PUT', function (json) {
+      if (JSON.parse (json).modulation == 'am') document.getElementById ('am').checked = 'checked';
+      else                                      document.getElementById ('fm').checked = 'checked';
+     });
+
+    "><span class='checkmark'></span></label>
+   </div>
+  </div>
+  <div class='d1'>
+   <div class='d2'>&nbsp;Nice radio 2</div>
+   <div class='d3'>
+    <label class='container'>&nbsp;<input type='radio' name='niceRadio5' id='fm' disabled onchange="
+
+     client.request ('/' + this.name + '/' + this.id, 'PUT', function (json) {
+      if (JSON.parse (json).modulation == 'am') document.getElementById ('am').checked = 'checked';
+      else                                      document.getElementById ('fm').checked = 'checked';
+     });
+
+    "><span class='checkmark'></span></label>
+   </div>
+  </div>
+
+  <hr />
+  <div class='d1'; style='height: 46px;'>
+   <div class='d2'>&nbsp;Nice button</div>
+   <div class='d3'>
+    <button class='button button1' id='niceButton2' onclick="
+
+     client.request ('/niceButton2/pressed', 'PUT', function (json) {;});
+
+    ">&nbsp;PRESS&nbsp;</button>
+    <button class='button button2' id='niceButton4' onclick="
+
+     client.request ('/niceButton4/pressed', 'PUT', function (json) {;});
+
+    ">&nbsp;PRESS&nbsp;</button>
+    <button class='button button3' id='niceButton6' onclick="
+
+     client.request ('/niceButton6/pressed', 'PUT', function (json) {;});
+
+    ">&nbsp;PRESS&nbsp;</button>
+   </div>
+  </div>
+
+  <hr />
+
+ </body>
+
+ <script type='text/javascript'>
+
+  var sliderTimeout = null;
+
+  // mechanism that makes REST calls and get their replies
+  var httpClient = function () {
+   this.request = function (url, method, callback) {
+    var httpRequest = new XMLHttpRequest ();
+    httpRequest.onreadystatechange = function () {
+     if (httpRequest.readyState == 4 && httpRequest.status == 200) callback (httpRequest.responseText);
+    }
+    httpRequest.open (method, url, true);
+    httpRequest.send (null);
+   }
+  }
+
+  var client = new httpClient ();
+
+  // send switch state to ESP and refresh switch with ESP response
+  function syncSwitchWithEsp (switchId, switchState) {
+   client.request ('/' + switchId + '/' + switchState, 'PUT', function (json) {
+    var obj = document.getElementById (switchId);
+    obj.checked = (JSON.parse (json).value == 'true');
+   });
+  }
+
+  // initialize/populate this page controls at page load
+
+  client.request ('/niceSwitch1', 'GET', function (json) {
+   var obj = document.getElementById ('niceSwitch1');
+   obj.disabled = false;
+   obj.checked = (JSON.parse (json).value == 'true');
+  });
+
+  client.request ('/niceSlider3', 'GET', function (json) {
+   var obj = document.getElementById ('niceSlider3');
+   obj.disabled = false;
+   obj.value = JSON.parse (json).value;
+  });
+
+  // initialize/populate this page controls at page load
+  client.request ('/niceRadio5', 'GET', function (json) {
+   document.getElementById ('am').disabled = false;
+   document.getElementById ('fm').disabled = false;
+   if (JSON.parse (json).modulation == 'am') document.getElementById ('am').checked = 'checked';
+   else                                      document.getElementById ('fm').checked = 'checked';
+  });
+
+ </script>
+
+</html>

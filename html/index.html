@@ -1,0 +1,171 @@
+<html>
+	<head>
+		<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
+		<link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
+		<link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
+		<meta http-equiv='content-type' content='text/html;charset=utf-8' />
+
+		<title>Esp32_web_ftp_telnet_server_template</title>
+
+		<style>
+			/* nice page framework */
+			hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
+
+			h1 {font-family: verdana; font-size: 40px; text-align: center}
+
+			div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px}
+			div.d2 {position: relative; float: left; width: 41%; font-family: verdana; font-size: 30px; color: gray;}
+			div.d3 {position: relative; float: left; width: 26%; font-family: verdana; font-size: 30px; color: gray;}
+			div.d4 {position: relative; float: left; width: 25%; font-family: verdana; font-size: 30px; color: black;}
+			div.d5 {position: relative; float: left; width: 49%;}
+
+			/* nice switch control */
+			.switch {position: relative; display: inline-block; width: 60px; height: 34px}
+			.slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
+			.slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
+			input:checked+.slider {background-color: #2196F3}
+			input:focus+.slider {box-shadow: 0 0 1px #2196F3}
+			input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
+			.switch input {display: none}
+			.slider.round {border-radius: 34px}
+			.slider.round:before {border-radius: 50%}
+			input:disabled+.slider {background-color: #aaa}
+
+		</style>
+	</head>
+	<body>
+		<br><h1>HTML demo</h1>
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbspLed - REST/JSON demo</div>
+			<div class='d4'>
+				<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed(this.checked)'><div class='slider round'></div></label>
+			</div>
+		</div>
+		<hr />
+		<div class='d1'>
+			<div class='d2'>&nbspUp time - stability testing</div>
+			<div class='d4' id='upTime'>...</div>
+		</div>
+		<hr />
+		<div class='d1' style='height: 48px;'>
+			<div class='d3'>&nbspFree heap</div>
+			<div class='d4' id='freeHeap'>...</div>
+			<div class='d5'><canvas id='freeHeapGraph' width='480' height='46';></canvas></div>
+		</div>
+		<hr />
+		<div class='d1' style='height: 48px;'>
+			<div class='d3'>&nbspHTTP requests</div>
+			<div class='d4' id='httpRequestCount'>...</div>
+			<div class='d5'><canvas id='httpRequestCountGraph' width='480' height='46';></canvas></div>	
+		</div>
+		<hr />
+
+		<div class='d1' style='height: 48px;'>
+			<div class='d3'>&nbspRSSI</div>
+			<div class='d4' id='rssi'>...</div>
+			<div class='d5'><canvas id='rssiGraph' width='480' height='46';></canvas></div>	
+		</div>
+		<hr />
+
+		<script type='text/javascript'>
+			var httpClient=function(){
+				this.request=function(url,method,callback){
+				 var httpRequest=new XMLHttpRequest();
+				 httpRequest.onreadystatechange=function(){
+							if (httpRequest.readyState==4 && httpRequest.status==200) callback(httpRequest.responseText);
+				 }
+				 httpRequest.open(method,url,true);
+				 httpRequest.send(null);
+				}
+			}
+			var client=new httpClient();
+
+			function getAndRefreshLedState(){ // read led state from ESP and refresh GUI
+				client.request('/builtInLed','GET',function(json){refreshLedState(json);});
+			}
+
+			function turnLed(switchIsOn){ // send desired led state to ESP and refresh GUI
+				client.request(switchIsOn ? '/builtInLed/on' : '/builtInLed/off' ,'PUT',function(json){refreshLedState(json);});
+			}
+
+			function turnLedOnFor10s(){ // send request to ESP and refresh GUI
+				document.getElementById('ledSwitch').checked=true; // this is just a simulation
+				client.request('/builtInLed/on10s' ,'PUT',function(json){refreshLedState(json);}); // this is a real response
+			}
+
+			function refreshLedState(json){ // refresh ledSwitch state with latest information from ESP
+				var sts=JSON.parse(json);
+				var obj=document.getElementById('ledSwitch'); obj.disabled=false; obj.checked=(sts.builtInLed=='on');
+			}
+
+			getAndRefreshLedState(); // GUI initialisation at load
+
+			function refreshUpTime(json){ // refresh up time with latest information from ESP
+				document.getElementById('upTime').innerText=(JSON.parse(json).upTime);
+			}
+
+			function lineGraph(json,contextId,graphColour){
+				var obj=JSON.parse(json);
+				if (obj.value.length==0) return '';
+				var retVal=obj.value[0];
+				var minVal=parseInt(obj.value[0]);
+				var maxVal=parseInt(obj.value[0]);
+				for(i=1;i<obj.value.length;i++){
+					var m=parseInt(obj.value[i]);
+					if (minVal>m) minVal=m;
+					if (maxVal<m) maxVal=m;
+				}
+				var midVal;
+				if (minVal==maxVal){
+					minVal--;
+					midVal=maxVal;
+					maxVal++;
+				} else {
+					if ((maxVal-minVal) % 2 == 1) maxVal++;
+					midVal=(minVal+maxVal)/2;
+				}
+				var fx=18; if (obj.value.length>24) fx=7.5;
+				var ox=22;
+				var fy=25/(minVal-maxVal);
+				oy=30-fy*minVal;
+				var c=document.getElementById(contextId);
+				var ctx=c.getContext('2d');
+				ctx.clearRect(0,0,c.width,c.height);
+				ctx.font='10px Verdana';
+				ctx.fillText(maxVal,10,10);
+				ctx.fillText(midVal,10,22);
+				ctx.fillText(minVal,10,34);
+				for(i=0;i<obj.scale.length;i++){
+					ctx.fillText(obj.scale[i], ox + fx * (i + 1) - 5,46);
+				}
+				ctx.beginPath();
+				ctx.moveTo(ox + fx,oy + fy * parseInt(obj.value[0]));
+				for(i = 1;i < obj.value.length;i++){
+					ctx.lineTo(ox + fx * (i + 1),oy + fy * parseInt(obj.value[i]));
+					retVal=obj.value[i];
+				}
+				ctx.lineWidth=3;
+				ctx.strokeStyle=graphColour;
+				ctx.stroke();
+				return retVal;
+			}
+
+			setInterval(function(){
+				client.request('/upTime','GET',function(json){refreshUpTime(json);});
+			}, 1000);
+
+			setInterval(function(){
+				client.request('/freeHeap','GET',function(json){document.getElementById('freeHeap').innerText=lineGraph(json,'freeHeapGraph','#0961aa') + ' KB';});
+			}, 60000);
+
+			setInterval(function(){
+				client.request('/httpRequestCount','GET',function(json){document.getElementById('httpRequestCount').innerText=lineGraph(json,'httpRequestCountGraph','#2597f4') + ' / min';});
+			}, 60000);
+
+			setInterval(function(){
+				client.request('/rssi','GET',function(json){document.getElementById('rssi').innerText=lineGraph(json,'rssiGraph','#2597f4') + ' dBm';});
+			}, 60000);
+		</script>
+	</body>
+</html>
