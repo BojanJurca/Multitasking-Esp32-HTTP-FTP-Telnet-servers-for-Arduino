@@ -423,7 +423,7 @@ Style user interface with CSS like in example04.html:
 </html>
 ```
 
-More controls with style can be found in example05.html.
+More controls with style can be found in **example05.html**.
 
 ## Building Telnet user interface for your ESP32 project
 
