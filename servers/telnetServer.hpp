@@ -30,11 +30,24 @@
  *          - added mkfs.spiffs command,
  *            replaced gmtime () function that returns ponter to static structure with reentrant solution
  *            October 29, 2019, Bojan Jurca
+ *          - added uname and telnet commands,
+ *            November 10, 2019, Bojan Jurca
+ *            
  */
 
 
 #ifndef __TELNET_SERVER__
   #define __TELNET_SERVER__
+
+  // ----- define basic project information -----
+
+  #ifndef ESP_HOST_NAME
+    #define ESP_HOST_NAME "EspTemplate" // define unique name for each chip
+  #endif
+  #define ESP_MACHINE "ESP32"
+  #define ESP_SDK_VERSION ESP.getSdkVersion ()
+  #define UNAME String (ESP_MACHINE) + " " + String (ESP_HOST_NAME) + " SDK " + String (ESP_SDK_VERSION)
+
 
   // ----- includes, definitions and supporting functions -----
 
@@ -61,6 +74,7 @@
   bool __free__ (TcpConnection *connection, int delaySeconds);
   bool __dmesg__ (TcpConnection *, bool);
   void __iw__ (TcpConnection *connection);
+  void __telnet__ (TcpConnection *clientConnection, String otherServerName, int otherServerPort);
 
 
   class telnetServer {                                             
@@ -187,7 +201,14 @@
                 
                 if (telnetArgc == 1) goto closeTelnetConnection;
                 else                 connection->sendData ("Unknown option.");
-              
+
+              // ----- uname -a -----
+
+              } else if (telnetArgv [0] == "uname") {
+
+                if (telnetArgc == 1 || telnetArgc == 2 && telnetArgv [1] == "-a") connection->sendData (UNAME);
+                else                                                              connection->sendData ("Only option -a is supported.");
+                              
               // ----- ls or ls directory or dir or dir directory -----
   
               } else if (telnetArgv [0] == "ls" || telnetArgv [0] == "dir") {
@@ -433,7 +454,6 @@
 
                 // ----- free -----
 
-
                   } else if (telnetArgv [0] == "free") {
                     int n;
                          if (telnetArgc == 1)                                                                           __free__ (connection, 0);
@@ -446,11 +466,18 @@
                          if (telnetArgc == 1)                                 __dmesg__ (connection, false);
                     else if (telnetArgc == 2 && telnetArgv [1] == "--follow") __dmesg__ (connection, true);
                     else                                                      connection->sendData ("The only dmesg syntax supported is dmesg (--follow).");
-                                                  
-                  } else {
 
-                    // ----- invalid command -----
+                  // ----- telnet  -----
+
+                  } else if (telnetArgv [0] == "telnet") {
+                         if (telnetArgc == 2) __telnet__ (connection, telnetArgv [1], 23);
+                    else if (telnetArgc == 3) __telnet__ (connection, telnetArgv [1], telnetArgv [2].toInt ());
+                    else                     connection->sendData ("Use telnet <server> (<port>).");
+                                                  
+                  // ----- invalid command -----
                     
+                  } else {
+                                        
                     connection->sendData ("Invalid command, use \"help\" to display available commands.");
                   }
               
@@ -658,8 +685,8 @@
   
     to.sin_len = sizeof (to);
     to.sin_family = AF_INET;
-    inet_addr_from_ipaddr (&to.sin_addr, addr);
-  
+      to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
+    
     if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
   
     return (err ? ERR_OK : ERR_VAL);
@@ -691,8 +718,8 @@
   
         /// Get from IP address
         ip4_addr_t fromaddr;
-        inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
-  
+          fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
+        
         strcpy (ipa, inet_ntoa (fromaddr));
   
         // Get echo
@@ -1011,6 +1038,93 @@
     }
     connection->sendData (s);
     return;
+  }
+
+  // sice client is already connected through telnet clientConnection all we have to do is to pass all the trafic between other server to client both ways
+  struct __telnetStruct__ {
+    TcpConnection *clientConnection;
+    bool clientConnectionRunning;
+    TcpConnection *otherServerConnection;
+    bool otherServerConnectionRunning;
+    bool receivedDataFromOtherServer;
+  };
+  void __telnet__ (TcpConnection *clientConnection, String otherServerName, int otherServerPort) {
+
+    // open TCP connection to the other server
+    TcpClient *otherServer = new TcpClient ((char *) otherServerName.c_str (), otherServerPort, 300000); // close also this connection if inactive for more than 5 minutes
+    if (!otherServer || !otherServer->connection () || !otherServer->connection ()->started ()) {
+      clientConnection->sendData ("Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".");
+      return;
+    }
+
+    struct __telnetStruct__ telnetSessionSharedMemory = {clientConnection, true, otherServer->connection (), true, false};
+    #define tskNORMAL_PRIORITY 1
+    if (pdPASS != xTaskCreate ( [] (void *param)  { // other server -> client data transfer  
+                                                    struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
+                                                    while (telnetSessionSharedMemory->clientConnectionRunning) { // while the other thread is running
+                                                        char buff [512];
+                                                        if (telnetSessionSharedMemory->otherServerConnection->available () == TcpConnection::AVAILABLE) {
+                                                          int received = telnetSessionSharedMemory->otherServerConnection->recvData (buff, sizeof (buff));
+                                                          if (!received) break;
+                                                          telnetSessionSharedMemory->receivedDataFromOtherServer = true;
+                                                          int sent = telnetSessionSharedMemory->clientConnection->sendData (buff, received);
+                                                          if (!sent) break;
+                                                        } else {
+                                                          SPIFFSsafeDelay (1);
+                                                        }
+                                                    }
+                                                    telnetSessionSharedMemory->otherServerConnectionRunning = false; // signal that this thread has stopped
+                                                    vTaskDelete (NULL);
+                                                  }, 
+                                "__telnet__", 
+                                4068, 
+                                &telnetSessionSharedMemory,
+                                tskNORMAL_PRIORITY,
+                                NULL)) {
+      clientConnection->sendData ("Could not start telnet session with " + otherServerName + ".");   
+      delete (otherServer);                               
+      return;
+    } 
+    if (pdPASS != xTaskCreate ( [] (void *param)  { // client -> other server data transfer
+                                                    struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
+                                                    while (telnetSessionSharedMemory->otherServerConnectionRunning) { // while the other thread is running
+                                                        char buff [512];
+                                                        if (telnetSessionSharedMemory->clientConnection->available () == TcpConnection::AVAILABLE) {
+                                                          int received = telnetSessionSharedMemory->clientConnection->recvData (buff, sizeof (buff));
+                                                          if (!received) break;
+                                                          int sent = telnetSessionSharedMemory->otherServerConnection->sendData (buff, received);
+                                                          if (!sent) break;
+                                                        } else {
+                                                          SPIFFSsafeDelay (1);
+                                                        }
+                                                    }
+                                                    telnetSessionSharedMemory->clientConnectionRunning = false; // signal that this thread has stopped
+                                                    vTaskDelete (NULL);
+                                                  }, 
+                                "__telnet__", 
+                                4068, 
+                                &telnetSessionSharedMemory,
+                                tskNORMAL_PRIORITY,
+                                NULL)) {
+      clientConnection->sendData ("Could not start telnet session with " + otherServerName + ".");   
+      telnetSessionSharedMemory.clientConnectionRunning = false;                          // signal other server -> client thread to stop
+      while (telnetSessionSharedMemory.otherServerConnectionRunning) SPIFFSsafeDelay (1); // wait untill it stops
+      delete (otherServer);                               
+      return;
+    } 
+    while (telnetSessionSharedMemory.otherServerConnectionRunning || telnetSessionSharedMemory.clientConnectionRunning) SPIFFSsafeDelay (10); // wait untill both threads stop
+
+    if (telnetSessionSharedMemory.receivedDataFromOtherServer) {
+      // send to the client IAC DONT ECHO again just in case ther server has changed this
+      #define IAC 255
+      #define DONT 254
+      #define ECHO 1
+      char s [6];      
+      sprintf (s, "%c%c%c", IAC, DONT, ECHO);
+      clientConnection->sendData (String (s) + "\r\nConnection to " + otherServerName + " lost.");
+    } else {
+      clientConnection->sendData ("Could not connect to " + otherServerName + ".");
+    }
   }
   
 #endif

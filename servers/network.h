@@ -221,9 +221,11 @@
       if (apSSID > "") {
         WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
         Serial.printf ("[%10d] [WIFI_AP_STA]\n", millis ());
+	__retry_to_connect_if_disconnected__ = true; // in STA mode reconnecto to router if connection drops
       } else {
         WiFi.mode (WIFI_STA); // only STA mode
         Serial.printf ("[%10d] [WIFI_STA]\n", millis ());
+	__retry_to_connect_if_disconnected__ = true; // in STA mode reconnecto to router if connection drops
       }
     } else {
       if (apSSID > "") {
@@ -275,11 +277,14 @@
                                                   break;
           case SYSTEM_EVENT_AP_STOP:              networkDmesg ("[network] [AP] WiFi access point stopped.");
                                                   break;
-          case SYSTEM_EVENT_AP_STACONNECTED:      networkDmesg ("[network] [AP] client connected.");
+          case SYSTEM_EVENT_AP_STACONNECTED:      // do not report this event - it is too frequent
+                                                  // networkDmesg ("[network] [AP] client connected.");
                                                   break;
-          case SYSTEM_EVENT_AP_STADISCONNECTED:   networkDmesg ("[network] [AP] client disconnected.");
+          case SYSTEM_EVENT_AP_STADISCONNECTED:   // do not report this event - it is too frequent
+                                                  // networkDmesg ("[network] [AP] client disconnected.");
                                                   break;
-          case SYSTEM_EVENT_AP_STAIPASSIGNED:     networkDmesg ("[network] [AP] assigned IP address to client.");
+          case SYSTEM_EVENT_AP_STAIPASSIGNED:     // do not report this event - it is too frequent
+                                                  // networkDmesg ("[network] [AP] assigned IP address to client.");
                                                   break;
           case SYSTEM_EVENT_AP_PROBEREQRECVED:    networkDmesg ("[network] [AP] received probe request.");
                                                   break;

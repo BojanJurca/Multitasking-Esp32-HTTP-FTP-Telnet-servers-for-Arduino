@@ -55,12 +55,7 @@
       portMUX_TYPE csTcpConnectionInternalStructure = portMUX_INITIALIZER_UNLOCKED;
 
       // controll vTaskDelay - vTaskSuspendAll multi-threading problem while accessing SPIFFS file system (see https://www.esp32.com/viewtopic.php?t=7876)
-      SemaphoreHandle_t __createSPIFSSsemaphore__ () {
-        SemaphoreHandle_t s;
-        vSemaphoreCreateBinary (s);  
-        return s;
-      }
-      SemaphoreHandle_t SPIFFSsemaphore = __createSPIFSSsemaphore__ (); // create sempahore during initialization while ESP32 still runs in a single thread
+      SemaphoreHandle_t SPIFFSsemaphore = xSemaphoreCreateMutex ();
 
       void SPIFFSsafeDelay (unsigned int ms) { // use this function instead of delay ()
         unsigned int msStart = millis ();
