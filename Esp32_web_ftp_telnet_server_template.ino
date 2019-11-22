@@ -19,6 +19,11 @@
  */
 
 
+// ----- define basic project information -----
+
+#define ESP_HOST_NAME "EspTemplate" // define unique name for each chip
+
+
 #include <WiFi.h>
 
 // ----- include project features -----
@@ -26,7 +31,7 @@
 #include "./servers/file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
 
 #include "./servers/network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
-                                                          
+
 // #define USER_MANAGEMENT NO_USER_MANAGEMENT             // Telnet and FTP servers use user management, Web server uses it only to get its home directory
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT      // define the kind of user management project is going to use
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
@@ -96,7 +101,7 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
                                                                           }
   else if (httpRequest.substring (0, 16) == "GET /builtInLed ")           { // used by Example 02, Example 03, Example 04, index.html
                                                                           getBuiltInLed:
-                                                                            return "{\"id\":\"ESP32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+                                                                            return "{\"id\":\"" + String (ESP_HOST_NAME) + "\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
                                                                           }                                                                    
   else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")        { // used by Example 03, Example 04
                                                                             digitalWrite (2, HIGH);
@@ -116,7 +121,7 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
                                                                             // int h = l % 60;
                                                                             // l /= 24;
                                                                             // return "{\"id\":\"" + ESP_NAME_FOR_JSON + "\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
-                                                                            return "{\"id\":\"ESP32\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
+                                                                            return "{\"id\":\"" + String (ESP_HOST_NAME) + "\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
                                                                           }                                                                    
   else if (httpRequest.substring (0, 14) == "GET /freeHeap ")             { // used by index.html
                                                                             return freeHeap.toJson (5);
@@ -166,6 +171,21 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
   else if (httpRequest.substring (0, 25) == "PUT /niceButton6/pressed ")  { // used by example05.html
                                                                             Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
                                                                             return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                          }
+
+  // ----- respond to GET /currentTime if you want to have a REST time server -----
+
+  else if (httpRequest.substring (0, 17) == "GET /currentTime ")          { 
+                                                                            if (rtc.isGmtTimeSet ()) {
+                                                                              #ifdef __TCP_SERVER__  // in multi-threaded environment (Esp32_web_ftp_telnet_server_template) we can afford more accurate timing
+                                                                                time_t tmp = rtc.getGmtTime ();
+                                                                                while (tmp == rtc.getGmtTime ()) SPIFFSsafeDelay (1); // wait for second to end
+                                                                              #endif
+                                                                              time_t now = rtc.getGmtTime ();
+                                                                              return "{\"id\":\"" + String (ESP_HOST_NAME) + "\",\"currentTime\":\"" + String (now) + "\"}";
+                                                                            } else {
+                                                                              return ""; // let webServer return 404 - not found
+                                                                            }
                                                                           }
 
   // ----- HTTP request has not been handled by httpRequestHandler - let the webServer try to handle it itself -----
@@ -306,7 +326,8 @@ void setup () {
     case ESP_SLEEP_WAKEUP_ULP:      dmesg ("[ESP32] wakeup caused by ULP program."); break;
     default:                        dmesg ("[ESP32] wakeup was not caused by deep sleep: " + String (wakeup_reason) + "."); break;
   }
-  
+
+    // SPIFFS.format ();
   if (mountSPIFFS ()) dmesg ("[SPIFFS] mounted.");    // this is the first thing that you should do
   else                dmesg ("[SPIFFS] mount failed.");
 
@@ -334,7 +355,29 @@ void setup () {
                                          }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10d] [examples] couldn't start examples\n", millis ());
 }
 
+      #define CONNECTION_TEST_PERIOD 30 * 60 * 1000
+      unsigned long __last_connection_test_time__ = millis ();
+      void test_loop () {
+
+          if (__retry_to_connect_if_disconnected__) {
+            if (millis () - __last_connection_test_time__ > CONNECTION_TEST_PERIOD) {
+              __last_connection_test_time__ = millis ();
+              
+              // čas za preverbo povezave
+
+
+
+
+
+            }
+          }
+                  
+      }
+
+
 void loop () {
+  test_loop ();
+  
   SPIFFSsafeDelay (1);  
 
   // periodicly check network status and reconnect if neccessary
