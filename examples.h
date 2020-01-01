@@ -54,8 +54,7 @@ void example08_realTimeClock () {
   while (millis () - startTime < 10000 && !rtc.isGmtTimeSet ()) SPIFFSsafeDelay (1);
   
   if (rtc.isGmtTimeSet ()) { // success, got time
-    time_t now;
-    now = rtc.getGmtTime ();
+    time_t now = rtc.getGmtTime ();
     Serial.printf ("[%10d] [example 08] current UNIX time is %lu\n", millis (), (unsigned long) now);
   
     struct tm nowStr = rtc.getLocalStructTime ();
@@ -89,7 +88,7 @@ void example10_webSockets (WebSocket *webSocket) {
                                       break;
       case WebSocket::STRING:       { // text received
                                       String s = webSocket->readString ();
-                                      Serial.printf ("[%10d] [example 09] got text from browser over webSocket: %s\n", millis (), s.c_str ());
+                                      Serial.printf ("[%10d] [example 10] got text from browser over webSocket: %s\n", millis (), s.c_str ());
                                       break;
                                     }
       case WebSocket::BINARY:       { // binary data received

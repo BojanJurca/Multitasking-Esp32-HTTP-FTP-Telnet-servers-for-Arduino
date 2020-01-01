@@ -48,23 +48,26 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
    - stop telnet server       /* added just as an example here */
    - digitalRead [pinNumber]  /* added just as an example here */
    - analogRead [pinNumber]   /* added just as an example here */
+   - uname /* synonym for "uname -a" as implemented here */
    - mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
-   - ls ([directoryName]) or dir ([directoryName]),
-   - cat [fileName] or type [fileName],
-   - rm [fileName] or del [fileName],
-   - ping [target],
-   - ifconfig or ipconfig,
-   - arp /* synonym for "arp -a" as implemented here */,
-   - iw,
-   - useradd -u [userId] -d [userHomeDirectory] [userName],
-   - userdel [userName],
-   - passwd ([userName]),
-   - free (-s [n]),
-   - dmesg (--follow),
-   - uptime,
-   - reboot,
-   - help,
-   - quit.
+   - ls ([directoryName]) or dir ([directoryName])
+   - cat [fileName] or type [fileName]
+   - rm [fileName] or del [fileName]
+   - ping [target]
+   - ifconfig or ipconfig
+   - telnet [otherServerIP] ([otherServerPort])
+   - arp /* synonym for "arp -a" as implemented here */
+   - iw
+   - curl (GET|PUT|POST|DELETE) http://[IP]/([page])
+   - useradd -u [userId] -d [userHomeDirectory] [userName]
+   - userdel [userName]
+   - passwd ([userName])
+   - free (-s [n])
+   - dmesg (--follow)
+   - uptime
+   - reboot
+   - help
+   - quit
 
 Like webServer it also offers:
 
@@ -224,7 +227,7 @@ A series of examples will demonstrate how to create a neat HTML user interface f
 You can always use static HTML that can be uploaded (with FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each HTTP request. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
-String httpRequestHandler (String httpRequest, WebSocket *webSocket) {
+String httpRequestHandler (String& httpRequest) {
   if (httpRequest.substring (0, 20) == "GET /example01.html ") 
     return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
                                                                    
@@ -239,7 +242,7 @@ Once HTML pages get large enough dynamic generation becomes impractical. The pre
 Let us look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino:
 
 ```C++
-String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  
+String httpRequestHandler (String& httpRequest) {  
   if (httpRequest.substring (0, 16) == "GET /builtInLed ") {
       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
 
@@ -287,7 +290,7 @@ We had only one-way client – server (HTML - ESP32) communication so far. It wa
 Server will have to handle two additional cases:
 
 ```C++
-String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  
+String httpRequestHandler (String& httpRequest) {  
   if (httpRequest.substring (0, 16) == "GET /builtInLed ") {
 getBuiltInLed:
       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
@@ -521,14 +524,12 @@ void example09_makeRestCall () {
 
 A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 – little endian so they understand each other without doing byte reordering. TCP suggests using network byte order, for sending binary data over network, which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
 
-Example 09 demonstrates how ESP32 server could handle WebSockets:
+Example 10 demonstrates how ESP32 server could handle WebSockets:
 
 ```C++
-String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
-                                                                        // - for WebSocket httpRequest is WS request, webSocket pointer is set, whatever function returns will be discarded
-                                                                        // - has to be reentrant!
+void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be entrant!
 
-  if (httpRequest.substring (0, 26) == "GET /example09_WebSockets " && webSocket) { // Example 09
+  if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") { // Example 10
 
     while (true) {
       switch (webSocket->available ()) {
@@ -536,7 +537,7 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                         break;
         case WebSocket::STRING:       { // text received
                                         String s = webSocket->readString ();
-                                        Serial.printf ("[example 09] got text from browser over webSocket: %s\n", s.c_str ());
+                                        Serial.printf ("[example 10] got text from browser over webSocket: %s\n", s.c_str ());
                                         break;
                                       }
         case WebSocket::BINARY:       { // binary data received
@@ -563,16 +564,14 @@ String httpRequestHandler (String httpRequest, WebSocket *webSocket) {  // - nor
                                       }
         case WebSocket::ERROR:          
   errorInCommunication:     
-                                        Serial.printf ("[example 09] error in communication, closing connection\n");
-                                        return ""; // close this connection, the return value will be discarded (in WebSocket case) so it doesn't matter what it is
+                                        Serial.printf ("[example 10] error in communication, closing connection\n");
+                                        return; // close this connection, the return value will be discarded (in WebSocket case) so it doesn't matter what it is
       }
     }
-                                                                    
-  else return ""; // HTTP request has not been handled by httpRequestHandler - let the webServer handle it itself
 }
 ```
 
-On the browser side Javascript program could look something like example09.html:
+On the browser side Javascript program could look something like example10.html:
 
 ```HTML
 <html>
@@ -583,7 +582,7 @@ On the browser side Javascript program could look something like example09.html:
     <script type='text/javascript'>
 
       if ("WebSocket" in window) {
-        var ws = new WebSocket ("ws://" + self.location.host + "/example09_WebSockets"); // open webSocket connection
+        var ws = new WebSocket ("ws://" + self.location.host + "/example10_WebSockets"); // open webSocket connection
 				
         ws.onopen = function () {
           alert ("WebSocket connection established.");
@@ -604,11 +603,11 @@ On the browser side Javascript program could look something like example09.html:
         };
 
         ws.onmessage = function (evt) { 
-          if (typeof(evt.data) === 'string' || evt.data instanceof String) { // // UTF-8 formatted string data
+          if (typeof(evt.data) === 'string' || evt.data instanceof String) { // UTF-8 formatted string data
 
             // ----- receive text data -----
 
-            alert ("[example 09] got text from server over webSocket: " + evt.data);
+            alert ("[example 10] got text from server over webSocket: " + evt.data);
 	  }
           if (evt.data instanceof Blob) { // binary data
 
@@ -657,7 +656,7 @@ On the browser side Javascript program could look something like example09.html:
 
 In example 11 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
 Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
-While starting and stopping the server is quite straightforward, more attention has to be put to routine that handles the connection. Make sure it is re-entrant for it can run in many threads simultaneously.
+While starting and stopping the server is quite straightforward, more attention must be put to routine that handles the connection. Make sure it is re-entrant for it can run in many threads simultaneously.
 
 ```C++
 // start new TCP server
@@ -670,7 +669,7 @@ TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler, // functi
                                      NULL);     // don't use firewall in this example
 // check success
 if (myServer->started ()) {
-  Serial.printf ("[example 10] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
+  Serial.printf ("[example 11] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
 
   // let the server run for 30 seconds - this much time you have to connect to it to test how it works
   SPIFFSsafeDelay (30000);
@@ -777,7 +776,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
       Serial.printf ("[example 10] error while sending response\n");
   }
-  Serial.printf ("[example 10] connection has just ended\n");
+  Serial.printf ("[example 11] connection has just ended\n");
 }
 ```
 

@@ -19,9 +19,10 @@
  */
 
 
-// ----- define basic project information -----
+// ----- define basic project information - this informatin will be displayed as a response to uname telnet command -----
 
-#define ESP_HOST_NAME "EspTemplate" // define unique name for each chip
+#define HOSTNAME    "EspTemplate"   // <- this is just an example, define unique name for each chip here - by default, if you don't change #definitions this will be hostname of STA and AP network interfaces and SSID of your AP
+#define MACHINETYPE "ESP32 NodeMCU" // <- this is just an example, describe your hardware here
 
 
 #include <WiFi.h>
@@ -30,6 +31,7 @@
 
 #include "./servers/file_system.h"                                  // network and user configuration files are loacted on file sistem - we'll need them
 
+// define default STA_SSID, STA_PASSWORD, STA_IP, STA_SUBNET_MASK, STA_GATEWAY, AP_SSID, AP_PASSWORD, AP_IP, AP_SUBNET_MASK in network.h
 #include "./servers/network.h"                                      // we'll need this to set up a network, Telnet server also needs this to execute certain commands such as ifconfig, ping, ... 
 
 // #define USER_MANAGEMENT NO_USER_MANAGEMENT             // Telnet and FTP servers use user management, Web server uses it only to get its home directory
@@ -42,9 +44,9 @@
 // #define TIMEZONE  CHAMORRO_TIMEZONE
 // (default) #define TIMEZONE  CET_TIMEZONE               // choose your time zone or modify timeToLocalTime function
 #include "./servers/real_time_clock.hpp"                  // Telnet server needs rtc to execute certain commands such as uptime
-real_time_clock rtc ( "1.si.pool.ntp.org",  // first NTP server
-                      "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
-                      "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
+real_time_clock rtc ("1.si.pool.ntp.org",  // first NTP server
+                     "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
+                     "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
 
 #include "./servers/oscilloscope.h"
 
@@ -60,8 +62,8 @@ measurements rssi (60);                     // measure WiFi signal quality
 
 #include "./servers/webServer.hpp"                      // Web server
 webServer *webSrv; // pointer to Web server
-String httpRequestHandler (String httpRequest);
-void wsRequestHandler (String wsRequest, WebSocket *webSocket);
+String httpRequestHandler (String& httpRequest);
+void wsRequestHandler (String& wsRequest, WebSocket *webSocket);
 String startWebServer () {
   if (!webSrv) {
     webSrv = new webServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
@@ -80,7 +82,7 @@ String stopWebServer () {
   if (webSrv) { delete (webSrv); webSrv = NULL; return "Web server stopped. Active connections will continue to run anyway."; } 
   else                                          return "Web server is not running.";
 }
-String httpRequestHandler (String httpRequest) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
+String httpRequestHandler (String& httpRequest) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
                                                   // httpRequestHandler is supposed to be used with smaller replies,
                                                   // if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (/var/www/html/ by default)
                                                   // - has to be reentrant!
@@ -101,7 +103,7 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
                                                                           }
   else if (httpRequest.substring (0, 16) == "GET /builtInLed ")           { // used by Example 02, Example 03, Example 04, index.html
                                                                           getBuiltInLed:
-                                                                            return "{\"id\":\"" + String (ESP_HOST_NAME) + "\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+                                                                            return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
                                                                           }                                                                    
   else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")        { // used by Example 03, Example 04
                                                                             digitalWrite (2, HIGH);
@@ -118,10 +120,10 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
                                                                             // l /= 60;
                                                                             // int m = l % 60;
                                                                             // l /= 60;
-                                                                            // int h = l % 60;
+                                                                            // int h = l % 24;
                                                                             // l /= 24;
                                                                             // return "{\"id\":\"" + ESP_NAME_FOR_JSON + "\",\"upTime\":\"" + String ((int) l) + " days " + String (h) + " hours " + String (m) + " minutes " + String (s) + " seconds\"}";
-                                                                            return "{\"id\":\"" + String (ESP_HOST_NAME) + "\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
+                                                                            return "{\"id\":\"" + String (HOSTNAME) + "\",\"upTime\":\"" + String ((unsigned long) l) + " sec\"}\r\n";
                                                                           }                                                                    
   else if (httpRequest.substring (0, 14) == "GET /freeHeap ")             { // used by index.html
                                                                             return freeHeap.toJson (5);
@@ -177,12 +179,10 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
 
   else if (httpRequest.substring (0, 17) == "GET /currentTime ")          { 
                                                                             if (rtc.isGmtTimeSet ()) {
-                                                                              #ifdef __TCP_SERVER__  // in multi-threaded environment (Esp32_web_ftp_telnet_server_template) we can afford more accurate timing
-                                                                                time_t tmp = rtc.getGmtTime ();
-                                                                                while (tmp == rtc.getGmtTime ()) SPIFFSsafeDelay (1); // wait for second to end
-                                                                              #endif
+                                                                              time_t tmp = rtc.getGmtTime ();
+                                                                              while (tmp == rtc.getGmtTime ()) SPIFFSsafeDelay (1); // wait for second to end
                                                                               time_t now = rtc.getGmtTime ();
-                                                                              return "{\"id\":\"" + String (ESP_HOST_NAME) + "\",\"currentTime\":\"" + String (now) + "\"}";
+                                                                              return "{\"id\":\"" + String (HOSTNAME) + "\",\"currentTime\":\"" + String (now) + "\"}";
                                                                             } else {
                                                                               return ""; // let webServer return 404 - not found
                                                                             }
@@ -192,7 +192,7 @@ String httpRequestHandler (String httpRequest) {  // - normally httpRequest is H
 
   else                                                                    return ""; 
 }
-void wsRequestHandler (String wsRequest, WebSocket *webSocket) { //     // - has to be reentrant!
+void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { //     // - has to be reentrant!
                                                                     
   // ----- handle WS (WebSockets) protocol requests -----
 
@@ -205,6 +205,26 @@ bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, r
                                                 // - has to be reentrant!
   if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
   else                          return true;    // ... but let every other client through
+}
+
+
+#define FTP_RTC rtc                                     // tell FTP server where to get time from to report file time
+#include "./servers/ftpServer.hpp"                      // SPIFFS doesn't record file creation time so this information will be false anyway
+ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
+String startFtpServer () {
+  if (!ftpSrv) {
+    ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
+                            21,                         // controll connection FTP port
+                            telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
+    if (ftpSrv)
+      if (ftpSrv->started ())                                   return "FTP server started.";  
+      else                    { delete (ftpSrv); ftpSrv = NULL; return "Could not start FTP server."; }
+    else                                                        return "Could not start FTP server.";  
+  } else                                                        return "FTP server is already running.";    
+}
+String stopFtpServer () {
+  if (ftpSrv) { delete (ftpSrv); ftpSrv = NULL; return "FTP server stopped. Active connections will continue to run anyway."; } 
+  else                                          return "FTP server is not running.";
 }
 
 
@@ -253,6 +273,27 @@ String telnetCommandHandler (int argc, String argv [], String homeDirectory) { /
     if (homeDirectory == "/") return stopTelnetServer (); // note that the level of rights is determined by homeDirecory
     else                      return "You must have root rights to stop Telnet sever.";
 
+
+/// to je samo test, če dela .... ifconfig STA up ne dela !!! - mogoče manjka begin ???
+
+  } else if (argc == 3 && argv [0] == "ifconfig" && argv [1] == "AP" && argv [2] == "up") {
+                              WiFi.mode (WIFI_AP_STA);
+                              return "AP is up.";
+
+  } else if (argc == 3 && argv [0] == "ifconfig" && argv [1] == "AP" && argv [2] == "down") {
+                              WiFi.mode (WIFI_STA);
+                              return "AP is down";
+
+  } else if (argc == 3 && argv [0] == "ifconfig" && argv [1] == "STA" && argv [2] == "up") {
+                              WiFi.mode (WIFI_AP_STA);
+                              return "STA is up.";
+
+  } else if (argc == 3 && argv [0] == "ifconfig" && argv [1] == "STA" && argv [2] == "down") {
+                              WiFi.mode (WIFI_AP);
+                              return "STA is down";
+
+
+
   // ---- led on ESP32 ----
     
   } else if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
@@ -283,26 +324,6 @@ String telnetCommandHandler (int argc, String argv [], String homeDirectory) { /
 }
 
 
-#define FTP_RTC rtc                                     // tell FTP server where to get time from to report file time
-#include "./servers/ftpServer.hpp"                      // SPIFFS doesn't record file creation time so this information will be false anyway
-ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
-String startFtpServer () {
-  if (!ftpSrv) {
-    ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
-                            21,                         // controll connection FTP port
-                            telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
-    if (ftpSrv)
-      if (ftpSrv->started ())                                   return "FTP server started.";  
-      else                    { delete (ftpSrv); ftpSrv = NULL; return "Could not start FTP server."; }
-    else                                                        return "Could not start FTP server.";  
-  } else                                                        return "FTP server is already running.";    
-}
-String stopFtpServer () {
-  if (ftpSrv) { delete (ftpSrv); ftpSrv = NULL; return "FTP server stopped. Active connections will continue to run anyway."; } 
-  else                                          return "FTP server is not running.";
-}
-
-
 // setup (), loop () --------------------------------------------------------
 
   //disable brownout detector - if power supply is rather poor
@@ -313,7 +334,7 @@ void setup () {
   WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
 
   Serial.begin (115200);
-  
+ 
   // __testLocalTime__ ();
 
   esp_sleep_wakeup_cause_t wakeup_reason;
@@ -327,8 +348,8 @@ void setup () {
     default:                        dmesg ("[ESP32] wakeup was not caused by deep sleep: " + String (wakeup_reason) + "."); break;
   }
 
-    // SPIFFS.format ();
-  if (mountSPIFFS ()) dmesg ("[SPIFFS] mounted.");    // this is the first thing that you should do
+  // SPIFFS.format ();
+  if (mountSPIFFS (true)) dmesg ("[SPIFFS] mounted.");    // this is the first thing that you should do
   else                dmesg ("[SPIFFS] mount failed.");
 
   usersInitialization ();                             // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
@@ -355,29 +376,7 @@ void setup () {
                                          }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10d] [examples] couldn't start examples\n", millis ());
 }
 
-      #define CONNECTION_TEST_PERIOD 30 * 60 * 1000
-      unsigned long __last_connection_test_time__ = millis ();
-      void test_loop () {
-
-          if (__retry_to_connect_if_disconnected__) {
-            if (millis () - __last_connection_test_time__ > CONNECTION_TEST_PERIOD) {
-              __last_connection_test_time__ = millis ();
-              
-              // čas za preverbo povezave
-
-
-
-
-
-            }
-          }
-                  
-      }
-
-
-void loop () {
-  test_loop ();
-  
+void loop () {  
   SPIFFSsafeDelay (1);  
 
   // periodicly check network status and reconnect if neccessary
