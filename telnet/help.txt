@@ -7,14 +7,17 @@ You can use the following commands:
   stop telnet server      /* added just as an example here */
   digitalRead <pinNumber> /* added just as an example here */
   analogRead <pinNumber>  /* added just as an example here */
+  uname (-a)
   mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
   ls (<directoryName>) or dir (<directoryName>)
   cat <fileName> or type <fileName>
   rm <fileName> or del <fileName>
   ping <target>
   ifconfig or ipconfig
+  telnet <otherServerIP> (<otherServerPort>)
   arp /* synonym for "arp -a" as implemented here */
   iw
+  curl (GET|PUT|POST|DELETE) http://<IP>/(<page>)
   useradd -u <userId> -d <userHomeDirectory> <userName>
   userdel <userName>
   passwd (<userName>)
