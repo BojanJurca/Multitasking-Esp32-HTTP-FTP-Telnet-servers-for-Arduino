@@ -20,7 +20,7 @@
  *            December 9, 2018, Bojan Jurca
  *          - added iw, 
  *            December 11, 2018, Bojan Jurca
-  *         - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+ *          - added SPIFFSsemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
  *            simplified installation,
  *            April 13, 2019, Bojan Jurca
  *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
@@ -32,8 +32,33 @@
  *            automatic reconnection to router,
  *            bug fixes
  *            October 13, Bojan Jurca
+ *          - simplifyed entry of default parameters,
+ *            simplifyed format of configuration files 
+ *            December 1, Bojan Jurca
  *            
  */
+
+
+// define host name (only works for station)
+#ifndef HOSTNAME
+  #define HOSTNAME WiFi.getHostname() // use default if not defined
+#endif
+
+// define default STAtion mode parameters to be written into /etc/wpa_supplicant.conf if you want to use ESP as WiFi station
+#define DEFAULT_STA_SSID          "YOUR-STA-SSID"
+#define DEFAULT_STA_PASSWORD      "YOUR-STA-PASSWORD"
+  // define default static IP, subnet mask and gateway to be written into /network/interfaces if you want ESP to connect to WiFi with static IP instead of using DHCP
+  /*
+  #define DEFAULT_STA_IP          "10.0.0.3" 
+  #define DEFAULT_STA_SUBNET_MASK "255.255.255.0"
+  #define DEFAULT_STA_GATEWAY     "10.0.0.3"
+  */
+// define default Access Point parameters to be written into /etc/hostapd/hostapd.conf if you want ESP to serve as an access point  
+#define DEFAULT_AP_SSID           HOSTNAME // change to what you want to name your AP SSID by default
+#define DEFAULT_AP_PASSWORD       "YOUR-AP-PASSWORD"
+  // define default access point IP and subnet mask to be written into /etc/dhcpcd.conf if you want to define them yourself
+  #define DEFAULT_AP_IP           "10.0.1.3"
+  #define DEFAULT_AP_SUBNET_MASK  "255.255.255.0"
 
 
 #ifndef __NETWORK__
@@ -47,10 +72,9 @@
   #include <lwip/sockets.h>
   #include <esp_wifi.h>
 
-  #include "file_system.h"  // network.h needs file_system.h to read configurations files
+  #include "file_system.h"  // network.h needs file_system.h to read configurations files from
 
-  // define the time in milli seconds ESP could be disconnected from router before trying to reconnect again
-  #define CONNECTION_RETRY_PERIOD 3600000
+  #define CONNECTION_RETRY_PERIOD 3600000   // define the time in milli seconds ESP could be disconnected from router before trying to reconnect again
 
   bool __retry_to_connect_if_disconnected__ = false;
   unsigned long __last_connection_retry_time__;
@@ -61,13 +85,13 @@
   String arp_a ();
   
   void __networkDmesg__ (String message) { 
-    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
-      dmesg (message);
+    #ifdef __TELNET_SERVER__ 
+      dmesg (message);                                            // use dmesg from telnet server if possible (if telnet server is in use)
     #else
-      Serial.println (message); 
+      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); // just print the message to serial console window otherwise
     #endif
   }
-  void (* networkDmesg) (String) = __networkDmesg__; // use this pointer to display / record system messages
+  void (* networkDmesg) (String) = __networkDmesg__; // use this pointer to display / record system messages - it will be redirected to telnet dmesg function if telnet server will be included later
   
   
   void connectNetwork () {                                        // connect to the network by calling this function
@@ -76,74 +100,110 @@
 
     String fileContent = "";
 
-    // prepare configuration for network interface 2 that will be used latter to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to your WiFi)
+    // prepare configuration for network interface 0 that will be used later to connect in STA-tion mode to WiFi (skip this if you don't want ESP32 to connect to your WiFi)
     readEntireFile (&fileContent, "/network/interfaces");
     if (fileContent == "") {
-      Serial.printf ("[%10d] [network] /network/interfaces does not exist, creating new one ... ", millis ());
+      networkDmesg ("[network] /network/interfaces does not exist, creating new one.");
       
-      fileContent =  "# only wlan0 can be used to connect to your WiFi\r\n"
-                     "\r\n"
-                     "# get IP address from DHCP\r\n"
-                     "   iface wlan0 inet dhcp\r\n"                  // this method is preferable, you can configure your router to always get the same IP address
-                     "\r\n"
-                     "# use static IP address (example below)\r\n"   // comment upper line and uncomment this lines if you want to set a static IP address
-                     "#   iface wlan0 inet static\r\n"
-                     "#      address 10.0.0.3\r\n"                   // change 10.0.0.3 to the IP you want to assigne to your ESP32 in static mode
-                     "#      netmask 255.255.255.0\r\n"              // change 255.255.255.0 to subnet mask you want to assigne to your ESP32 in static mode
-                     "#      gateway 10.0.0.1\r\n";                  // change 10.0.0.1 to your router's IP
+      fileContent = "# only wlan0 can be used to connect to your WiFi\r\n\r\n";
+                     #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY
 
-      if (writeEntireFile (fileContent, "/network/interfaces")) Serial.printf ("created.\n");
-      else                                                      Serial.printf ("error creating /network/interfaces.\n");
+                       fileContent += "# get IP address from DHCP\r\n"
+                                      "#  iface wlan0 inet dhcp\r\n"                  
+                                      "\r\n"
+                                      "# use static IP address\r\n"                   
+                                      "   iface wlan0 inet static\r\n"
+                                      "      address " DEFAULT_STA_IP "\r\n"          
+                                      "      netmask " DEFAULT_STA_SUBNET_MASK "\r\n" 
+                                      "      gateway " DEFAULT_STA_GATEWAY "\r\n";    
+                     #else
+
+                       fileContent += "# get IP address from DHCP\r\n"
+                                      "   iface wlan0 inet dhcp\r\n"                  
+                                      "\r\n"
+                                      "# use static IP address (example below)\r\n"   
+                                      "#  iface wlan0 inet static\r\n"
+                                      "#     address 10.0.0.3\r\n"          
+                                      "#     netmask 255.255.255.0\r\n" 
+                                      "#     gateway 10.0.0.1\r\n";  
+                     #endif
+
+      if (!writeEntireFile (fileContent, "/network/interfaces")) networkDmesg ("Unable to create file /network/interfaces.\n");
     }
 
     // create /etc/wpa_supplicant.conf if it doesn't exist
     readEntireFile (&fileContent, "/etc/wpa_supplicant.conf");
     if (fileContent == "") {
-      Serial.printf ("[%10d] [network] /etc/wpa_supplicant.conf does noes exist, creating new one ... ", millis ());
+      networkDmesg ("[network] /etc/wpa_supplicant.conf does noes exist, creating new one.");
       
       fileContent = "network = {\r\n"
-                    "   ssid = \"YOUR-STA-SSID\"\r\n"               // change YOUR-STA-SSID to your WiFi SSID here
-                    "   psk  = \"YOUR-STA-PASSWORD\"\r\n"           // change YOUR-STA-PASSWORD to your WiFi password here
+                    "   ssid " 
+                    #ifdef DEFAULT_STA_SSID
+                      DEFAULT_STA_SSID                                                       
+                    #endif
+                    "\r\n"               
+                    "   psk "
+                    #ifdef DEFAULT_STA_PASSWORD
+                      DEFAULT_STA_PASSWORD                                                    
+                    #endif
+                    "\r\n"           
                     "}\r\n";
 
-      if (writeEntireFile (fileContent, "/etc/wpa_supplicant.conf")) Serial.printf ("created.\n");
-      else                                                           Serial.printf ("error creating /etc/wpa_supplicant.conf.\n");
+      if (!writeEntireFile (fileContent, "/etc/wpa_supplicant.conf")) networkDmesg ("Unable to create file /etc/wpa_supplicant.conf.");
     }
 
     // prepare configuration for network interface 1 that will be used latter to start WiFi access point (skip this if you don't want ESP32 to be an access point)
     // create /etc/wpa_supplicant.conf if it doesn't exist
     readEntireFile (&fileContent, "/etc/dhcpcd.conf");
     if (fileContent == "") {
-      Serial.printf ("[%10d] [network] /etc/dhcpcd.conf does noes exist, creating new one ... ", millis ());
+      networkDmesg ("[network] /etc/dhcpcd.conf does noes exist, creating new one.");
 
       fileContent =  "# only static IP addresses can be used for access point and only wlan1 can be used (example below)\r\n"
                      "\r\n"
                      "interface wlan1\r\n"
-                     "   static ip_address = 10.0.1.3\r\n"           // change 10.0.1.3 to the access point IP your ESP32 will have here
-                     "          netmask = 255.255.255.0\r\n"         // change 255.255.255.0 to the access point subnet mask your ESP32 will have here
-                     "          gateway = 10.0.1.3\r\n";             // change 10.0.1.3 to the access point IP your ESP32 will have here
+                     "   static ip_address "
+                     #ifdef DEFAULT_AP_IP
+                       DEFAULT_AP_IP                                        
+                     #endif
+                     "\r\n"
+                     "          netmask "
+                     #ifdef DEFAULT_AP_SUBNET_MASK
+                       DEFAULT_AP_SUBNET_MASK                                
+                     #endif
+                     "\r\n"
+                     "          gateway "
+                     #ifdef DEFAULT_AP_IP
+                       DEFAULT_AP_IP                                         
+                     #endif
+                     "\r\n";
       
-      if (writeEntireFile (fileContent, "/etc/dhcpcd.conf")) Serial.printf ("created.\n");
-      else                                                   Serial.printf ("error creating /etc/dhcpcd.conf.\n");
+      if (!writeEntireFile (fileContent, "/etc/dhcpcd.conf")) networkDmesg ("Unable to create file /etc/dhcpcd.conf.\n");
     }
 
     // create /etc/hostapd/hostapd.conf if it doesn't exist
     readEntireFile (&fileContent, "/etc/hostapd/hostapd.conf");
     if (fileContent == "") {
-      Serial.printf ("[%10d] [network] /etc/hostapd/hostapd.conf does noes exist, creating new one ... ", millis ());
+      networkDmesg ("[network] /etc/hostapd/hostapd.conf does noes exist, creating new one.");
 
       fileContent =  "# only wlan1 can be used for access point\r\n"
                      "\r\n"
                      "interface = wlan1\r\n"
-                     "   ssid = ESP32_SRV\r\n"                      // change ESP32_SRV to your access point SSID here
+                     "   ssid "                      
+                     #ifdef DEFAULT_AP_SSID
+                       DEFAULT_AP_SSID                                     
+                     #endif
+                     "\r\n"
                      "   # use at least 8 characters for wpa_passphrase\r\n"
-                     "   wpa_passphrase = YOUR-AP-PASSWORD\r\n";    // change YOUR-AP-PASSWORD to your access point password here
+                     "   wpa_passphrase "
+                     #ifdef DEFAULT_AP_PASSWORD
+                       DEFAULT_AP_PASSWORD                                   
+                     #endif                
+                     "\r\n";    
 
-      if (writeEntireFile (fileContent, "/etc/hostapd/hostapd.conf")) Serial.printf ("created.\n");
-      else                                                            Serial.printf ("error creating /etc/hostapd/hostapd.conf.\n");
+      if (!writeEntireFile (fileContent, "/etc/hostapd/hostapd.conf")) networkDmesg ("Unable to create file /etc/hostapd/hostapd.conf.\n");
     }
 
-    // read network configuration from configuration files and set it accordingly
+    // read network configuration from configuration files and set network interfaces accordingly
     String staSSID = "";
     String staPassword = "";
     String staIP = "";
@@ -155,6 +215,7 @@
     String apIP = "";
     String apSubnetMask = "";
     String apGateway = "";
+
     String s;
     int i;
     
@@ -195,42 +256,48 @@
 
     if (staSSID > "") { // setup STA
       if (staIP > "") { // configure static IP address
-        Serial.printf ("[%10d] [network] [STA] connecting STAtion to router with static IP ...\n", millis ());
+        networkDmesg ("[network] [STA] connecting STAtion to router with static IP " + staIP);
         WiFi.config (IPAddressFromString (staIP), IPAddressFromString (staGateway), IPAddressFromString (staSubnetMask));
       } else { // go with DHCP
-        Serial.printf ("[%10d] [network] [STA] connecting STAtion to router through DHCP ...\n", millis ());
+        networkDmesg ("[network] [STA] connecting STAtion to router using DHCP.");
       }
       WiFi.begin (staSSID.c_str (), staPassword.c_str ());
       __last_connection_retry_time__ = millis ();
     }    
     if (apSSID > "") { // setup AP
         if (WiFi.softAP (apSSID.c_str (), apPassword.c_str ())) { 
+          networkDmesg ("[network] [AP] initializing access point: " + apSSID + "/" + apPassword + ", " + apIP + ", " + apGateway + ", " + apSubnetMask); 
           WiFi.softAPConfig (IPAddressFromString (apIP), IPAddressFromString (apGateway), IPAddressFromString (apSubnetMask));
           WiFi.begin ();
-          Serial.printf ("[%10d] [network] [AP] SSID: %s\n", millis (), apSSID.c_str ());
-          Serial.printf ("[%10d] [network] [AP] password: %s\n", millis (), apPassword.c_str ());
-          Serial.printf ("[%10d] [network] [AP] IP: %s\n", millis (), WiFi.softAPIP ().toString ().c_str ());
+          // Serial.printf ("[%10d] [network] [AP] IP: %s\n", millis (), WiFi.softAPIP ().toString ().c_str ());
         } else {
           // ESP.restart ();
-          Serial.printf ("[%10d] [network] [AP] failed to initialize access point mode\n", millis ()); 
+          networkDmesg ("[network] [AP] failed to initialize access point mode."); 
         }
     } 
 
     // set WiFi mode
     if (staSSID > "") { 
       if (apSSID > "") {
+        { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change STA adapter hostname."); } // outdated, use: esp_netif_set_hostname
+        // AP hostname can't be set until AP interface is mounted { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
+        // WiFi.setHostname (HOSTNAME); // only for STA interface
         WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
-        Serial.printf ("[%10d] [WIFI_AP_STA]\n", millis ());
-	__retry_to_connect_if_disconnected__ = true; // in STA mode reconnecto to router if connection drops
+        // networkDmesg ("[network] Connecting to " + staSSID + ", mounting " + apSSID + ".");
+	__retry_to_connect_if_disconnected__ = true; // in STA mode reconnect to router if connection drops
       } else {
+	{ esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change STA adapter hostname."); } // outdated, use: esp_netif_set_hostname
+        // WiFi.setHostname (HOSTNAME); // only for STA interface
         WiFi.mode (WIFI_STA); // only STA mode
-        Serial.printf ("[%10d] [WIFI_STA]\n", millis ());
+        // WiFi.setHostname (HOSTNAME); // only for STA interface
+        // networkDmesg ("[network] Connecting to " + staSSID + ".");
 	__retry_to_connect_if_disconnected__ = true; // in STA mode reconnecto to router if connection drops
       }
     } else {
       if (apSSID > "") {
+        // AP hostname can't be set until AP interface is mounted { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
         WiFi.mode (WIFI_AP); // only AP mode
-        Serial.printf ("[%10d] [WIFI_AP]\n", millis ());
+        // networkDmesg ("[network] mounting " + apSSID + ".");
       }
     }  
 
@@ -274,6 +341,8 @@
           case SYSTEM_EVENT_STA_WPS_ER_PIN:       networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): pin code in enrollee mode.");
                                                   break;
           case SYSTEM_EVENT_AP_START:             networkDmesg ("[network] [AP] WiFi access point started.");
+                                                  // AP hostname can't be set until AP interface is mounted 
+                                                  { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
                                                   break;
           case SYSTEM_EVENT_AP_STOP:              networkDmesg ("[network] [AP] WiFi access point stopped.");
                                                   break;
@@ -345,9 +414,18 @@
     return "";
   }
 
-  String inet_ntoString (ip_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 
-                                                  // inet_ntoa returns pointer to static string which may
-                                                  // be a problem in multi-threaded environment
+  String inet_ntos (ip_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 
+                                      // inet_ntoa returns pointer to static string which may
+                                      // be a problem in multi-threaded environment
+    return String (*(((byte *) &addr) + 0)) + "." + 
+           String (*(((byte *) &addr) + 1)) + "." + 
+           String (*(((byte *) &addr) + 2)) + "." + 
+           String (*(((byte *) &addr) + 3));
+  }
+
+  String inet_ntos (ip4_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 
+                                       // inet_ntoa returns pointer to static string which may
+                                       // be a problem in multi-threaded environment
     return String (*(((byte *) &addr) + 0)) + "." + 
            String (*(((byte *) &addr) + 1)) + "." + 
            String (*(((byte *) &addr) + 2)) + "." + 
@@ -385,7 +463,7 @@
         if (s != "") s += "\r\n";
         s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "     hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" + 
                  "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
-                 "        inet addr: " + inet_ntoString (netif->ip_addr) + "\r\n" + 
+                 "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n" + 
                  "        mtu: " + String (netif->mtu) + "\r\n";
       }
     }
@@ -455,13 +533,13 @@
       struct etharp_entry *p = arpTablePointer; // start scan of ARP table from the beginning with the next netif
       if (netif_is_up (netif)) {
         if (s != "") s += "\r\n\r\n";
-        s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + ": " + inet_ntoString (netif->ip_addr) + "\r\n  Internet Address      Physical Address      Type";
+        s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + ": " + inet_ntos (netif->ip_addr) + "\r\n  Internet Address      Physical Address      Type";
         if (arpTablePointer) { // we have got a valid pointer to ARP table
           for (int i = 0; i < ARP_TABLE_SIZE; i++) { // scan through ARP table
             if (p->state != ETHARP_STATE_EMPTY) {
               struct netif *arp_table_netif = p->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
               if (arp_table_netif && arp_table_netif->num == netif->num) { // if ARP entry is for the same as netif we are displaying
-                s += "\r\n  " + __appendString__ (inet_ntoString (*(ip_addr_t *) &p->ipaddr), 22) +
+                s += "\r\n  " + __appendString__ (inet_ntos (*(ip_addr_t *) &p->ipaddr), 22) +
                      MacAddressAsString ((byte *) &p->ethaddr, 6) +  
                      (p->state > ETHARP_STATE_STABLE_REREQUESTING_2 ? "     static" : "     dynamic");
               } 

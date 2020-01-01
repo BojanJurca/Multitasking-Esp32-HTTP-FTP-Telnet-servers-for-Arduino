@@ -32,6 +32,8 @@
  *            October 29, 2019, Bojan Jurca
  *          - added uname and telnet commands,
  *            November 10, 2019, Bojan Jurca
+ *          - added curl command
+ *            December 22, 2019, Bojan Jurca
  *            
  */
 
@@ -41,12 +43,15 @@
 
   // ----- define basic project information -----
 
-  #ifndef ESP_HOST_NAME
-    #define ESP_HOST_NAME "EspTemplate" // define unique name for each chip
+  #ifndef HOSTNAME
+    #define WiFi.getHostname() // use default if not defined
   #endif
-  #define ESP_MACHINE "ESP32"
+  #ifndef MACHINETYPE
+    #define MACHINETYPE "ESP32"
+  #endif
   #define ESP_SDK_VERSION ESP.getSdkVersion ()
-  #define UNAME String (ESP_MACHINE) + " " + String (ESP_HOST_NAME) + " SDK " + String (ESP_SDK_VERSION)
+  #define SRV_TEMPLATE_VERSION "SRV32-1.20"
+  #define UNAME String (MACHINETYPE) + " " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (SRV_TEMPLATE_VERSION)
 
 
   // ----- includes, definitions and supporting functions -----
@@ -56,13 +61,15 @@
   #include "user_management.h"    // telnetServer.hpp needs user_management.h for login and to get home directory, ...
   #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
   #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
-  #include "real_time_clock.hpp"  // some telnet function (like uptime, ...) need real-time clock
-    #ifndef TELNET_RTC              // if not defined earlier define it now but it will only make code to compile, not to work properly
-      #define TELNET_RTC __TELNET_RTC__
-      real_time_clock TELNET_RTC ("", "", "");
-    #endif
 
   void dmesg (String message);
+
+  #include "real_time_clock.hpp"  // some telnet function (like uptime, ...) need real-time clock
+    #ifndef TELNET_RTC              // if not defined earlier define it now but it will only make code to compile, not to work properly
+      real_time_clock __TELNET_RTC__  ("", "", "");
+      #define TELNET_RTC __TELNET_RTC__
+    #endif
+  #include "webServer.hpp" // webClient needed for curl
     
   // TO DO: make the following functions class member functions
   bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection);
@@ -75,6 +82,7 @@
   bool __dmesg__ (TcpConnection *, bool);
   void __iw__ (TcpConnection *connection);
   void __telnet__ (TcpConnection *clientConnection, String otherServerName, int otherServerPort);
+  String __curl__ (TcpConnection *thisTelnetConnection, String method, String url);
 
 
   class telnetServer {                                             
@@ -314,7 +322,7 @@
                     char homeDir [41]; // 33 for home directory and 8 for help.txt
                     if (getUserHomeDirectory (homeDir, "telnetserver")) {
                       if (!__cat__ (connection, String (homeDir) + "help.txt")) // send special reply
-                        connection->sendData ("Please use FTP, loggin as root/rootpassword and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + String (homeDir) + " directory.");
+                        connection->sendData (" Please use FTP, loggin as root/rootpassword and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + String (homeDir) + " directory.");
                     } else {
                       connection->sendData ("Unexpected error - telnetserver home directory not found.");
                     }                      
@@ -460,20 +468,27 @@
                     else if (telnetArgc == 3 && telnetArgv [1] == "-s" && (n = telnetArgv [2].toInt ()) > 0 && n < 300) __free__ (connection, n);
                     else                                                                                                connection->sendData ("The only free syntax supported is free (-s <n>   where 0 < n < 300).");
                 
-                // ----- dmesg  -----
+                // ----- dmesg -----
 
                   } else if (telnetArgv [0] == "dmesg") {
                          if (telnetArgc == 1)                                 __dmesg__ (connection, false);
                     else if (telnetArgc == 2 && telnetArgv [1] == "--follow") __dmesg__ (connection, true);
                     else                                                      connection->sendData ("The only dmesg syntax supported is dmesg (--follow).");
 
-                  // ----- telnet  -----
+                  // ----- telnet -----
 
                   } else if (telnetArgv [0] == "telnet") {
                          if (telnetArgc == 2) __telnet__ (connection, telnetArgv [1], 23);
                     else if (telnetArgc == 3) __telnet__ (connection, telnetArgv [1], telnetArgv [2].toInt ());
                     else                     connection->sendData ("Use telnet <server> (<port>).");
-                                                  
+                                           
+                  // ----- curl -----
+
+                  } else if (telnetArgv [0] == "curl") {
+                         if (telnetArgc == 2) __curl__ (connection, "GET", telnetArgv [1]);
+                    else if (telnetArgc == 3) __curl__ (connection, telnetArgv [1], telnetArgv [2]);
+                    else                      connection->sendData ("Use curl (method) http://<url>.");
+       
                   // ----- invalid command -----
                     
                   } else {
@@ -543,6 +558,11 @@
   }
 
   bool __ls__ (TcpConnection *connection, String directory) {
+    if (!__fileSystemMounted__) {
+      connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+      return false;
+    }
+
     char d [33]; *d = 0; 
     if (directory.length () < sizeof (d)) strcpy (d, directory.c_str ()); 
     if (*d && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
@@ -577,6 +597,11 @@
   }
 
   bool __cat__ (TcpConnection *connection, String fileName) {
+    if (!__fileSystemMounted__) {
+      connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+      return false;
+    }
+
     bool retVal = false;
     File file;
 
@@ -615,6 +640,11 @@
   }
 
   bool __rm__ (TcpConnection *connection, String fileName) {
+    if (!__fileSystemMounted__) {
+      connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+      return false;
+    }
+
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
     if (SPIFFS.remove (fileName)) {
       xSemaphoreGive (SPIFFSsemaphore);
@@ -685,7 +715,7 @@
   
     to.sin_len = sizeof (to);
     to.sin_family = AF_INET;
-      to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
+    to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
     
     if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
   
@@ -718,9 +748,9 @@
   
         /// Get from IP address
         ip4_addr_t fromaddr;
-          fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
+        fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
         
-        strcpy (ipa, inet_ntoa (fromaddr));
+        strcpy (ipa, inet_ntos (fromaddr).c_str ()); 
   
         // Get echo
         iphdr = (struct ip_hdr *) buf;
@@ -850,7 +880,8 @@
   };
 
   #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 256
-  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String ("[ESP32] started.")}}; // there is always at lease 1 message in the queue which makes things a little simper
+  RTC_DATA_ATTR unsigned int bootCount = 0;
+  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String (TELNET_RTC.isGmtTimeSet () ? "[ESP32] (re)started " + String (++bootCount) + " times at: " + timeToString (TELNET_RTC.getLocalTime ()) + "." : "[ESP32] (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}}; // there is always at lease 1 message in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
   byte __dmesgBeginning__ = 0; // first used location
   byte __dmesgEnd__ = 1;       // the location next to be used
   portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
@@ -903,12 +934,15 @@
     __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
     __dmesgCircularQueue__ [__dmesgEnd__].message = message;
     if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
-    Serial.printf ("[%10d] %s\n", millis (), message.c_str ());
     portEXIT_CRITICAL (&__csDmesg__);
+    Serial.printf ("[%10d] %s\n", millis (), message.c_str ());
   }
 
   // redirect other moduls' dmesg here before setup () begins
   bool __redirectDmesg__ () {
+    #ifdef __FILE_SYSTEM__
+      fileSystemDmesg = dmesg;
+    #endif  
     #ifdef __NETWORK__
       networkDmesg = dmesg;
     #endif
@@ -995,9 +1029,9 @@
         // display the following information for STA and AP interface (similar to ifconfig)
         s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "     hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
              "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
-             "        inet addr: " + String (inet_ntoa (netif->ip_addr)) + "\r\n";
+             "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n";
                 // display the following information for STA interface
-                if (String (inet_ntoa (netif->ip_addr)) == WiFi.localIP ().toString ()) {
+                if (inet_ntos (netif->ip_addr) == WiFi.localIP ().toString ()) {
                   if (WiFi.status () == WL_CONNECTED) {
                     int rssi = WiFi.RSSI ();
                     String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
@@ -1008,7 +1042,7 @@
                     s += "           STAtion is disconnected from router\r\n";
                   }
                 // display the following information for local loopback interface
-                } else if (String (inet_ntoa (netif->ip_addr)) == "127.0.0.1") {
+                } else if (inet_ntos (netif->ip_addr) == "127.0.0.1") {
                     s += "           local loopback\r\n";
                 // display the following information for AP interface
                 } else {
@@ -1021,8 +1055,12 @@
                     for (int i = 0; i < adapter_sta_list.num; i++) {
                       tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
                       s += String ("\r\n") + 
-                                   "              hwaddr: " + MacAddressAsString ((byte *) &station.mac, 6).c_str () + "\r\n" + 
-                                   "              inet addr: " + String (ip4addr_ntoa (&(station.ip))) + "\r\n";
+                                   "              hwaddr: " + MacAddressAsString ((byte *) &station.mac, 6)
+                                                                                                             #ifdef TELNET_DEVICE_NICK_NAME // TO DO: try to get hostname (for example by callig gethostbyaddr) from connected device, for now this is how we get some meaning out of MAC and IP numbers
+                                                                                                               + " " + TELNET_DEVICE_NICK_NAME (MacAddressAsString ((byte *) &station.mac, 6))
+                                                                                                             #endif
+                                                                                                             + "\r\n" + 
+                                   "              inet addr: " + inet_ntos (station.ip) + "\r\n";
 
                                    connection->sendData (s);
                                    s = "";
@@ -1124,6 +1162,47 @@
       clientConnection->sendData (String (s) + "\r\nConnection to " + otherServerName + " lost.");
     } else {
       clientConnection->sendData ("Could not connect to " + otherServerName + ".");
+    }
+  }
+
+  String __curl__ (TcpConnection *thisTelnetConnection, String method, String url) {
+    Serial.printf ("[%10d] [CURL] %s %s.\n", millis (), method.c_str (), url.c_str ());
+    if (method == "GET" || method == "PUT" || method == "POST" || method == "DEELTE") {
+      if (url.substring (0, 7) == "http://") {
+        url = url.substring (7);
+        String server = "";
+        int port = 80;
+        int i = url.indexOf ('/');
+        if (i < 0) {
+          server = url;
+          url = "/";
+        } else {
+          server = url.substring (0, i);
+          url = url.substring (i);
+        }
+        i = server.indexOf (":");
+        if (i >= 0) {
+          port = server.substring (i + 1).toInt ();
+          if (port <= 0) {
+            thisTelnetConnection->sendData ("Invalid port number.");
+            return "";
+          }
+          server = server.substring (0, i);
+        } 
+
+            // call webClient
+            Serial.printf ("[%10d] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
+            String r = webClient ((char *) server.c_str (), port, 15000, method + " " + url);
+            if (r > "") thisTelnetConnection->sendData (r);
+            else        thisTelnetConnection->sendData ("Error, check dmesg to get more information.");
+
+      } else {
+        thisTelnetConnection->sendData ("URL must begin with http://");
+        return "";
+      }
+    } else {
+      thisTelnetConnection->sendData ("Use GET, PUT, POST or DELETE methods.");
+      return "";
     }
   }
   

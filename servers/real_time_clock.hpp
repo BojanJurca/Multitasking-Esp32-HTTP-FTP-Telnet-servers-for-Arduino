@@ -124,7 +124,7 @@
   #define RTC_NTP_TIME_OUT 100    // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
   #define RTC_REST_TIME_OUT 1100  // number of milliseconds we are going to wait for REST reply - it the number is too large the time will be less accurate but it has to be longer tha  1 s
   #define RTC_RETRY_TIME 15000    // number of milliseconds between NTP request retries before it succeds, 15000 = 15 s
-  #define RTC_SYNC_TIME 172800000 // number of milliseconds between NTP synchronizations, 2 days (86400000 = 1 day)
+  #define RTC_SYNC_TIME 604800000 // number of milliseconds between NTP synchronizations, 7 days (86400000 = 1 day)
 
   void __rtcDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
@@ -426,7 +426,11 @@
                                                       this->__ntpServer3__ = ntpServer3;
 
                                                       #ifdef ESP32
-                                                        if (this->getGmtTime () > 1573326600) this->__gmtTimeIsSet__ = true; // if ESP32 wakes up from the deep sleep  the time is still preserved
+                                                        time_t now = this->getGmtTime ();
+                                                        if (now > 1573326600) { // if ESP32 wakes up from the deep sleep or reset the time is preserved
+                                                          this->setGmtTime (now);
+                                                          this->forceSync ();
+                                                        }
                                                       #endif
                                                       
                                                       this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
@@ -445,7 +449,11 @@
                                                       this->__espRESTtimeServerURL__ = espRESTtimeServerURL;
                                                       
                                                       #ifdef ESP32
-                                                        if (this->getGmtTime () > 1573326600) this->__gmtTimeIsSet__ = true; // if ESP32 wakes up from the deep sleep  the time is still preserved
+                                                        time_t now = this->getGmtTime ();
+                                                        if (now > 1573326600) { // if ESP32 wakes up from the deep sleep or reset the time is preserved
+                                                          this->setGmtTime (now);
+                                                          this->forceSync ();
+                                                        }
                                                       #endif
 
                                                       this->__state__ = real_time_clock::WAITING_FOR_REST_SYNC;
@@ -465,10 +473,8 @@
                                                       newTime.tv_sec = currentTime;
                                                       settimeofday (&newTime, NULL); // we don't use struct timezone since it is obsolete and useless
                                                       time_t newLocalTime = this->getLocalTime ();
-  
                                                       if (!this->__espStartupTime__) {
                                                         this->__espStartupTime__ = newTime.tv_sec - millis () / 1000;
-                                                        rtcDmesg ("[RTC] got GMT from server: " + timeToString (newTime.tv_sec) + ".");
                                                         newTime.tv_sec = this->getLocalTime ();
                                                         rtcDmesg ("[RTC] local time (according to TIMEZONE definition): " + timeToString (newLocalTime) + ".");
                                                         Serial.printf ("[%10d] [RTC] if your local time is different change TIMEZONE definition or modify timeToLocalTime () function for your country and location.\n", millis ());
@@ -519,7 +525,7 @@
 
       time_t getLastSyncTime ()                     { return __lastSyncTime__; } // returns the time of last synchronization with NTP servers
 
-      void forceSync ()                             { this->__lastSyncMillis__ = millis () - 86400000; } // forces instance to synchronize with NTP server
+      void forceSync ()                             { this->__lastSyncMillis__ = millis () - RTC_SYNC_TIME; } // forces instance to synchronize with NTP server
   
       void doThings ()                              { // this is where real_time_clock is getting its processing time
                                                       // real_time_clock can only be in one of four states:
@@ -532,6 +538,7 @@
                                                       
                                                       switch (this->__state__) {
                                                         case real_time_clock::WAITING_FOR_NTP_SYNC:
+
 
                                                                 if ((this->__gmtTimeIsSet__ && millis () - this->__lastSyncMillis__ > RTC_SYNC_TIME) // time already set, synchronize every RTC_SYNC_TIME
                                                                     ||
@@ -548,7 +555,7 @@
                                                                         this->__ntpPacket__ [14] = 49;
                                                                         this->__ntpPacket__ [15] = 52;  
 
-                                                                        // if ESP32 is not connected to WiFi UDP can't succeed
+                                                                        // if ESP32 is not connected to WiFi, UDP can't succeed
                                                                         if (WiFi.status () != WL_CONNECTED) {
                                                                           #ifdef ESP8266
                                                                             // in case of ESP8266, correct synchronization variables - only for the purpose 
@@ -563,6 +570,7 @@
                                                                           #endif
                                                                           return;
                                                                         }
+
                                                                         // connect to one of three servers
                                                                         IPAddress ntpServerIp;
                                                                         if (!WiFi.hostByName (this->__ntpServer1__, ntpServerIp))
@@ -587,24 +595,27 @@
                                                                               rtcDmesg ("[RTC] internal port " + String (INTERNAL_NTP_PORT) + " for NTP is not available.");
                                                                               return;
                                                                             }
-                                                                            // change state although we are not sure yet that request will succeed
-                                                                            this->__state__ = real_time_clock::WAITING_FOR_NTP_REPLY;
                                                                             this->__requestMillis__ = millis (); // prepare time-out timing
                                                                             // start UDP over port 123                                                      
                                                                             if (!this->__udp__.beginPacket (ntpServerIp, 123)) { 
+                                                                              this->__udp__.stop ();
                                                                               rtcDmesg ("[RTC] NTP server(s) are not available on port.");
                                                                               return;
                                                                             }
                                                                             // send UDP request
                                                                             if (this->__udp__.write (this->__ntpPacket__, sizeof (this->__ntpPacket__)) != sizeof (this->__ntpPacket__)) { // 48
+                                                                              this->__udp__.stop ();
                                                                               rtcDmesg ("[RTC] could not send NTP request.");
                                                                               return;
                                                                             }
                                                                             // check if UDP request has been sent
-                                                                            if (!this->__udp__.endPacket ()) {
+                                                                             if (!this->__udp__.endPacket ()) {
+                                                                              this->__udp__.stop ();
                                                                               rtcDmesg ("[RTC] NTP request not sent.");
                                                                               return;
                                                                             }
+                                                                            // change state
+                                                                            this->__state__ = real_time_clock::WAITING_FOR_NTP_REPLY;
                                                                             this->__requestMillis__ = millis (); // correct time-out timing
 
                                                                     this->__lastSyncMillis__ = millis ();
@@ -615,6 +626,7 @@
                                                                 
                                                                 // wait for NTP reply or time-out
                                                                 if (millis () - this->__requestMillis__ > RTC_NTP_TIME_OUT) { // time-out, stop waiting for reply
+                                                                  this->__udp__.stop ();
                                                                   rtcDmesg ("[RTC] NTP time-out.");
                                                                   this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
                                                                   return;
@@ -627,8 +639,8 @@
                                                                 // read NTP response back into the same packet we used for NTP request (different bytes are used for request and reply)
                                                                 this->__udp__.read (this->__ntpPacket__, sizeof (this->__ntpPacket__));
                                                                 if (!this->__ntpPacket__ [40] && !this->__ntpPacket__ [41] && !this->__ntpPacket__ [42] && !this->__ntpPacket__ [43]) { // sometimes we get empty response which is invalid
-                                                                  rtcDmesg ("[RTC] got invalid NTP response.");
                                                                   this->__udp__.stop ();
+                                                                  rtcDmesg ("[RTC] got invalid NTP response.");
                                                                   return;
                                                                 }
                                                                 // NTP server counts seconds from 1st January 1900 but ESP32 uses UNIX like format - it counts seconds from 1st January 1970 - let's do the conversion 
@@ -645,11 +657,12 @@
                                                                 // Serial.printf ("currentTime = %i\n", currentTime);
                                                                 // right now currentTime is 1542238838 (14.11.18 23:40:38), every valid time should be grater then 1542238838
                                                                 if (currentTime < 1542238838) { 
-                                                                  rtcDmesg ("[RTC] got invalid NTP response.");
                                                                   this->__udp__.stop ();
+                                                                  rtcDmesg ("[RTC] got invalid NTP response.");
                                                                   return;
                                                                 }
                                                                 this->__udp__.stop ();
+                                                                rtcDmesg ("[RTC] got GMT from NTP server: " + timeToString (currentTime) + ".");
                                                                 this->setGmtTime (currentTime);
                                                                 this->__lastSyncTime__ = currentTime;
                                                                 break;
@@ -684,8 +697,8 @@
                                                                         }
                                                                         // send request
                                                                         if (this->__tcp__.print ("GET " + String (this->__espRESTtimeServerURL__) + " HTTP/1.0\r\n\r\n") <= 0) {
-                                                                          rtcDmesg ("[RTC] couldn't send REST request.");
                                                                           this->__tcp__.stop ();
+                                                                          rtcDmesg ("[RTC] couldn't send REST request.");
                                                                           return;    
                                                                         }
                                                                         // change state although we are not sure yet that request will succeed
@@ -712,17 +725,17 @@
                                                                 this->__state__ = real_time_clock::WAITING_FOR_REST_SYNC;
 
                                                                 String reply = "";
-                                                                while (this->__tcp__.available ()) reply += (char) this->__tcp__.read ();
+                                                                while ((this->__tcp__.available () || this->__tcp__.connected ()) && !(millis () - this->__requestMillis__ > RTC_REST_TIME_OUT)) reply += (char) this->__tcp__.read ();
                                                                 this->__tcp__.stop ();
-                                                                // JSON part og HTTP reply is in a form of: {"id":"ESP","currentTime":"1573336079"}
+                                                                // JSON part of HTTP reply is in a form of: {"id":"ESP","currentTime":"1573336079"}
                                                                 currentTime = 0;
                                                                 #ifdef ESP8266
                                                                   int i;
                                                                   if ((i = reply.indexOf ("\":\"")) > 0) {
                                                                     if ((i = reply.indexOf ("\":\"", i + 1)) > 0) {
-                                                                      reply = reply.substring (i + 3); Serial.printf ("reply = %s\n", reply.c_str ());
+                                                                      reply = reply.substring (i + 3); // Serial.printf ("reply = %s\n", reply.c_str ());
                                                                       if ((i = reply.indexOf ("\"")) > 0) {
-                                                                        reply = reply.substring (0, i); Serial.printf ("reply = %s\n", reply.c_str ());
+                                                                        reply = reply.substring (0, i); // Serial.printf ("reply = %s\n", reply.c_str ());
                                                                         currentTime = reply.toInt ();
                                                                       }
                                                                     }
@@ -735,6 +748,7 @@
                                                                   rtcDmesg ("[RTC] got invalid REST response.");
                                                                   return;
                                                                 }
+                                                                rtcDmesg ("[RTC] got GMT from WEB server: " + timeToString (currentTime) + ".");
                                                                 this->setGmtTime (currentTime);
                                                                 this->__lastSyncTime__ = currentTime;
                                                                 break;
