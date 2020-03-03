@@ -21,8 +21,10 @@
 
 // ----- define basic project information - this informatin will be displayed as a response to uname telnet command -----
 
-#define HOSTNAME    "EspTemplate"   // <- this is just an example, define unique name for each chip here - by default, if you don't change #definitions this will be hostname of STA and AP network interfaces and SSID of your AP
+#define HOSTNAME    "MyESP32Server" // <- this is just an example, define unique name for each chip here - by default, if you don't change #definitions this will be hostname of STA and AP network interfaces and SSID of your AP
 #define MACHINETYPE "ESP32 NodeMCU" // <- this is just an example, describe your hardware here
+
+#include "./servers/webServer.hpp"                      // Web server
 
 
 #include <WiFi.h>
@@ -61,26 +63,26 @@ measurements rssi (60);                     // measure WiFi signal quality
 
 
 #include "./servers/webServer.hpp"                      // Web server
-webServer *webSrv; // pointer to Web server
+httpServer  *httpSrv = NULL;  // pointer to Web server
 String httpRequestHandler (String& httpRequest);
 void wsRequestHandler (String& wsRequest, WebSocket *webSocket);
 String startWebServer () {
-  if (!webSrv) {
-    webSrv = new webServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
-                            wsRequestHandler,           // a callback function that will handle WS requests, NULL if WS requests are to be ignored
-                            8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stable
-                            "0.0.0.0",                  // start web server on all available ip addresses
-                            80,                         // HTTP port
-                            NULL);                      // we won't use firewall callback function for web server
-    if (webSrv)
-      if (webSrv->started ())                                   return "Web server started.";  
-      else                    { delete (webSrv); webSrv = NULL; return "Could not start web server."; }
-    else                                                        return "Could not start web server.";  
-  } else                                                        return "Web server is already running.";    
+  if (!httpSrv) {
+    httpSrv = new httpServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
+                              wsRequestHandler,           // a callback function that will handle WS requests, NULL if WS requests are to be ignored
+                              8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stable
+                              "0.0.0.0",                  // start HTTP server on all available ip addresses
+                              80,                         // HTTP port
+                              NULL);                      // we won't use firewall callback function for HTTP server
+    if (httpSrv)
+      if (httpSrv->started ())                                    return "HTTP server started.";  
+      else                    { delete (httpSrv); httpSrv = NULL; return "Could not start HTTP server."; }
+    else                                                          return "Could not start HTTP server.";  
+  } else                                                          return "HTTP server is already running.";    
 }
 String stopWebServer () {
-  if (webSrv) { delete (webSrv); webSrv = NULL; return "Web server stopped. Active connections will continue to run anyway."; } 
-  else                                          return "Web server is not running.";
+  if (httpSrv) { delete (httpSrv); httpSrv = NULL; return "HTTP server stopped. Active connections will continue to run anyway."; } 
+  else                                             return "HTTP server is not running.";
 }
 String httpRequestHandler (String& httpRequest) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
                                                   // httpRequestHandler is supposed to be used with smaller replies,
@@ -200,7 +202,6 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { //     // - ha
   else if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") example10_webSockets (webSocket); // used by Example 10
 }
 
-
 bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, return true if IP is accepted or false if not
                                                 // - has to be reentrant!
   if (!strcmp (IP, "10.0.0.2")) return false;   // block 10.0.0.2 (for some reason) ... please note that this is just an example
@@ -210,7 +211,7 @@ bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, r
 
 #define FTP_RTC rtc                                     // tell FTP server where to get time from to report file time
 #include "./servers/ftpServer.hpp"                      // SPIFFS doesn't record file creation time so this information will be false anyway
-ftpServer *ftpSrv; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
+ftpServer *ftpSrv = NULL; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
 String startFtpServer () {
   if (!ftpSrv) {
     ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
@@ -230,7 +231,7 @@ String stopFtpServer () {
 
 #define TELNET_RTC rtc                                    // tell Telnet server functions (like uptime, ...) where to get time from
 #include "./servers/telnetServer.hpp"                     // Telnet server - if other server are going to use dmesg telnetServer.hpp has to be defined priorly
-telnetServer *telnetSrv; // pointer to Telnet server
+telnetServer *telnetSrv = NULL; // pointer to Telnet server
 String telnetCommandHandler (int argc, String argv [], String homeDirectory);
 String startTelnetServer () {
   if (!telnetSrv) {
@@ -273,9 +274,6 @@ String telnetCommandHandler (int argc, String argv [], String homeDirectory) { /
     if (homeDirectory == "/") return stopTelnetServer (); // note that the level of rights is determined by homeDirecory
     else                      return "You must have root rights to stop Telnet sever.";
 
-
-/// to je samo test, če dela .... ifconfig STA up ne dela !!! - mogoče manjka begin ???
-
   } else if (argc == 3 && argv [0] == "ifconfig" && argv [1] == "AP" && argv [2] == "up") {
                               WiFi.mode (WIFI_AP_STA);
                               return "AP is up.";
@@ -291,7 +289,6 @@ String telnetCommandHandler (int argc, String argv [], String homeDirectory) { /
   } else if (argc == 3 && argv [0] == "ifconfig" && argv [1] == "STA" && argv [2] == "down") {
                               WiFi.mode (WIFI_AP);
                               return "STA is down";
-
 
 
   // ---- led on ESP32 ----
@@ -333,6 +330,9 @@ String telnetCommandHandler (int argc, String argv [], String homeDirectory) { /
 void setup () {
   WRITE_PERI_REG (RTC_CNTL_BROWN_OUT_REG, 0); // disable brownout detector
 
+  // disableCore0WDT ();
+  // disableCore1WDT ();
+
   Serial.begin (115200);
  
   // __testLocalTime__ ();
@@ -349,10 +349,13 @@ void setup () {
   }
 
   // SPIFFS.format ();
+
   if (mountSPIFFS (true)) dmesg ("[SPIFFS] mounted.");    // this is the first thing that you should do
   else                dmesg ("[SPIFFS] mount failed.");
 
   usersInitialization ();                             // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
+
+  // SPIFFS.remove ("/etc/wpa_supplicant.conf"); // deleting wpa_supplicant.conf would cause creating a new one with default WiFi settings - see network.h
 
   connectNetwork ();                                  // network should be connected after file system is mounted since it reads its configuration from file system
 

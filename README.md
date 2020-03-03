@@ -14,13 +14,6 @@ In case of Web user interface all you need to do is to upload (with FTP) .html (
 
 In case of Telnet all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
 
-I have ported a slightly simplified version of Esp32_web_ftp_telnet_server_template also to ESP8266 controllers. You can find it here:  https://github.com/BojanJurca/Esp8266_web_ftp_telnet_server_template
-## Understanding different versions of ESP...server_template
-
-![Screenshot](versions.png)
-
-If you are using ESP8266 then you only have one choice which version to use. If you have ESP32, on the other hand, you can choose between both versions. If Esp8266_web_ftp_telnet_server_template is all you need then my guess is you should go with it since multi-threading, beside benefits, also brings additional complexity that you would have to handle in your code.
-
 You can go directly to Setup instructions and examples now or continue reading the rest of this text.
 
 While I was working on my ESP32 / Arduino home automation project I often missed functionalities that were available on real computers. This template is an attempt of providing some of this functionalities such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather than making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface through which users can turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. It creates somewhat Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
@@ -192,6 +185,20 @@ ftp> put example09.html
 226 /var/www/html/example09.html transfer complete
 ftp> put oscilloscope.html oscilloscope.html
 226 /var/www/html/oscilloscope.html transfer complete
+ftp> ls
+200 port ok
+150 starting transfer
+-r-xr-xrwx   1 owner    group             119 Mar 03 18:22      /etc/passwd
+-r-xr-xrwx   1 owner    group             254 Mar 03 18:22      /network/interfaces
+-r-xr-xrwx   1 owner    group             211 Mar 03 18:22      /etc/dhcpcd.conf
+-r-xr-xrwx   1 owner    group             174 Mar 03 18:22      /etc/hostapd/hostapd.conf
+-r-xr-xrwx   1 owner    group             166 Mar 03 18:22      /etc/shadow
+-r-xr-xrwx   1 owner    group              61 Mar 03 18:22      /etc/wpa_supplicant.conf
+-r-xr-xrwx   1 owner    group            1596 Mar 03 18:22      /var/www/html/apple-180.png
+-r-xr-xrwx   1 owner    group            1818 Mar 03 18:22      /var/www/html/android-192.png
+-r-xr-xrwx   1 owner    group            6807 Mar 03 18:22      /var/www/html/index.html
+226 transfer complete
+ftp: 975 bytes received in 0.66Seconds 1.47Kbytes/sec.
 ftp>
 ```
 
@@ -481,7 +488,7 @@ for (int i = 0; i < 3; i++) {
 
 **Example 08 - reading time**
 
-Example 07 demonstrates the use of rtc (real time clock) instance built into Esp32_web_ftp_telnet_server_template.
+Example 08 demonstrates the use of rtc (real time clock) instance built into Esp32_web_ftp_telnet_server_template.
 
 ```C++
 if (rtc.isGmtTimeSet ()) {
@@ -498,11 +505,11 @@ if (rtc.isGmtTimeSet ()) {
 }
 ```
 
-**Example 08 - making HTTP requests (REST calls for example) directly from ESP32**
+**Example 09 - making HTTP requests (REST calls for example) directly from ESP32**
 
 Up to now, we have only made REST calls from within Javascript (from browser). However, for establishing machine-to-machine communication REST calls should be made directly from C++ code residing in ESP32. The only drawback is that C++ does not support parsing JSON answers natively. You have to program the parsing yourself (not included in this example).
 
-Example 08 shows how we can use TcpServer objects to make HTTP requests.
+Example 09 shows how we can use TcpServer objects to make HTTP requests.
 
 ```C++
 void example09_makeRestCall () {
@@ -543,8 +550,7 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be e
         case WebSocket::BINARY:       { // binary data received
                                         char buffer [256];
                                         int bytesRead = webSocket->readBinary (buffer, sizeof (buffer));
-                                        Serial.printf ("[example 10] got %i bytes of binary data from browser over webSocket\n"
-                                                       "[example 10]", bytesRead);
+                                        Serial.printf ("[example 10] got %i bytes of binary data from browser over webSocket\n", bytesRead);
                                         // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 16 bit integers
                                         // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
                                         int16_t *i = (int16_t *) buffer;
@@ -565,7 +571,7 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be e
         case WebSocket::ERROR:          
   errorInCommunication:     
                                         Serial.printf ("[example 10] error in communication, closing connection\n");
-                                        return; // close this connection, the return value will be discarded (in WebSocket case) so it doesn't matter what it is
+                                        return; // close this connection
       }
     }
 }
@@ -711,7 +717,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   bytesToSend = strlen (outputBuffer);
   if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
     *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[example 10] error while sending response\n");
+    Serial.printf ("[example 11] error while sending response\n");
     goto endThisConnection;
   }
   *outputBuffer = 0; // mark outputBuffer as empty
@@ -734,7 +740,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         bytesToSend = strlen (outputBuffer);
         if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
           *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[example 10] error while sending response\n");
+          Serial.printf ("[example 11] error while sending response\n");
           goto endThisConnection;
         }
         strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
@@ -764,7 +770,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
       *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[example 10] error while sending response\n");
+      Serial.printf ("[example 11] error while sending response\n");
       goto endThisConnection;
     }    
     *outputBuffer = 0; // mark outputBuffer as empty
@@ -774,7 +780,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   if (*outputBuffer) {
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[example 10] error while sending response\n");
+      Serial.printf ("[example 11] error while sending response\n");
   }
   Serial.printf ("[example 11] connection has just ended\n");
 }
