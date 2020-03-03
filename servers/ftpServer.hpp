@@ -47,7 +47,7 @@
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-      Serial.println (message); 
+      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
@@ -62,39 +62,22 @@
   #include "user_management.h"    // ftpServer.hpp needs user_management.h
 
 
-  class ftpServer {                                             
+  class ftpServer: public TcpServer {                                             
   
     public:
   
       ftpServer (char *serverIP,                                       // FTP server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
                  int serverPort,                                       // FTP server port
                  bool (* firewallCallback) (char *)                    // a reference to callback function that will be celled when new connection arrives 
-                )                               {
-                                                  // start TCP server
-                                                  this->__tcpServer__ = new TcpServer ( __ftpConnectionHandler__, // worker function
-                                                                                        NULL,                     // we don't need additional paramater for __ftpConnectionHandler__
-                                                                                        8192,                     // 8 KB stack is enough for ftpConnectionHandler
-                                                                                        300000,                   // close connection if inactive for more than 5 minutes
-                                                                                        serverIP,                 // accept incomming connections on on specified addresses
-                                                                                        serverPort,               // FTP port
-                                                                                        firewallCallback);        // firewall callback function
-
-                                                  if (this->started ()) ftpDmesg ("[FTP] server started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                                                  else                  ftpDmesg ("[FTP] couldn't start FTP server.");
+                ): TcpServer (__ftpConnectionHandler__, NULL, 8192, 300000, serverIP, serverPort, firewallCallback)
+                                                {
+                                                  if (started ()) ftpDmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else            ftpDmesg ("[ftpServer] couldn't start.");
                                                 }
       
-      ~ftpServer ()                             { 
-                                                  if (this->__tcpServer__) {
-                                                    ftpDmesg ("[FTP] server stopped.");
-                                                    delete (this->__tcpServer__); 
-                                                  }
-                                                }
-      
-      bool started ()                           { return this->__tcpServer__ && this->__tcpServer__->started (); } 
-                                                     
+      ~ftpServer ()                             { if (started ()) ftpDmesg ("[ftpServer] stopped."); }
+                                                      
     private:
-
-      TcpServer *__tcpServer__ = NULL;
 
       static void __ftpConnectionHandler__ (TcpConnection *connection, void *notUsed) {  // connectionHandler callback function
         // log_i ("[Thread:%i][Core:%i] connection has started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
@@ -144,11 +127,11 @@
                 if (checkUserNameAndPassword (user, ftpParam)) getUserHomeDirectory (homeDir, user);
                 if (*homeDir) { 
                   loggedIn = true; 
-                  ftpDmesg ("[FTP] " + String (user) + " logged in.");
+                  ftpDmesg ("[ftpServer] " + String (user) + " logged in.");
                   sprintf (buffer, "230 logged on, use \"/\" to refer to your home directory \"%s\", cd command is not supported\r\n", homeDir);
                   connection->sendData (buffer);
                 } else { 
-                  ftpDmesg ("[FTP] " + String (user) + " login attempt failed.");
+                  ftpDmesg ("[ftpServer] " + String (user) + " login attempt failed.");
                   connection->sendData ("530 user name or password incorrect\r\n"); 
                 }
           
@@ -371,7 +354,7 @@
         }
       closeFtpConnection:
         // log_i ("[Thread:%i][Core:%i] connection has ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ()); 
-        if (loggedIn) ftpDmesg ("[FTP] " + String (user) + " logged out.");
+        if (loggedIn) ftpDmesg ("[ftpServer] " + String (user) + " logged out.");
       }
       
   };

@@ -34,6 +34,8 @@
  *            November 10, 2019, Bojan Jurca
  *          - added curl command
  *            December 22, 2019, Bojan Jurca
+ *          - telnetServer is now inherited from TcpServer
+ *            February 27.2.2020, Bojan Jurca
  *            
  */
 
@@ -50,8 +52,15 @@
     #define MACHINETYPE "ESP32"
   #endif
   #define ESP_SDK_VERSION ESP.getSdkVersion ()
-  #define SRV_TEMPLATE_VERSION "SRV32-1.20"
-  #define UNAME String (MACHINETYPE) + " " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (SRV_TEMPLATE_VERSION)
+  #define SRV_TEMPLATE_VERSION "SRV32-1.21-dev"
+  int __getMHz__ () {
+    unsigned long startMicors = micros ();
+    unsigned long counter = 0;
+    while (micros () - startMicors < 1000) counter ++;
+    return  (int) (((float) counter / (float) 463) + 0.5) * 80; // estimate CPU frequency
+  }
+  int __MHz__ = __getMHz__ ();
+  #define UNAME String (MACHINETYPE) + " (" + String (__MHz__) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (SRV_TEMPLATE_VERSION)
 
 
   // ----- includes, definitions and supporting functions -----
@@ -62,70 +71,146 @@
   #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
   #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
 
-  void dmesg (String message);
+
+  // ----- dmesg data structure and functions -----  
+  typedef struct __dmesgType__ {
+    unsigned long milliseconds;    
+    String        message;
+  };
+
+  #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 256
+  RTC_DATA_ATTR unsigned int bootCount = 0;
+  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String (TELNET_RTC.isGmtTimeSet () ? "[ESP32] " + UNAME +" (re)started " + String (++bootCount) + " times at: " + timeToString (TELNET_RTC.getLocalTime ()) + "." : "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}}; // there is always at lease 1 message in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
+  byte __dmesgBeginning__ = 0; // first used location
+  byte __dmesgEnd__ = 1;       // the location next to be used
+  portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
+
+  // displays dmesg circular queue over telnet connection
+  bool __dmesg__ (TcpConnection *connection, bool follow) {
+    // make a copy of all messages in circular queue in critical section
+    portENTER_CRITICAL (&__csDmesg__);  
+    byte i = __dmesgBeginning__;
+    String s = "";
+    do {
+      if (s != "") s+= "\r\n";
+      char c [15];
+      sprintf (c, "[%10d] ", __dmesgCircularQueue__ [i].milliseconds);
+      s += String (c) + __dmesgCircularQueue__ [i].message;
+    } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
+    portEXIT_CRITICAL (&__csDmesg__);
+    // send everything to the client
+    if (!connection->sendData (s)) return false;
+
+    // --follow?
+    while (follow) {
+      while (i == __dmesgEnd__) {
+        while (connection->available () == TcpConnection::AVAILABLE) {
+          char c;
+          if (!connection->recvData (&c, sizeof (c))) return false;
+          if (c == 3 || c >= ' ') return true; // return if user pressed Ctrl-C or any key
+        }
+        SPIFFSsafeDelay (10); // wait a while and check again
+      }
+      // __dmesgEnd__ has changed which means that at least one new message has been inserted into dmesg circular queue menawhile
+      portENTER_CRITICAL (&__csDmesg__);
+      s = "";
+      do {
+        s += "\r\n";
+        char c [15];
+        sprintf (c, "[%10d] ", __dmesgCircularQueue__ [i].milliseconds);
+        s += String (c) + __dmesgCircularQueue__ [i].message;
+      } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
+      portEXIT_CRITICAL (&__csDmesg__);
+      // send everything to the client
+      if (!connection->sendData (s)) return false;
+    }
+    return true;
+  }
+
+  // adds message into dmesg circular queue
+  void dmesg (String message) {
+    portENTER_CRITICAL (&__csDmesg__); 
+    __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
+    __dmesgCircularQueue__ [__dmesgEnd__].message = message;
+    if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
+    portEXIT_CRITICAL (&__csDmesg__);
+    Serial.printf ("[%10d] %s\n", millis (), message.c_str ());
+  }
+
+  // redirect other moduls' dmesg here before setup () begins
+  bool __redirectDmesg__ () {
+    #ifdef __TCP_SERVER__
+      TcpDmesg = dmesg;
+    #endif  
+    #ifdef __FILE_SYSTEM__
+      fileSystemDmesg = dmesg;
+    #endif  
+    #ifdef __NETWORK__
+      networkDmesg = dmesg;
+    #endif
+    #ifdef __FTP_SERVER__
+      ftpDmesg = dmesg;
+    #endif    
+    #ifdef __WEB_SERVER__
+      webDmesg = dmesg;
+    #endif  
+    #ifdef __REAL_TIME_CLOCK__
+      rtcDmesg = dmesg;
+    #endif      
+    return true;
+  }
+  bool __redirectedDmesg__ = __redirectDmesg__ ();
 
   #include "real_time_clock.hpp"  // some telnet function (like uptime, ...) need real-time clock
-    #ifndef TELNET_RTC              // if not defined earlier define it now but it will only make code to compile, not to work properly
-      real_time_clock __TELNET_RTC__  ("", "", "");
+    #ifndef TELNET_RTC              // if not defined earlier define it now but it will only make code to compile, not also to work properly
+      real_time_clock __TELNET_RTC__ ("", "", "");
       #define TELNET_RTC __TELNET_RTC__
     #endif
-  #include "webServer.hpp" // webClient needed for curl
+  #include "webServer.hpp" // webClient needed for curl command
+
+  // needed for ping command
+  #include "lwip/inet_chksum.h"
+  #include "lwip/ip.h"
+  #include "lwip/ip4.h"
+  #include "lwip/err.h"
+  #include "lwip/icmp.h"
+  #include "lwip/sockets.h"
+  #include "lwip/sys.h"
+  #include "lwip/netdb.h"
+  #include "lwip/dns.h"
+
+  // needed for (hard) reset command
+  #include <esp_int_wdt.h>
+  #include <esp_task_wdt.h>
     
-  // TO DO: make the following functions class member functions
-  bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection);
-  void __trimCstring__ (char *cstring);
-  bool __ls__ (TcpConnection *connection, String directory);
-  bool __cat__ (TcpConnection *connection, String fileName);
-  bool __rm__ (TcpConnection *connection, String fileName);
-  bool __ping__ (TcpConnection *, char *, int, int, int, int);
-  bool __free__ (TcpConnection *connection, int delaySeconds);
-  bool __dmesg__ (TcpConnection *, bool);
+  // TO DO: make __iw__ static member function
   void __iw__ (TcpConnection *connection);
-  void __telnet__ (TcpConnection *clientConnection, String otherServerName, int otherServerPort);
-  String __curl__ (TcpConnection *thisTelnetConnection, String method, String url);
 
 
-  class telnetServer {                                             
+  class telnetServer: public TcpServer {                      
   
     public:
   
-      telnetServer (String (* telnetCommandHandler) (int argc, String argv [], String homeDirectory), // httpRequestHandler callback function provided by calling program
-                    unsigned int stackSize,                                                           // stack size of httpRequestHandler thread, usually 4 KB will do 
-                    char *serverIP,                                                                   // telnet server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
-                    int serverPort,                                                                   // telnet server port
-                    bool (* firewallCallback) (char *)                                                // a reference to callback function that will be celled when new connection arrives 
-                    )                           {
-                                                  // start TCP server
-                                                  this->__tcpServer__ = new TcpServer ( __telnetConnectionHandler__,    // worker function
-                                                                                        (void *) telnetCommandHandler,  // tell TcpServer to pass reference callback function to __telnetConnectionHandler__
-                                                                                        stackSize,                      // usually 4 KB will do for telnetConnectionHandler
-                                                                                        300000,                         // close connection if inactive for more than 5 minutes
-                                                                                        serverIP,                       // accept incomming connections on on specified addresses
-                                                                                        serverPort,                     // telnet port
-                                                                                        firewallCallback);              // firewall callback function
+      telnetServer (String (*telnetCommandHandler) (int argc, String argv [], String homeDirectory), // httpRequestHandler callback function provided by calling program
+                    unsigned int stackSize,                                                          // stack size of httpRequestHandler thread, usually 4 KB will do 
+                    char *serverIP,                                                                  // telnet server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+                    int serverPort,                                                                  // telnet server port
+                    bool (*firewallCallback) (char *)                                                // a reference to callback function that will be celled when new connection arrives 
+                   ): TcpServer (__telnetConnectionHandler__, (void *) telnetCommandHandler, stackSize, 300000, serverIP, serverPort, firewallCallback)
+                                {
+                                  if (started ()) dmesg ("[telnetServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                  else            dmesg ("[telnetServer] couldn't start.");
+                                }
 
-                                                  if (this->started ()) dmesg ("[TELNET] server started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                                                  else                  dmesg ("[TELNET] couldn't start Telnet server.");                                                                                        
-                                                }
-      
-      ~telnetServer ()                          { 
-                                                  if (this->__tcpServer__) {
-                                                    dmesg ("[TELNET] server stopped.");
-                                                    delete (this->__tcpServer__);
-                                                  }
-                                                }
-      
-      bool started ()                           { return this->__tcpServer__ && this->__tcpServer__->started (); } 
-
+      ~telnetServer ()          { if (started ()) dmesg ("[telnetServer] stopped."); }
+     
     private:
 
-      TcpServer *__tcpServer__ = NULL;                                    // pointer to (threaded) TcpServer instance
-
-      static void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
+       static void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
         // log_i ("[Thread:%i][Core:%i] connection started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
-        char prompt1 [] = "\r\n# "; // root user's prompt
-        char prompt2 [] = "\r\n$ "; // other users' prompt
-        char *prompt = prompt1;
+        #define rootPrompt  "\r\n# " 
+        #define otherPrompt "\r\n$ " 
+        char *prompt = rootPrompt;
         char cmdLine [256];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         #define IAC 255
         #define DONT 254
@@ -138,7 +223,7 @@
           sprintf (cmdLine, "Hello %s%c%c%c! ", connection->getOtherSideIP (), IAC, DONT, ECHO); // say hello and tell telnet client not to echo, telnet server will do the echoing
           connection->sendData (cmdLine);
           if (*homeDir) { 
-            dmesg ("[TELNET] " + String (user) + " logged in.");
+            dmesg ("[telnetServer] " + String (user) + " logged in.");
             sprintf (cmdLine, "\r\n\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.\r\n%s", homeDir, prompt);
             connection->sendData (cmdLine);
           } else { 
@@ -155,12 +240,12 @@
           if (!__readCommandLine__ (password, sizeof (password), false, connection)) goto closeTelnetConnection;
           if (checkUserNameAndPassword (user, password)) getUserHomeDirectory (homeDir, user);
           if (*homeDir) { 
-            dmesg ("[TELNET] " + String (user) + " logged in.");
-            if (strcmp (user, "root")) prompt = prompt2;
+            dmesg ("[telnetServer] " + String (user) + " logged in.");
+            if (strcmp (user, "root")) prompt = otherPrompt;
             sprintf (cmdLine, "\r\n\nWelcome %s,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.\r\n%s", user, homeDir, prompt);
             connection->sendData (cmdLine);
           } else {
-            dmesg ("[TELNET] " + String (user) + " login attempt failed.");
+            dmesg ("[telnetServer] " + String (user) + " login attempt failed.");
             connection->sendData ("\r\n\nUser name or password incorrect.");
             SPIFFSsafeDelay (500); // TODO: check why last message doesn't get to the client (without SPIFFSsafeDelay) if we close the connection immediatelly
             goto closeTelnetConnection;
@@ -299,7 +384,7 @@
                   connection->sendData ("Unknown option.");
                 }
 
-                // ----- reboot -----
+                // ----- reboot ----- reset -----
 
                 } else if (telnetArgv [0] == "reboot") {
                   
@@ -309,6 +394,21 @@
                     Serial.printf ("\r\n\nreboot requested via telnet ...\r\n");
                     SPIFFSsafeDelay (100);
                     ESP.restart ();
+                  } else {
+                    connection->sendData ("Unknown option.");
+                  }
+
+                } else if (telnetArgv [0] == "reset") {
+                  
+                  if (telnetArgc == 1) {
+                    connection->sendData ("reseting ...");
+                    connection->closeConnection ();
+                    Serial.printf ("\r\n\nreset requested via telnet ...\r\n");
+                    SPIFFSsafeDelay (100);
+                    // ESP.reset (); // is not supported on ESP32, let's trigger watchdog insttead: https://github.com/espressif/arduino-esp32/issues/1270
+                    esp_task_wdt_init (1, true);
+                    esp_task_wdt_add (NULL);
+                    while (true);
                   } else {
                     connection->sendData ("Unknown option.");
                   }
@@ -500,710 +600,612 @@
 
           } // if cmdLine is not empty
           connection->sendData (prompt);
-        }
+        } // read and process comands in a loop
       
       closeTelnetConnection:
-          if (*homeDir) dmesg ("[TELNET] " + String (user) + " logged out.");
+          if (*homeDir) dmesg ("[telnetServer] " + String (user) + " logged out.");
           // log_i ("[Thread:%i][Core:%i] connection ended\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
       }
-            
-  };
 
-       
-  // returns true if command line is read, false if connection is closed
-  bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection) {
-    unsigned char c;
-    int i = 0;
-    *buffer = 0; 
-    while (connection->recvData ((char *) &c, 1)) { // read and process incomming data in a loop
-      switch (c) {
-          case 3:   // Ctrl-C
-                    return false;
-          
-          case 127: // ignore
-          case 10:  // ignore
-                    break;
 
-          case 8:   // backspace - delete last character from the buffer and from the screen
-                    if (i) {
-                      buffer [i--] = 0; // delete last character from buffer
-                      if (echo) if (!connection->sendData ("\x08 \x08")) false; // delete the last character from the screen
-                    }
-                    break;                        
-
-          case 13:  // end of command line
-                    __trimCstring__ (buffer);
-                    return true;
-          
-          default:  // fill buffer if the character is a valid character and there is still space in a buffer
-                    if (c >= ' ' && c < 240 && i < bufferSize - 1) { // ignore control characters
-                      buffer [i++] = c; // insert character into buffer
-                      buffer [i] = 0;
-                      if (echo) if (!connection->sendData ((char *) &c, 1)) return false; // write character to the screen
-                    }
-                    break;
-      } // switch
-    } // while
-    return false;
-  }
-
-  void __trimCstring__ (char *cstring) {
-    // ltrim
-    int i = 0;
-    while (cstring [i] == ' ' || cstring [i] == '\t') i++;
-    if (i) strcpy (cstring, cstring + i);
-    // rtrim
-    i = strlen (cstring) - 1;
-    while ((cstring [i] == ' ' || cstring [i] == '\t') && i >= 0) cstring [i--] = 0;
-  }
-
-  bool __ls__ (TcpConnection *connection, String directory) {
-    if (!__fileSystemMounted__) {
-      connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
-      return false;
-    }
-
-    char d [33]; *d = 0; 
-    if (directory.length () < sizeof (d)) strcpy (d, directory.c_str ()); 
-    if (*d && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
-    if (!*d) *d = '/';
-    String s = "";
-
-    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    File dir = SPIFFS.open (d);
-    if (!dir) { // TO DO: debug - this doesn't work like expected
-      xSemaphoreGive (SPIFFSsemaphore);
-      connection->sendData ("Failed to open directory.");
-      return false;
-    }
-    if (!dir.isDirectory ()) {
-      xSemaphoreGive (SPIFFSsemaphore);
-      connection->sendData (directory); connection->sendData (" is a file, not a directory."); 
-      return false;
-    }
-    File file = dir.openNextFile ();
-    while (file) {
-      if(!file.isDirectory ()) {
-        if (s != "") s += "\r\n";
-        char c [10];
-        sprintf (c, "  %6i ", file.size ());
-        s += String (c) + String (file.name ());
+      // returns true if command line is read, false if connection is closed while reading
+      static bool __readCommandLine__ (char *buffer, int bufferSize, bool echo, TcpConnection *connection) {
+        unsigned char c;
+        int i = 0;
+        *buffer = 0; 
+        while (connection->recvData ((char *) &c, 1)) { // read and process incomming data in a loop
+          switch (c) {
+              case 3:   // Ctrl-C
+                        return false;
+              case 127: // ignore
+              case 10:  // ignore
+                        break;
+              case 8:   // backspace - delete last character from the buffer and from the screen
+                        if (i) {
+                          buffer [i--] = 0; // delete last character from buffer
+                          if (echo) if (!connection->sendData ("\x08 \x08")) false; // delete the last character from the screen
+                        }
+                        break;                        
+              case 13:  // end of command line
+                        __trimCString__ (buffer);
+                        return true;
+              default:  // fill buffer if the character is a valid character and there is still space in a buffer
+                        if (c >= ' ' && c < 240 && i < bufferSize - 1) { // ignore control characters
+                          buffer [i++] = c; // insert character into buffer
+                          buffer [i] = 0;
+                          if (echo) if (!connection->sendData ((char *) &c, 1)) return false; // write character to the screen
+                        }
+                        break;
+          } // switch
+        } // while
+        return false;
       }
-      file = dir.openNextFile ();
-    }
-    xSemaphoreGive (SPIFFSsemaphore);
-    connection->sendData (s);
-    return true;
-  }
 
-  bool __cat__ (TcpConnection *connection, String fileName) {
-    if (!__fileSystemMounted__) {
-      connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
-      return false;
-    }
-
-    bool retVal = false;
-    File file;
-
-    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
-      if (!file.isDirectory ()) {
-        char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
-        if (buff) {
-          *buff = 0;
-          int i = strlen (buff);
-          while (file.available ()) {
-            switch (*(buff + i) = file.read ()) {
-              case '\r':  // ignore
-                          break;
-              case '\n':  // crlf conversion
-                          *(buff + i ++) = '\r'; 
-                          *(buff + i ++) = '\n';
-                          break;
-              default:
-                          i ++;                  
-            }
-            if (i >= 2048 - 2) { connection->sendData ((char *) buff, i); i = 0; }
-          }
-          if (i) { connection->sendData ((char *) buff, i); }
-          free (buff);
-          retVal = true;
-        } 
-        file.close ();
-      } else {
-        connection->sendData ("Failed to open "); connection->sendData (fileName);
+      static void __trimCString__ (char *cString) {
+        int i = 0; // ltrim
+        while (cString [i] == ' ' || cString [i] == '\t') i++;
+        if (i) strcpy (cString, cString + i);
+        i = strlen (cString) - 1; // rtrim
+        while ((cString [i] == ' ' || cString [i] == '\t') && i >= 0) cString [i--] = 0;
       }
-      file.close ();
-    } 
-    xSemaphoreGive (SPIFFSsemaphore);
-    return retVal;
-  }
 
-  bool __rm__ (TcpConnection *connection, String fileName) {
-    if (!__fileSystemMounted__) {
-      connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
-      return false;
-    }
+      // ----- file system related commands -----
 
-    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-    if (SPIFFS.remove (fileName)) {
-      xSemaphoreGive (SPIFFSsemaphore);
-      connection->sendData (fileName); connection->sendData (" deleted.\r\n");
-      return true;
-    } else {
-      xSemaphoreGive (SPIFFSsemaphore);
-      connection->sendData ("Failed to delete "); connection->sendData (fileName);
-      return false;          
-    }
-  }
-
-  // ----- ping ----- according to: https://github.com/pbecchi/ESP32_ping
-
-  #include "lwip/inet_chksum.h"
-  #include "lwip/ip.h"
-  #include "lwip/ip4.h"
-  #include "lwip/err.h"
-  #include "lwip/icmp.h"
-  #include "lwip/sockets.h"
-  #include "lwip/sys.h"
-  #include "lwip/netdb.h"
-  #include "lwip/dns.h"
-
-  #define PING_DEFAULT_COUNT     4
-  #define PING_DEFAULT_INTERVAL  1
-  #define PING_DEFAULT_SIZE     32
-  #define PING_DEFAULT_TIMEOUT   1
-
-  struct __pingDataStructure__ {
-    uint16_t ID;
-    uint16_t pingSeqNum;
-    uint8_t stopped = 0;
-    uint32_t transmitted = 0;
-    uint32_t received = 0;
-    float minTime = 0;
-    float maxTime = 0;
-    float meanTime = 0;
-    float lastMeanTime = 0;
-    float varTime = 0;
-  };
-
-  static void __pingPrepareEcho__ (__pingDataStructure__ *pds, struct icmp_echo_hdr *iecho, uint16_t len) {
-    size_t i;
-    size_t data_len = len - sizeof (struct icmp_echo_hdr);
-  
-    ICMPH_TYPE_SET (iecho, ICMP_ECHO);
-    ICMPH_CODE_SET (iecho, 0);
-    iecho->chksum = 0;
-    iecho->id = pds->ID;
-    iecho->seqno = htons (++pds->pingSeqNum);
-  
-    /* fill the additional data buffer with some data */
-    for (i = 0; i < data_len; i++) ((char*) iecho)[sizeof (struct icmp_echo_hdr) + i] = (char) i;
-  
-    iecho->chksum = inet_chksum (iecho, len);
-  }
-
-  static err_t __pingSend__ (__pingDataStructure__ *pds, int s, ip4_addr_t *addr, int pingSize) {
-    struct icmp_echo_hdr *iecho;
-    struct sockaddr_in to;
-    size_t ping_size = sizeof (struct icmp_echo_hdr) + pingSize;
-    int err;
-  
-    if (!(iecho = (struct icmp_echo_hdr *) mem_malloc ((mem_size_t) ping_size))) return ERR_MEM;
-  
-    __pingPrepareEcho__ (pds, iecho, (uint16_t) ping_size);
-  
-    to.sin_len = sizeof (to);
-    to.sin_family = AF_INET;
-    to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
+      static bool __ls__ (TcpConnection *connection, String directory) {
+        if (!__fileSystemMounted__) {
+          connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+          return false;
+        }
     
-    if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
-  
-    return (err ? ERR_OK : ERR_VAL);
-  }
+        char d [33]; *d = 0; 
+        if (directory.length () < sizeof (d)) strcpy (d, directory.c_str ()); 
+        if (*d && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
+        if (!*d) *d = '/';
+        String s = "";
+    
+        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+          File dir = SPIFFS.open (d);
+          if (!dir) { // TO DO: debug - this doesn't work like expected
+            xSemaphoreGive (SPIFFSsemaphore);
+            connection->sendData ("Failed to open directory.");
+            return false;
+          }
+          if (!dir.isDirectory ()) {
+            xSemaphoreGive (SPIFFSsemaphore);
+            connection->sendData (directory); connection->sendData (" is a file, not a directory."); 
+            return false;
+          }
+          File file = dir.openNextFile ();
+          while (file) {
+            if(!file.isDirectory ()) {
+              if (s != "") s += "\r\n";
+              char c [10];
+              sprintf (c, "  %6i ", file.size ());
+              s += String (c) + String (file.name ());
+            }
+            file = dir.openNextFile ();
+          }
+        xSemaphoreGive (SPIFFSsemaphore);
+        connection->sendData (s);
+        return true;
+      }
 
-  bool __pingRecv__ (__pingDataStructure__ *pds, TcpConnection *telnetConnection, int s) {
-    char buf [64];
-    int fromlen, len;
-    struct sockaddr_in from;
-    struct ip_hdr *iphdr;
-    struct icmp_echo_hdr *iecho = NULL;
-    char ipa[16];
-    struct timeval begin;
-    struct timeval end;
-    uint64_t microsBegin;
-    uint64_t microsEnd;
-    float elapsed;
+      static bool __cat__ (TcpConnection *connection, String fileName) {
+        if (!__fileSystemMounted__) {
+          connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+          return false;
+        }
 
-    char cstr [255];    
-  
-    // Register begin time
-    gettimeofday (&begin, NULL);
-  
-    // Send
-    while ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr *) &from, (socklen_t *) &fromlen)) > 0) {
-      if (len >= (int)(sizeof(struct ip_hdr) + sizeof(struct icmp_echo_hdr))) {
-        // Register end time
-        gettimeofday (&end, NULL);
-  
-        /// Get from IP address
-        ip4_addr_t fromaddr;
-        fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
+        bool retVal = false;
+        File file;
+    
+        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+          if ((bool) (file = SPIFFS.open (fileName, FILE_READ))) {
+            if (!file.isDirectory ()) {
+              char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+              if (buff) {
+                *buff = 0;
+                int i = strlen (buff);
+                while (file.available ()) {
+                  switch (*(buff + i) = file.read ()) {
+                    case '\r':  // ignore
+                                break;
+                    case '\n':  // crlf conversion
+                                *(buff + i ++) = '\r'; 
+                                *(buff + i ++) = '\n';
+                                break;
+                    default:
+                                i ++;                  
+                  }
+                  if (i >= 2048 - 2) { connection->sendData ((char *) buff, i); i = 0; }
+                }
+                if (i) { connection->sendData ((char *) buff, i); }
+                free (buff);
+                retVal = true;
+              } 
+              file.close ();
+            } else {
+              connection->sendData ("Failed to open " + fileName);
+            }
+            file.close ();
+          } 
+        xSemaphoreGive (SPIFFSsemaphore);
+        return retVal;
+      }
+
+      static bool __rm__ (TcpConnection *connection, String fileName) {
+        if (!__fileSystemMounted__) {
+          connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+          return false;
+        }
+    
+        xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+          if (SPIFFS.remove (fileName)) {
+            xSemaphoreGive (SPIFFSsemaphore);
+              connection->sendData (fileName + " deleted.");
+              return true;
+          } else {
+            xSemaphoreGive (SPIFFSsemaphore);
+              connection->sendData ("Failed to delete " + fileName);
+              return false;          
+          }
+      }
+
+      // ----- network related commands -----
+
+      // ----- ping ----- according to: https://github.com/pbecchi/ESP32_ping
+      #define PING_DEFAULT_COUNT     4
+      #define PING_DEFAULT_INTERVAL  1
+      #define PING_DEFAULT_SIZE     32
+      #define PING_DEFAULT_TIMEOUT   1
+
+      struct __pingDataStructure__ {
+        uint16_t ID;
+        uint16_t pingSeqNum;
+        uint8_t stopped = 0;
+        uint32_t transmitted = 0;
+        uint32_t received = 0;
+        float minTime = 0;
+        float maxTime = 0;
+        float meanTime = 0;
+        float lastMeanTime = 0;
+        float varTime = 0;
+      };
+
+      static void __pingPrepareEcho__ (__pingDataStructure__ *pds, struct icmp_echo_hdr *iecho, uint16_t len) {
+        size_t i;
+        size_t data_len = len - sizeof (struct icmp_echo_hdr);
+      
+        ICMPH_TYPE_SET (iecho, ICMP_ECHO);
+        ICMPH_CODE_SET (iecho, 0);
+        iecho->chksum = 0;
+        iecho->id = pds->ID;
+        iecho->seqno = htons (++pds->pingSeqNum);
+      
+        /* fill the additional data buffer with some data */
+        for (i = 0; i < data_len; i++) ((char*) iecho)[sizeof (struct icmp_echo_hdr) + i] = (char) i;
+      
+        iecho->chksum = inet_chksum (iecho, len);
+      }
+
+      static err_t __pingSend__ (__pingDataStructure__ *pds, int s, ip4_addr_t *addr, int pingSize) {
+        struct icmp_echo_hdr *iecho;
+        struct sockaddr_in to;
+        size_t ping_size = sizeof (struct icmp_echo_hdr) + pingSize;
+        int err;
+      
+        if (!(iecho = (struct icmp_echo_hdr *) mem_malloc ((mem_size_t) ping_size))) return ERR_MEM;
+      
+        __pingPrepareEcho__ (pds, iecho, (uint16_t) ping_size);
+      
+        to.sin_len = sizeof (to);
+        to.sin_family = AF_INET;
+        to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
         
-        strcpy (ipa, inet_ntos (fromaddr).c_str ()); 
-  
-        // Get echo
-        iphdr = (struct ip_hdr *) buf;
-        iecho = (struct icmp_echo_hdr *) (buf + (IPH_HL(iphdr) * 4));
-  
-        // Print ....
-        if ((iecho->id == pds->ID) && (iecho->seqno == htons (pds->pingSeqNum))) {
-          pds->received ++;
-  
-          // Get elapsed time in milliseconds
-          microsBegin = begin.tv_sec * 1000000;
-          microsBegin += begin.tv_usec;
-  
-          microsEnd = end.tv_sec * 1000000;
-          microsEnd += end.tv_usec;
-  
-          elapsed = (float) (microsEnd - microsBegin) / (float) 1000.0;
-  
-          // Update statistics
-          // Mean and variance are computed in an incremental way
-          if (elapsed < pds->minTime) pds->minTime = elapsed;
-          if (elapsed > pds->maxTime) pds->maxTime = elapsed;
-  
-          pds->lastMeanTime = pds->meanTime;
-          pds->meanTime = (((pds->received - 1) * pds->meanTime) + elapsed) / pds->received;
-  
-          if (pds->received > 1) pds->varTime = pds->varTime + ((elapsed - pds->lastMeanTime) * (elapsed - pds->meanTime));
-  
-          // Print ...
-          sprintf (cstr, "%d bytes from %s: icmp_seq=%d time=%.3f ms\r\n", len, ipa, ntohs (iecho->seqno), elapsed);
+        if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
+      
+        return (err ? ERR_OK : ERR_VAL);
+      }
+    
+      static bool __pingRecv__ (__pingDataStructure__ *pds, TcpConnection *telnetConnection, int s) {
+        char buf [64];
+        int fromlen, len;
+        struct sockaddr_in from;
+        struct ip_hdr *iphdr;
+        struct icmp_echo_hdr *iecho = NULL;
+        char ipa[16];
+        struct timeval begin;
+        struct timeval end;
+        uint64_t microsBegin;
+        uint64_t microsEnd;
+        float elapsed;
+    
+        char cstr [255];    
+      
+        // Register begin time
+        gettimeofday (&begin, NULL);
+      
+        // Send
+        while ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr *) &from, (socklen_t *) &fromlen)) > 0) {
+          if (len >= (int)(sizeof(struct ip_hdr) + sizeof(struct icmp_echo_hdr))) {
+            // Register end time
+            gettimeofday (&end, NULL);
+      
+            /// Get from IP address
+            ip4_addr_t fromaddr;
+            fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
+            
+            strcpy (ipa, inet_ntos (fromaddr).c_str ()); 
+      
+            // Get echo
+            iphdr = (struct ip_hdr *) buf;
+            iecho = (struct icmp_echo_hdr *) (buf + (IPH_HL(iphdr) * 4));
+      
+            // Print ....
+            if ((iecho->id == pds->ID) && (iecho->seqno == htons (pds->pingSeqNum))) {
+              pds->received ++;
+      
+              // Get elapsed time in milliseconds
+              microsBegin = begin.tv_sec * 1000000;
+              microsBegin += begin.tv_usec;
+      
+              microsEnd = end.tv_sec * 1000000;
+              microsEnd += end.tv_usec;
+      
+              elapsed = (float) (microsEnd - microsBegin) / (float) 1000.0;
+      
+              // Update statistics
+              // Mean and variance are computed in an incremental way
+              if (elapsed < pds->minTime) pds->minTime = elapsed;
+              if (elapsed > pds->maxTime) pds->maxTime = elapsed;
+      
+              pds->lastMeanTime = pds->meanTime;
+              pds->meanTime = (((pds->received - 1) * pds->meanTime) + elapsed) / pds->received;
+      
+              if (pds->received > 1) pds->varTime = pds->varTime + ((elapsed - pds->lastMeanTime) * (elapsed - pds->meanTime));
+      
+              // Print ...
+              sprintf (cstr, "%d bytes from %s: icmp_seq=%d time=%.3f ms\r\n", len, ipa, ntohs (iecho->seqno), elapsed);
+              if (!telnetConnection->sendData (cstr)) return false;
+              
+              return true;
+            }
+            else {
+              // TODO: 
+            }
+          }
+        }
+      
+        if (len < 0) {
+          sprintf (cstr, "Request timeout for icmp_seq %d\r\n", pds->pingSeqNum);
+          telnetConnection->sendData (cstr);
+        }
+      }  
+    
+      static bool __ping__ (TcpConnection *telnetConnection, char *targetIP, int pingCount = PING_DEFAULT_COUNT, int pingInterval = PING_DEFAULT_INTERVAL, int pingSize = PING_DEFAULT_SIZE, int timeOut = PING_DEFAULT_TIMEOUT) {
+        struct sockaddr_in address;
+        ip4_addr_t pingTarget;
+        int s;
+        char cstr [256];
+      
+        // Create socket
+        if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
+          return false; // Error creating socket.
+        }
+      
+        pingTarget.addr = inet_addr (targetIP); 
+      
+        // Setup socket
+        struct timeval tOut;
+      
+        // Timeout
+        tOut.tv_sec = timeOut;
+        tOut.tv_usec = 0;
+      
+        if (setsockopt (s, SOL_SOCKET, SO_RCVTIMEO, &tOut, sizeof (tOut)) < 0) {
+          closesocket (s);
+          return false; // Error setting socket options
+        }
+    
+        __pingDataStructure__ pds = {};
+        pds.ID = random (0, 0xFFFF); // each consequently running ping command should have its own unique ID otherwise we won't be able to distinguish packets 
+        pds.minTime = 1.E+9; // FLT_MAX;
+      
+        // Begin ping ...
+      
+        sprintf (cstr, "ping %s: %d data bytes\r\n",  targetIP, pingSize);
+        if (!telnetConnection->sendData (cstr)) return false;
+        
+        while ((pds.pingSeqNum < pingCount) && (!pds.stopped)) {
+          if (__pingSend__ (&pds, s, &pingTarget, pingSize) == ERR_OK) if (!__pingRecv__ (&pds, telnetConnection, s)) return false;
+          SPIFFSsafeDelay (pingInterval * 1000L);
+        }
+      
+        closesocket (s);
+      
+        sprintf (cstr, "%d packets transmitted, %d packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
+        if (!telnetConnection->sendData (cstr)) return false;
+      
+        if (pds.received) {
+          sprintf (cstr, "round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms", pds.minTime, pds.meanTime, pds.maxTime, sqrt (pds.varTime / pds.received));
           if (!telnetConnection->sendData (cstr)) return false;
-          
           return true;
         }
-        else {
-          // TODO: 
-        }
+        return false;
       }
-    }
-  
-    if (len < 0) {
-      sprintf (cstr, "Request timeout for icmp_seq %d\r\n", pds->pingSeqNum);
-      telnetConnection->sendData (cstr);
-    }
-  }  
 
-  bool __ping__ (TcpConnection *telnetConnection, char *targetIP, int pingCount = PING_DEFAULT_COUNT, int pingInterval = PING_DEFAULT_INTERVAL, int pingSize = PING_DEFAULT_SIZE, int timeOut = PING_DEFAULT_TIMEOUT) {
-    struct sockaddr_in address;
-    ip4_addr_t pingTarget;
-    int s;
-    char cstr [256];
-  
-    // Create socket
-    if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
-      return false; // Error creating socket.
-    }
-  
-    pingTarget.addr = inet_addr (targetIP); 
-  
-    // Setup socket
-    struct timeval tOut;
-  
-    // Timeout
-    tOut.tv_sec = timeOut;
-    tOut.tv_usec = 0;
-  
-    if (setsockopt (s, SOL_SOCKET, SO_RCVTIMEO, &tOut, sizeof (tOut)) < 0) {
-      closesocket (s);
-      return false; // Error setting socket options
-    }
-
-    __pingDataStructure__ pds = {};
-    pds.ID = random (0, 0xFFFF); // each consequently running ping command should have its own unique ID otherwise we won't be able to distinguish packets 
-    pds.minTime = 1.E+9; // FLT_MAX;
-  
-    // Begin ping ...
-  
-    sprintf (cstr, "ping %s: %d data bytes\r\n",  targetIP, pingSize);
-    if (!telnetConnection->sendData (cstr)) return false;
+      // ----- telnet (from ESP to other server) ----- sice client is already connected through telnet clientConnection all we have to do is to pass all the trafic between other server to client both ways
+      struct __telnetStruct__ {
+        TcpConnection *clientConnection;
+        bool clientConnectionRunning;
+        TcpConnection *otherServerConnection;
+        bool otherServerConnectionRunning;
+        bool receivedDataFromOtherServer;
+      };
+      
+      static void __telnet__ (TcpConnection *clientConnection, String otherServerName, int otherServerPort) {
+        // open TCP connection to the other server
+        TcpClient *otherServer = new TcpClient ((char *) otherServerName.c_str (), otherServerPort, 300000); // close also this connection if inactive for more than 5 minutes
+        if (!otherServer || !otherServer->connection () || !otherServer->connection ()->started ()) {
+          clientConnection->sendData ("Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".");
+          return;
+        }
     
-    while ((pds.pingSeqNum < pingCount) && (!pds.stopped)) {
-      if (__pingSend__ (&pds, s, &pingTarget, pingSize) == ERR_OK) if (!__pingRecv__ (&pds, telnetConnection, s)) return false;
-      SPIFFSsafeDelay (pingInterval * 1000L);
-    }
-  
-    closesocket (s);
-  
-    sprintf (cstr, "%d packets transmitted, %d packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
-    if (!telnetConnection->sendData (cstr)) return false;
-  
-    if (pds.received) {
-      sprintf (cstr, "round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms", pds.minTime, pds.meanTime, pds.maxTime, sqrt (pds.varTime / pds.received));
-      if (!telnetConnection->sendData (cstr)) return false;
-      return true;
-    }
-    return false;
-  }
-
-  // ----- free -----
-
-  // displays free heap memory
-  bool __free__ (TcpConnection *connection, int delaySeconds) {
-    String s = "free memory: " + String (ESP.getFreeHeap ()) + " bytes";
-    if (!connection->sendData (s)) return false;
-
-    // - s?
-    while (delaySeconds) {
-      for (int i = 0; i < 880; i++) { // 880 instead of 1000 - a correction for more precise timing
-        while (connection->available () == TcpConnection::AVAILABLE) {
-          char c;
-          if (!connection->recvData (&c, sizeof (c))) return false;
-          if (c == 3 || c >= ' ') return true; // return if user pressed Ctrl-C or any key
-        }
-        SPIFFSsafeDelay (delaySeconds); // / 1000
-      }
-      s = "\r\nfree memory: " + String (ESP.getFreeHeap ()) + " bytes";
-      if (!connection->sendData (s)) return false;
-    }
-    return true;
-  }
-  
-  // ----- dmesg data structure and functions -----
-  
-  typedef struct __dmesgType__ {
-    unsigned long milliseconds;    
-    String        message;
-  };
-
-  #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 256
-  RTC_DATA_ATTR unsigned int bootCount = 0;
-  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String (TELNET_RTC.isGmtTimeSet () ? "[ESP32] (re)started " + String (++bootCount) + " times at: " + timeToString (TELNET_RTC.getLocalTime ()) + "." : "[ESP32] (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}}; // there is always at lease 1 message in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
-  byte __dmesgBeginning__ = 0; // first used location
-  byte __dmesgEnd__ = 1;       // the location next to be used
-  portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
-
-  // displays dmesg circular queue over telnet connection
-  bool __dmesg__ (TcpConnection *connection, bool follow) {
-    // make a copy of all messages in circular queue in critical section
-    portENTER_CRITICAL (&__csDmesg__);  
-    byte i = __dmesgBeginning__;
-    String s = "";
-    do {
-      if (s != "") s+= "\r\n";
-      char c [15];
-      sprintf (c, "[%10d] ", __dmesgCircularQueue__ [i].milliseconds);
-      s += String (c) + __dmesgCircularQueue__ [i].message;
-    } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
-    portEXIT_CRITICAL (&__csDmesg__);
-    // send everything to the client
-    if (!connection->sendData (s)) return false;
-
-    // --follow?
-    while (follow) {
-      while (i == __dmesgEnd__) {
-        while (connection->available () == TcpConnection::AVAILABLE) {
-          char c;
-          if (!connection->recvData (&c, sizeof (c))) return false;
-          if (c == 3 || c >= ' ') return true; // return if user pressed Ctrl-C or any key
-        }
-        SPIFFSsafeDelay (10); // wait a while and check again
-      }
-      // __dmesgEnd__ has changed which means that at least one new message has been inserted into dmesg circular queue menawhile
-      portENTER_CRITICAL (&__csDmesg__);
-      s = "";
-      do {
-        s += "\r\n";
-        char c [15];
-        sprintf (c, "[%10d] ", __dmesgCircularQueue__ [i].milliseconds);
-        s += String (c) + __dmesgCircularQueue__ [i].message;
-      } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
-      portEXIT_CRITICAL (&__csDmesg__);
-      // send everything to the client
-      if (!connection->sendData (s)) return false;
-    }
-    return true;
-  }
-
-  // adds message into dmesg circular queue
-  void dmesg (String message) {
-    portENTER_CRITICAL (&__csDmesg__); 
-    __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
-    __dmesgCircularQueue__ [__dmesgEnd__].message = message;
-    if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
-    portEXIT_CRITICAL (&__csDmesg__);
-    Serial.printf ("[%10d] %s\n", millis (), message.c_str ());
-  }
-
-  // redirect other moduls' dmesg here before setup () begins
-  bool __redirectDmesg__ () {
-    #ifdef __FILE_SYSTEM__
-      fileSystemDmesg = dmesg;
-    #endif  
-    #ifdef __NETWORK__
-      networkDmesg = dmesg;
-    #endif
-    #ifdef __FTP_SERVER__
-      ftpDmesg = dmesg;
-    #endif    
-    #ifdef __WEB_SERVER__
-      webDmesg = dmesg;
-    #endif  
-    #ifdef __REAL_TIME_CLOCK__
-      rtcDmesg = dmesg;
-    #endif      
-    return true;
-  }
-  bool __redirectedDmesg__ = __redirectDmesg__ ();
-
-  // ----- iw ----- output doesn't really correspond to any iw command form but displays some usefull information about WiFi interfaces
-
-  SemaphoreHandle_t __createWiFiSnifferSemaphore__ () {
-    SemaphoreHandle_t s;
-    vSemaphoreCreateBinary (s);  
-    return s;
-  }
-  SemaphoreHandle_t WiFiSnifferSemaphore = __createWiFiSnifferSemaphore__ (); // create sempahore during initialization while ESP32 still runs in a single thread
-  
-  typedef struct {
-    unsigned frame_ctrl:16;
-    unsigned duration_id:16;
-    uint8_t addr1[6]; /* receiver address */
-    uint8_t addr2[6]; /* sender address */
-    uint8_t addr3[6]; /* filtering address */
-    unsigned sequence_ctrl:16;
-    uint8_t addr4[6]; /* optional */
-  } wifi_ieee80211_mac_hdr_t;
-  
-  typedef struct {
-    wifi_ieee80211_mac_hdr_t hdr;
-    uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
-  } wifi_ieee80211_packet_t;      
-
-  String __macToFindRssiFor__;
-  int __rssiForMac__;
-
-  int __sniffWiFiForRssi__ (String stationMac) {  // sniff WiFi trafic for station RSSI - since we are sniffing connected stations we can stay on AP WiFi channel
-                                                  // sniffing WiFi is not well documented, there are some working examples on internet however:
-                                                  // https://www.hackster.io/p99will/esp32-wifi-mac-scanner-sniffer-promiscuous-4c12f4
-                                                  // https://esp32.com/viewtopic.php?t=1314
-                                                  // https://blog.podkalicki.com/esp32-wifi-sniffer/
-    int rssi;                                          
-    xSemaphoreTake (WiFiSnifferSemaphore, portMAX_DELAY);
-
-      __macToFindRssiFor__ = stationMac;
-      __rssiForMac__ = 0;
-      esp_wifi_set_promiscuous (true);
-      const wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};      
-      esp_wifi_set_promiscuous_filter (&filter);
-      // esp_wifi_set_promiscuous_rx_cb (&__WiFiSniffer__);
-      esp_wifi_set_promiscuous_rx_cb ([] (void* buf, wifi_promiscuous_pkt_type_t type) {
-                                                                                          const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *) buf;
-                                                                                          const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *) ppkt->payload;
-                                                                                          const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
-                                                                                          // TO DO: I'm not 100% sure that this works in all cases since sourc mac address may not be
-                                                                                          //        always in the same place for all types and subtypes of frame
-                                                                                          if (__macToFindRssiFor__ == MacAddressAsString ((byte *) hdr->addr2, 6)) __rssiForMac__ = ppkt->rx_ctrl.rssi;
-                                                                                          return;
-                                                                                        });
-        unsigned long startTime = millis ();
-        while (__rssiForMac__ == 0 && millis () - startTime < 5000) SPIFFSsafeDelay (1); // sniff max 5 second, it should be enough
-        // Serial.printf ("RSSI obtained in %i milliseconds\n", millis () - startTime);
-        rssi = __rssiForMac__;
-
-      esp_wifi_set_promiscuous (false);
-
-    xSemaphoreGive (WiFiSnifferSemaphore);
-    return rssi;
-  }
-
-  void __iw__ (TcpConnection *connection) {
-    String s = "";
-    struct netif *netif;
-    for (netif = netif_list; netif; netif = netif->next) {
-      if (netif_is_up (netif)) {
-        if (s != "") s += "\r\n";
-        // display the following information for STA and AP interface (similar to ifconfig)
-        s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "     hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
-             "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
-             "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n";
-                // display the following information for STA interface
-                if (inet_ntos (netif->ip_addr) == WiFi.localIP ().toString ()) {
-                  if (WiFi.status () == WL_CONNECTED) {
-                    int rssi = WiFi.RSSI ();
-                    String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
-                    s += String ("           STAtion is connected to router:\r\n\r\n") + 
-                                 "              inet addr: " + WiFi.gatewayIP ().toString () + "\r\n" +
-                                 "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
-                  } else {
-                    s += "           STAtion is disconnected from router\r\n";
-                  }
-                // display the following information for local loopback interface
-                } else if (inet_ntos (netif->ip_addr) == "127.0.0.1") {
-                    s += "           local loopback\r\n";
-                // display the following information for AP interface
-                } else {
-                  wifi_sta_list_t wifi_sta_list = {};
-                  tcpip_adapter_sta_list_t adapter_sta_list = {};
-                  esp_wifi_ap_get_sta_list (&wifi_sta_list);
-                  tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
-                  if (adapter_sta_list.num) {
-                    s += "           stations connected to Access Point (" + String (adapter_sta_list.num) + "):\r\n";
-                    for (int i = 0; i < adapter_sta_list.num; i++) {
-                      tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
-                      s += String ("\r\n") + 
-                                   "              hwaddr: " + MacAddressAsString ((byte *) &station.mac, 6)
-                                                                                                             #ifdef TELNET_DEVICE_NICK_NAME // TO DO: try to get hostname (for example by callig gethostbyaddr) from connected device, for now this is how we get some meaning out of MAC and IP numbers
-                                                                                                               + " " + TELNET_DEVICE_NICK_NAME (MacAddressAsString ((byte *) &station.mac, 6))
-                                                                                                             #endif
-                                                                                                             + "\r\n" + 
-                                   "              inet addr: " + inet_ntos (station.ip) + "\r\n";
-
-                                   connection->sendData (s);
-                                   s = "";
-                                   int rssi = __sniffWiFiForRssi__ (MacAddressAsString ((byte *) &station.mac, 6));
-                                   String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
-                                   s = "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
-                    }
-                  } else {
-                    s += "           there are no stations connected to Access Point\r\n";
-                  }
-                }
-      }
-    }
-    connection->sendData (s);
-    return;
-  }
-
-  // sice client is already connected through telnet clientConnection all we have to do is to pass all the trafic between other server to client both ways
-  struct __telnetStruct__ {
-    TcpConnection *clientConnection;
-    bool clientConnectionRunning;
-    TcpConnection *otherServerConnection;
-    bool otherServerConnectionRunning;
-    bool receivedDataFromOtherServer;
-  };
-  void __telnet__ (TcpConnection *clientConnection, String otherServerName, int otherServerPort) {
-
-    // open TCP connection to the other server
-    TcpClient *otherServer = new TcpClient ((char *) otherServerName.c_str (), otherServerPort, 300000); // close also this connection if inactive for more than 5 minutes
-    if (!otherServer || !otherServer->connection () || !otherServer->connection ()->started ()) {
-      clientConnection->sendData ("Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".");
-      return;
-    }
-
-    struct __telnetStruct__ telnetSessionSharedMemory = {clientConnection, true, otherServer->connection (), true, false};
-    #define tskNORMAL_PRIORITY 1
-    if (pdPASS != xTaskCreate ( [] (void *param)  { // other server -> client data transfer  
-                                                    struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
-                                                    while (telnetSessionSharedMemory->clientConnectionRunning) { // while the other thread is running
-                                                        char buff [512];
-                                                        if (telnetSessionSharedMemory->otherServerConnection->available () == TcpConnection::AVAILABLE) {
-                                                          int received = telnetSessionSharedMemory->otherServerConnection->recvData (buff, sizeof (buff));
-                                                          if (!received) break;
-                                                          telnetSessionSharedMemory->receivedDataFromOtherServer = true;
-                                                          int sent = telnetSessionSharedMemory->clientConnection->sendData (buff, received);
-                                                          if (!sent) break;
-                                                        } else {
-                                                          SPIFFSsafeDelay (1);
+        struct __telnetStruct__ telnetSessionSharedMemory = {clientConnection, true, otherServer->connection (), true, false};
+        #define tskNORMAL_PRIORITY 1
+        if (pdPASS != xTaskCreate ( [] (void *param)  { // other server -> client data transfer  
+                                                        struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
+                                                        while (telnetSessionSharedMemory->clientConnectionRunning) { // while the other thread is running
+                                                            char buff [512];
+                                                            if (telnetSessionSharedMemory->otherServerConnection->available () == TcpConnection::AVAILABLE) {
+                                                              int received = telnetSessionSharedMemory->otherServerConnection->recvData (buff, sizeof (buff));
+                                                              if (!received) break;
+                                                              telnetSessionSharedMemory->receivedDataFromOtherServer = true;
+                                                              int sent = telnetSessionSharedMemory->clientConnection->sendData (buff, received);
+                                                              if (!sent) break;
+                                                            } else {
+                                                              SPIFFSsafeDelay (1);
+                                                            }
                                                         }
-                                                    }
-                                                    telnetSessionSharedMemory->otherServerConnectionRunning = false; // signal that this thread has stopped
-                                                    vTaskDelete (NULL);
-                                                  }, 
-                                "__telnet__", 
-                                4068, 
-                                &telnetSessionSharedMemory,
-                                tskNORMAL_PRIORITY,
-                                NULL)) {
-      clientConnection->sendData ("Could not start telnet session with " + otherServerName + ".");   
-      delete (otherServer);                               
-      return;
-    } 
-    if (pdPASS != xTaskCreate ( [] (void *param)  { // client -> other server data transfer
-                                                    struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
-                                                    while (telnetSessionSharedMemory->otherServerConnectionRunning) { // while the other thread is running
-                                                        char buff [512];
-                                                        if (telnetSessionSharedMemory->clientConnection->available () == TcpConnection::AVAILABLE) {
-                                                          int received = telnetSessionSharedMemory->clientConnection->recvData (buff, sizeof (buff));
-                                                          if (!received) break;
-                                                          int sent = telnetSessionSharedMemory->otherServerConnection->sendData (buff, received);
-                                                          if (!sent) break;
-                                                        } else {
-                                                          SPIFFSsafeDelay (1);
+                                                        telnetSessionSharedMemory->otherServerConnectionRunning = false; // signal that this thread has stopped
+                                                        vTaskDelete (NULL);
+                                                      }, 
+                                    "__telnet__", 
+                                    4068, 
+                                    &telnetSessionSharedMemory,
+                                    tskNORMAL_PRIORITY,
+                                    NULL)) {
+          clientConnection->sendData ("Could not start telnet session with " + otherServerName + ".");   
+          delete (otherServer);                               
+          return;
+        } 
+        if (pdPASS != xTaskCreate ( [] (void *param)  { // client -> other server data transfer
+                                                        struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
+                                                        while (telnetSessionSharedMemory->otherServerConnectionRunning) { // while the other thread is running
+                                                            char buff [512];
+                                                            if (telnetSessionSharedMemory->clientConnection->available () == TcpConnection::AVAILABLE) {
+                                                              int received = telnetSessionSharedMemory->clientConnection->recvData (buff, sizeof (buff));
+                                                              if (!received) break;
+                                                              int sent = telnetSessionSharedMemory->otherServerConnection->sendData (buff, received);
+                                                              if (!sent) break;
+                                                            } else {
+                                                              SPIFFSsafeDelay (1);
+                                                            }
                                                         }
-                                                    }
-                                                    telnetSessionSharedMemory->clientConnectionRunning = false; // signal that this thread has stopped
-                                                    vTaskDelete (NULL);
-                                                  }, 
-                                "__telnet__", 
-                                4068, 
-                                &telnetSessionSharedMemory,
-                                tskNORMAL_PRIORITY,
-                                NULL)) {
-      clientConnection->sendData ("Could not start telnet session with " + otherServerName + ".");   
-      telnetSessionSharedMemory.clientConnectionRunning = false;                          // signal other server -> client thread to stop
-      while (telnetSessionSharedMemory.otherServerConnectionRunning) SPIFFSsafeDelay (1); // wait untill it stops
-      delete (otherServer);                               
-      return;
-    } 
-    while (telnetSessionSharedMemory.otherServerConnectionRunning || telnetSessionSharedMemory.clientConnectionRunning) SPIFFSsafeDelay (10); // wait untill both threads stop
-
-    if (telnetSessionSharedMemory.receivedDataFromOtherServer) {
-      // send to the client IAC DONT ECHO again just in case ther server has changed this
-      #define IAC 255
-      #define DONT 254
-      #define ECHO 1
-      char s [6];      
-      sprintf (s, "%c%c%c", IAC, DONT, ECHO);
-      clientConnection->sendData (String (s) + "\r\nConnection to " + otherServerName + " lost.");
-    } else {
-      clientConnection->sendData ("Could not connect to " + otherServerName + ".");
-    }
-  }
-
-  String __curl__ (TcpConnection *thisTelnetConnection, String method, String url) {
-    Serial.printf ("[%10d] [CURL] %s %s.\n", millis (), method.c_str (), url.c_str ());
-    if (method == "GET" || method == "PUT" || method == "POST" || method == "DEELTE") {
-      if (url.substring (0, 7) == "http://") {
-        url = url.substring (7);
-        String server = "";
-        int port = 80;
-        int i = url.indexOf ('/');
-        if (i < 0) {
-          server = url;
-          url = "/";
+                                                        telnetSessionSharedMemory->clientConnectionRunning = false; // signal that this thread has stopped
+                                                        vTaskDelete (NULL);
+                                                      }, 
+                                    "__telnet__", 
+                                    4068, 
+                                    &telnetSessionSharedMemory,
+                                    tskNORMAL_PRIORITY,
+                                    NULL)) {
+          clientConnection->sendData ("Could not start telnet session with " + otherServerName + ".");   
+          telnetSessionSharedMemory.clientConnectionRunning = false;                          // signal other server -> client thread to stop
+          while (telnetSessionSharedMemory.otherServerConnectionRunning) SPIFFSsafeDelay (1); // wait untill it stops
+          delete (otherServer);                               
+          return;
+        } 
+        while (telnetSessionSharedMemory.otherServerConnectionRunning || telnetSessionSharedMemory.clientConnectionRunning) SPIFFSsafeDelay (10); // wait untill both threads stop
+    
+        if (telnetSessionSharedMemory.receivedDataFromOtherServer) {
+          // send to the client IAC DONT ECHO again just in case ther server has changed this
+          #define IAC 255
+          #define DONT 254
+          #define ECHO 1
+          char s [6];      
+          sprintf (s, "%c%c%c", IAC, DONT, ECHO);
+          clientConnection->sendData (String (s) + "\r\nConnection to " + otherServerName + " lost.");
         } else {
-          server = url.substring (0, i);
-          url = url.substring (i);
+          clientConnection->sendData ("Could not connect to " + otherServerName + ".");
         }
-        i = server.indexOf (":");
-        if (i >= 0) {
-          port = server.substring (i + 1).toInt ();
-          if (port <= 0) {
-            thisTelnetConnection->sendData ("Invalid port number.");
+      }
+          
+      // ---- curl -----
+      static String __curl__ (TcpConnection *thisTelnetConnection, String method, String url) {
+        Serial.printf ("[%10d] [CURL] %s %s.\n", millis (), method.c_str (), url.c_str ());
+        if (method == "GET" || method == "PUT" || method == "POST" || method == "DEELTE") {
+          if (url.substring (0, 7) == "http://") {
+            url = url.substring (7);
+            String server = "";
+            int port = 80;
+            int i = url.indexOf ('/');
+            if (i < 0) {
+              server = url;
+              url = "/";
+            } else {
+              server = url.substring (0, i);
+              url = url.substring (i);
+            }
+            i = server.indexOf (":");
+            if (i >= 0) {
+              port = server.substring (i + 1).toInt ();
+              if (port <= 0) {
+                thisTelnetConnection->sendData ("Invalid port number.");
+                return "";
+              }
+              server = server.substring (0, i);
+            } 
+    
+                // call webClient
+                Serial.printf ("[%10d] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
+                String r = webClient ((char *) server.c_str (), port, 15000, method + " " + url);
+                if (r > "") thisTelnetConnection->sendData (r);
+                else        thisTelnetConnection->sendData ("Error, check dmesg to get more information.");
+    
+          } else {
+            thisTelnetConnection->sendData ("URL must begin with http://");
             return "";
           }
-          server = server.substring (0, i);
-        } 
-
-            // call webClient
-            Serial.printf ("[%10d] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
-            String r = webClient ((char *) server.c_str (), port, 15000, method + " " + url);
-            if (r > "") thisTelnetConnection->sendData (r);
-            else        thisTelnetConnection->sendData ("Error, check dmesg to get more information.");
-
-      } else {
-        thisTelnetConnection->sendData ("URL must begin with http://");
-        return "";
+        } else {
+          thisTelnetConnection->sendData ("Use GET, PUT, POST or DELETE methods.");
+          return "";
+        }
       }
-    } else {
-      thisTelnetConnection->sendData ("Use GET, PUT, POST or DELETE methods.");
-      return "";
-    }
-  }
-  
+      
+      // ----- system related commands -----
+
+      // displays free heap memory
+      static bool __free__ (TcpConnection *connection, int delaySeconds) {
+        String s = "free memory: " + String (ESP.getFreeHeap ()) + " bytes";
+        if (!connection->sendData (s)) return false;
+    
+        // - s?
+        while (delaySeconds) {
+          for (int i = 0; i < 880; i++) { // 880 instead of 1000 - a correction for more precise timing
+            while (connection->available () == TcpConnection::AVAILABLE) {
+              char c;
+              if (!connection->recvData (&c, sizeof (c))) return false;
+              if (c == 3 || c >= ' ') return true; // return if user pressed Ctrl-C or any key
+            }
+            SPIFFSsafeDelay (delaySeconds); // / 1000
+          }
+          s = "\r\nfree memory: " + String (ESP.getFreeHeap ()) + " bytes";
+          if (!connection->sendData (s)) return false;
+        }
+        return true;
+      }
+           
+  };
+
+      // TO DO: make __iw__ static member function
+
+      // ----- iw ----- output doesn't really correspond to any iw command form but displays some usefull information about WiFi interfaces
+      SemaphoreHandle_t __createWiFiSnifferSemaphore__ () {
+        SemaphoreHandle_t s;
+        vSemaphoreCreateBinary (s);  
+        return s;
+      }
+      SemaphoreHandle_t WiFiSnifferSemaphore = __createWiFiSnifferSemaphore__ (); // create sempahore during initialization while ESP32 still runs in a single thread
+      
+      typedef struct {
+        unsigned frame_ctrl:16;
+        unsigned duration_id:16;
+        uint8_t addr1[6]; /* receiver address */
+        uint8_t addr2[6]; /* sender address */
+        uint8_t addr3[6]; /* filtering address */
+        unsigned sequence_ctrl:16;
+        uint8_t addr4[6]; /* optional */
+      } wifi_ieee80211_mac_hdr_t;
+      
+      typedef struct {
+        wifi_ieee80211_mac_hdr_t hdr;
+        uint8_t payload[0]; /* network data ended with 4 bytes csum (CRC32) */
+      } wifi_ieee80211_packet_t;      
+    
+      String __macToFindRssiFor__;
+      int __rssiForMac__;
+    
+      int __sniffWiFiForRssi__ (String stationMac) { // sniff WiFi trafic for station RSSI - since we are sniffing connected stations we can stay on AP WiFi channel
+                                                     // sniffing WiFi is not well documented, there are some working examples on internet however:
+                                                     // https://www.hackster.io/p99will/esp32-wifi-mac-scanner-sniffer-promiscuous-4c12f4
+                                                     // https://esp32.com/viewtopic.php?t=1314
+                                                     // https://blog.podkalicki.com/esp32-wifi-sniffer/
+        int rssi;                                          
+        xSemaphoreTake (WiFiSnifferSemaphore, portMAX_DELAY);
+    
+          __macToFindRssiFor__ = stationMac;
+          __rssiForMac__ = 0;
+          esp_wifi_set_promiscuous (true);
+          const wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};      
+          esp_wifi_set_promiscuous_filter (&filter);
+          // esp_wifi_set_promiscuous_rx_cb (&__WiFiSniffer__);
+          esp_wifi_set_promiscuous_rx_cb ([] (void* buf, wifi_promiscuous_pkt_type_t type) {
+                                                                                              const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *) buf;
+                                                                                              const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *) ppkt->payload;
+                                                                                              const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
+                                                                                              // TO DO: I'm not 100% sure that this works in all cases since sourc mac address may not be
+                                                                                              //        always in the same place for all types and subtypes of frame
+                                                                                              if (__macToFindRssiFor__ == MacAddressAsString ((byte *) hdr->addr2, 6)) __rssiForMac__ = ppkt->rx_ctrl.rssi;
+                                                                                              return;
+                                                                                            });
+            unsigned long startTime = millis ();
+            while (__rssiForMac__ == 0 && millis () - startTime < 5000) SPIFFSsafeDelay (1); // sniff max 5 second, it should be enough
+            // Serial.printf ("RSSI obtained in %i milliseconds\n", millis () - startTime);
+            rssi = __rssiForMac__;
+    
+          esp_wifi_set_promiscuous (false);
+    
+        xSemaphoreGive (WiFiSnifferSemaphore);
+        return rssi;
+      }
+    
+      void __iw__ (TcpConnection *connection) {
+        String s = "";
+        struct netif *netif;
+        for (netif = netif_list; netif; netif = netif->next) {
+          if (netif_is_up (netif)) {
+            if (s != "") s += "\r\n";
+            // display the following information for STA and AP interface (similar to ifconfig)
+            s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "     hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
+                 "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
+                 "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n";
+                    // display the following information for STA interface
+                    if (inet_ntos (netif->ip_addr) == WiFi.localIP ().toString ()) {
+                      if (WiFi.status () == WL_CONNECTED) {
+                        int rssi = WiFi.RSSI ();
+                        String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+                        s += String ("           STAtion is connected to router:\r\n\r\n") + 
+                                     "              inet addr: " + WiFi.gatewayIP ().toString () + "\r\n" +
+                                     "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
+                      } else {
+                        s += "           STAtion is disconnected from router\r\n";
+                      }
+                    // display the following information for local loopback interface
+                    } else if (inet_ntos (netif->ip_addr) == "127.0.0.1") {
+                        s += "           local loopback\r\n";
+                    // display the following information for AP interface
+                    } else {
+                      wifi_sta_list_t wifi_sta_list = {};
+                      tcpip_adapter_sta_list_t adapter_sta_list = {};
+                      esp_wifi_ap_get_sta_list (&wifi_sta_list);
+                      tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
+                      if (adapter_sta_list.num) {
+                        s += "           stations connected to Access Point (" + String (adapter_sta_list.num) + "):\r\n";
+                        for (int i = 0; i < adapter_sta_list.num; i++) {
+                          tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
+                          s += String ("\r\n") + 
+                                       "              hwaddr: " + MacAddressAsString ((byte *) &station.mac, 6)
+                                                                                                                 #ifdef TELNET_DEVICE_NICK_NAME // TO DO: try to get hostname (for example by callig gethostbyaddr) from connected device, for now this is how we get some meaning out of MAC and IP numbers
+                                                                                                                   + " " + TELNET_DEVICE_NICK_NAME (MacAddressAsString ((byte *) &station.mac, 6))
+                                                                                                                 #endif
+                                                                                                                 + "\r\n" + 
+                                       "              inet addr: " + inet_ntos (station.ip) + "\r\n";
+    
+                                       connection->sendData (s);
+                                       s = "";
+                                       int rssi = __sniffWiFiForRssi__ (MacAddressAsString ((byte *) &station.mac, 6));
+                                       String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+                                       s = "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
+                        }
+                      } else {
+                        s += "           there are no stations connected to Access Point\r\n";
+                      }
+                    }
+          }
+        }
+        connection->sendData (s);
+        return;
+      }
+         
 #endif

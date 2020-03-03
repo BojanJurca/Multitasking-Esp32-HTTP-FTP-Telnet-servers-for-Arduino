@@ -124,13 +124,13 @@
   #define RTC_NTP_TIME_OUT 100    // number of milliseconds we are going to wait for NTP reply - it the number is too large the time will be less accurate
   #define RTC_REST_TIME_OUT 1100  // number of milliseconds we are going to wait for REST reply - it the number is too large the time will be less accurate but it has to be longer tha  1 s
   #define RTC_RETRY_TIME 15000    // number of milliseconds between NTP request retries before it succeds, 15000 = 15 s
-  #define RTC_SYNC_TIME 604800000 // number of milliseconds between NTP synchronizations, 7 days (86400000 = 1 day)
+  #define RTC_SYNC_TIME 86400000  // number of milliseconds between NTP synchronizations, 86400000 s = 1 day
 
   void __rtcDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-      Serial.println (message); 
+      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* rtcDmesg) (String) = __rtcDmesg__; // use this pointer to display / record system messages

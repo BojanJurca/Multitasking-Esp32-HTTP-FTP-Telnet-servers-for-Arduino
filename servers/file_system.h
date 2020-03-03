@@ -32,7 +32,7 @@
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-      Serial.println (message); 
+      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* fileSystemDmesg) (String) = __fileSystemDmesg__; // use this pointer to display / record system messages
@@ -144,6 +144,28 @@
     xSemaphoreGive (SPIFFSsemaphore);
     
     return s;  
+  }
+
+  // reads entire file into buffer allocted by malloc, returns success pointer to buffer - it has to be
+  // free-d after not needed any more
+  byte *readEntireFile (char *fileName, size_t *buffSize) {
+    byte *retVal = NULL;
+    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
+
+      File file;
+      if ((bool) (file = SPIFFS.open (fileName, "r")) && !file.isDirectory ()) {
+        *buffSize = file.size ();
+        if (retVal = (byte *) malloc (*buffSize)) {
+          char *p = (char *) retVal;
+          int i = 0;
+          while (file.available () && i++ < *buffSize) *(p++) = file.read ();
+          *buffSize = i;
+        } else fileSystemDmesg ("[file system] malloc failed in function " + String (__func__) + "."); 
+        file.close ();
+      } else fileSystemDmesg ("[file system] can't open " + String (fileName) + "."); 
+      
+    xSemaphoreGive (SPIFFSsemaphore);
+    return retVal;      
   }
 
   void listFilesOnFlashDrive () {
