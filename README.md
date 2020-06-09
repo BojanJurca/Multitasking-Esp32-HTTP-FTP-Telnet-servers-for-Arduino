@@ -120,6 +120,8 @@ By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like 
    - Canada time zones (NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE)
    - USA time zones (ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE)
 
+By default TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE
+
 Please do additional testing yourself. I cannot be 100 % sure that local time works as it should for every time zone. If you need support for another time zone, please let me know. You can also modify getLocalTime () function yourself to match your country and location.
 
 ## Setup instructions
