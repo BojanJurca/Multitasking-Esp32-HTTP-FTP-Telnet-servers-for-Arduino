@@ -1,10 +1,10 @@
-﻿# ESP32 with Web Server, Telnet Server, file system, FTP server and Real-time Clock, ...
+﻿# ESP32 with Web Server, Telnet Server, file system, FTP Server and Real-time Clock, ...
 
 Very briefly why would you use Esp32_web_ftp_telnet_server_template:
 
 - **extremely fast and easy development of Telnet command-line user interface for your project** 
 - **easy development of nice looking Web user interface for your project**
-- **working with files (uploading and downloading .html and other files)**
+- **working with files (uploading and downloading .html and other files) instead of hard-coding HTTP responses**
 - **run-time monitoring of ESP32 behaviour with built-in dmesg Telnet command**
 - **run-time monitoring of ESP32 signals with built-in Web-based oscilloscope**
 
@@ -16,7 +16,7 @@ In case of Telnet all you need to do is to modify telnetCommandHandler function 
 
 You can go directly to Setup instructions and examples now or continue reading the rest of this text.
 
-While I was working on my ESP32 / Arduino home automation project I often missed functionalities that were available on real computers. This template is an attempt of providing some of this functionalities such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather than making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface through which users can turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. It creates somewhat Unix like environment so Unix / Linux / Raspian programmers will be familiar with.
+While I was working on my ESP32 / Arduino home automation project I often missed functionalities that were available on real computers. This template is an attempt of providing some of this functionalities such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather than making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface through which users can turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. 
 
 ## Features
 
@@ -41,7 +41,9 @@ Here is a list of features of objects included in Esp32_web_ftp_telnet_server_te
    - stop telnet server       /* added just as an example here */
    - digitalRead [pinNumber]  /* added just as an example here */
    - analogRead [pinNumber]   /* added just as an example here */
+   - date (-s <YYYY/MM/DD hh:mm:ss>)
    - uname /* synonym for "uname -a" as implemented here */
+   - date (-s [YYYY/MM/DD hh:mm:ss])
    - mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
    - ls ([directoryName]) or dir ([directoryName])
    - cat [fileName] or type [fileName]
@@ -96,7 +98,7 @@ Like webServer and telentServer it also offers:
    - /etc/dhcpcd.conf
    - /etc/hostapd/hostapd.conf  
 
-Modify (the part of code that create) these files according to your needs or upload your own files onto ESP32 by using FTP. 
+Modify (the part of code in network.h that create) these files according to your needs or upload your own files onto ESP32 by using FTP. 
 
 - **User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
 
@@ -104,12 +106,12 @@ Modify (the part of code that create) these files according to your needs or upl
    - hardcoded (username and password are hardcoded in to Arduino sketch constants - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT),
    - no user management at all (everyone can Telnet or FTP to ESP32 servers - use #define USER_MANAGEMENT   NO_USER_MANAGEMENT).
 
-By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code that creates user management files) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
+By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code in user_management.h that creates user management files) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
 
       - /etc/passwd
       - /etc/shadow
 
-- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. Six European and twelve USA time zones are supported so far (change TIMEZONE definition in real_time_clock.hpp to select the one that is right for you. List of 35 already supported time zones from east to west:
+- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. 35 time zones thar are supported so far: 
 
    - Russia time zones (KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE)
    - Japan time zone (JAPAN_TIMEZONE)
@@ -124,7 +126,7 @@ Please do additional testing yourself. I cannot be 100 % sure that local time wo
 
 1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
 2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
-3. Go to Network.h and do the following changes:
+3. Go to network.h and do the following changes:
 
    - find and change YOUR-STA-SSID to your WiFi SSID,
    - find and change YOUR-STA-PASSWORD to your WiFi password,
@@ -246,7 +248,7 @@ String httpRequestHandler (String& httpRequest) {
 
 Once HTML pages get large enough dynamic generation becomes impractical. The preferred way is building a large static HTML page that will be accessed by web browser and would call smaller server side functions. In this case, we have two sides where programming code is located at run time. The server side code is still in ESP32 whereas client side code is in your web browser. They communicate with each other in standardised way - through REST functions. Although REST functions could respond in HTML manner they usually use JSON format.
 
-Let us look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino:
+Let's take a look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino:
 
 ```C++
 String httpRequestHandler (String& httpRequest) {  
@@ -292,7 +294,7 @@ We do not have C++ compiler available in a browser, but Javascript will do the j
 
 **Example 03 - HTML page interacting with ESP32**
 
-We had only one-way client – server (HTML - ESP32) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of the use of PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
+We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of the use of PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
 
 Server will have to handle two additional cases:
 
@@ -461,7 +463,7 @@ getBuiltInLed:
 
 **Example 07 - SPIFFS file system and delays**
 
-Example shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() and vTaskResumeAll()). The assertion failure you see is vTaskDelay() checking if it was called whilst the scheduler is disabled." Some SPIFFS functions internally call vTaskSuspendAll() hence no other thread should call delay()  (which internally calls vTaskDelay()) since we cannot predict if this would happen while the scheduler is disabled.
+Example shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() and vTaskResumeAll()). The assertion failure is caused by vTaskDelay() checking if it was called whilst the scheduler is disabled." Some SPIFFS functions internally call vTaskSuspendAll() hence no other thread should call delay()  (which internally calls vTaskDelay()) since we cannot predict if this would happen while the scheduler is disabled.
 
 Esp32_web_ftp_telnet_server_template introduces a SPIFFSsemaphore mutex that prevents going into delay() and SPIFSS functions simultaneously from different threads. Calling a delay() function is not thread safe (when used together with SPIFFS) and would crash ESP32 occasionally. Use SPIFFSsafeDelay() instead.
 
