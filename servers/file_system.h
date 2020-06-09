@@ -111,6 +111,7 @@
         return true;        
       }
     }
+    return false; // never executes
   }  
 
   // reads entire file into String, returns success
