@@ -15,6 +15,8 @@
  *            April 13, 2019, Bojan Jurca
  *          - telnetCommandHandler parameters are now easyer to access 
  *            September 4, Bojan Jurca   
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca
  *  
  */
 
@@ -43,12 +45,12 @@
 
 // define TIMEZONE  KAL_TIMEZONE
 // ...
-// #define TIMEZONE  CHAMORRO_TIMEZONE
+#define TIMEZONE  EASTERN_TIMEZONE
 // (default) #define TIMEZONE  CET_TIMEZONE               // choose your time zone or modify timeToLocalTime function
 #include "./servers/real_time_clock.hpp"                  // Telnet server needs rtc to execute certain commands such as uptime
-real_time_clock rtc ("1.si.pool.ntp.org",  // first NTP server
-                     "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
-                     "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
+real_time_clock rtc ((char *) "1.si.pool.ntp.org",  // first NTP server
+                     (char *) "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
+                     (char *) "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
 
 #include "./servers/oscilloscope.h"
 
@@ -71,7 +73,7 @@ String startWebServer () {
     httpSrv = new httpServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
                               wsRequestHandler,           // a callback function that will handle WS requests, NULL if WS requests are to be ignored
                               8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stable
-                              "0.0.0.0",                  // start HTTP server on all available ip addresses
+                              (char *) "0.0.0.0",         // start HTTP server on all available ip addresses
                               80,                         // HTTP port
                               NULL);                      // we won't use firewall callback function for HTTP server
     if (httpSrv)
@@ -211,10 +213,10 @@ bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, r
 
 #define FTP_RTC rtc                                     // tell FTP server where to get time from to report file time
 #include "./servers/ftpServer.hpp"                      // SPIFFS doesn't record file creation time so this information will be false anyway
-ftpServer *ftpSrv = NULL; // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
+ftpServer *ftpSrv = NULL;                               // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
 String startFtpServer () {
   if (!ftpSrv) {
-    ftpSrv = new ftpServer ("0.0.0.0",                  // start FTP server on all available ip addresses
+    ftpSrv = new ftpServer ((char *) "0.0.0.0",         // start FTP server on all available ip addresses
                             21,                         // controll connection FTP port
                             telnetAndFtpFirewall);      // use firewall callback function for FTP server or NULL
     if (ftpSrv)
@@ -237,7 +239,7 @@ String startTelnetServer () {
   if (!telnetSrv) {
     telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
                                   8192,                 // 8 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
-                                  "0.0.0.0",            // start telnt server on all available ip addresses
+                                  (char *) "0.0.0.0",   // start telnt server on all available ip addresses
                                   23,                   // telnet port
                                   telnetAndFtpFirewall);// use firewall callback function for telnet server or NULL
     if (telnetSrv)
@@ -376,7 +378,7 @@ void setup () {
                                             example09_makeRestCall ();
                                             example11_morseEchoServer ();
                                             vTaskDelete (NULL); // end this thread
-                                         }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10d] [examples] couldn't start examples\n", millis ());
+                                         }, "examples", 2048, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10lu] [examples] couldn't start examples\n", millis ());
 }
 
 void loop () {  
@@ -393,7 +395,7 @@ void loop () {
     static bool messageAlreadyDispalyed = false;
     if (timeToString (rtc.getLocalTime ()).substring (11) >= "23:05:00" && !messageAlreadyDispalyed) {
       messageAlreadyDispalyed = true;
-      Serial.printf ("[%10d] Working late again?\n", millis ());
+      Serial.printf ("[%10lu] Working late again?\n", millis ());
     }
   }
 
@@ -405,7 +407,7 @@ void loop () {
     freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB each minute 
     httpRequestCount.addCounterToMeasurements (lastScale);          // take sample of number of web connections that arrived last minute
     rssi.addMeasurement (lastScale, WiFi.RSSI ());                  // take RSSI sample each minute 
-    Serial.printf ("[%10d] [loop ()] %s, free heap: %6i bytes, RSSI: %3i dBm\n",  millis (), 
+    Serial.printf ("[%10lu] [loop ()] %s, free heap: %6i bytes, RSSI: %3i dBm\n", millis (), 
                                                                                   rtc.isGmtTimeSet () ? timeToString (rtc.getLocalTime ()).c_str () : "                   ",
                                                                                   ESP.getFreeHeap (),
                                                                                   WiFi.RSSI ()

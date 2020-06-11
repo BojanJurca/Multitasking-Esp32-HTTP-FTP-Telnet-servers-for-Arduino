@@ -8,6 +8,8 @@
  * 
  * History:
  *          - first release, October 31, 2018, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca       
  *  
  */
 
@@ -15,7 +17,7 @@
 #ifndef __MEASUREMENTS__
   #define __MEASUREMENTS__
   
-  typedef struct measurementType {
+  struct measurementType {
      unsigned char scale;    
      int           value;
   };
@@ -28,7 +30,7 @@
     public:
   
       measurements (int noOfSamples)            {                  // constructor
-                                                  if (this->__measurements__ = (measurementType *) malloc ((noOfSamples + 1) * sizeof (measurementType))) { // one space more then the number of measurements in the queue
+                                                  if ((this->__measurements__ = (measurementType *) malloc ((noOfSamples + 1) * sizeof (measurementType)))) { // one space more then the number of measurements in the queue
                                                     this->__noOfSamples__ = noOfSamples;
                                                     this->__beginning__ = this->__end__ = 0;
                                                   }
@@ -74,8 +76,8 @@
                                                     while (i != this->__end__) {
                                                       if (i != this->__beginning__) s += ",";
                                                       tmp = *(this->__measurements__ + i);
-                                                      if (tmp.scale == 255 || scaleModule && (tmp.scale % scaleModule != 0)) {s += "\"\"";} // skip all 255 scales and if module is specified skip all scales where module is not 0
-                                                      else                                                                   {s += "\"" + String (tmp.scale) + "\"";}
+                                                      if (tmp.scale == 255 || (scaleModule && (tmp.scale % scaleModule != 0))) {s += "\"\"";} // skip all 255 scales and if module is specified skip all scales where module is not 0
+                                                      else                                                                     {s += "\"" + String (tmp.scale) + "\"";}
                                                       i = (i + 1) % (this->__noOfSamples__ + 1); 
                                                     }
                                                     s += "],\"value\":[";
