@@ -5,10 +5,12 @@
  *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  * 
  * History:
-  *         - first release,
+ *          - first release,
  *            August, 14, 2019, Bojan Jurca
  *          - oscilloscope structures and functions moved into separate file, 
  *            October 2, 2019, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 11, 2020, Bojan Jurca 
  *            
  */
 
@@ -16,21 +18,21 @@
 // ----- includes, definitions and supporting functions -----
 
 #include <WiFi.h>
-#include "webServer.hpp"        // oscilloscope uses websockets defined in  webServer.hpp  
+#include "webServer.hpp"        // oscilloscope uses websockets defined in webServer.hpp  
 
 
-typedef struct oscilloscopeSample {
+struct oscilloscopeSample {
    int16_t value;       // sample value read by analogRead or digialRead   
-   int16_t timeOffset;  // sampe time offset drom previous sample in ms or us
+   int16_t timeOffset;  // sample time offset from previous sample in ms or us
 };
 
-typedef struct oscilloscopeSamples {
+struct oscilloscopeSamples {
    oscilloscopeSample samples [64]; // sample buffer will never exceed 41 samples, make it 64 for simplicity reasons    
    int count;                       // number of samples in the buffer
    bool ready;                      // is the buffer ready for sending
 };
 
-typedef struct oscilloscopeSharedMemoryType { // data structure to be shared with oscilloscope tasks
+struct oscilloscopeSharedMemoryType { // data structure to be shared among oscilloscope tasks
   // basic objects for webSocket communication
   WebSocket *webSocket;               // open webSocket for communication with javascript client
   bool clientIsBigEndian;             // true if javascript client is big endian machine
@@ -79,7 +81,7 @@ void oscilloscopeReader (void *parameters) {
   portMUX_TYPE *csSendBuffer =        &((oscilloscopeSharedMemoryType *) parameters)->csSendBuffer;
   
   int screenTimeOffset = 0;
-  int16_t sampleTimeOffset = 0;
+  int16_t sampleTimeOffset; // = 0;
   int screenRefreshCounter = 0;
   while (true) {
     
@@ -93,19 +95,19 @@ void oscilloscopeReader (void *parameters) {
 
     if (triggeredMode) { // if no trigger is set then skip this part and start sampling immediatelly
       // Serial.printf ("[oscilloscope] waiting to be triggered ...\n");
-      uint16_t lastSample = analog ? analogRead (gpio) : digitalRead (gpio);
+      int16_t lastSample = analog ? analogRead (gpio) : digitalRead (gpio);
       lastSampleTime = microSeconds ? micros () : millis ();
 
       while (true) { 
         if (microSeconds) SPIFFSsafeDelayMicroseconds (samplingTime);
         else              SPIFFSsafeDelay (samplingTime);
-        uint16_t newSample = analog ? analogRead (gpio) : digitalRead (gpio);
+        int16_t newSample = analog ? analogRead (gpio) : digitalRead (gpio);
         unsigned int newSampleTime = microSeconds ? micros () : millis ();
         if ((positiveTrigger && lastSample < positiveTriggerTreshold && newSample >= positiveTriggerTreshold) || 
             (negativeTrigger && lastSample > negativeTriggerTreshold && newSample <= negativeTriggerTreshold)) {
           // insert both samples into the buffer
           readBuffer->samples [1] = {lastSample, 0};
-          readBuffer->samples [2] = {newSample, screenTimeOffset = newSampleTime - lastSampleTime};
+          readBuffer->samples [2] = {newSample, (int16_t) (screenTimeOffset = newSampleTime - lastSampleTime)};
           readBuffer->count = 3;
           break;
         }
@@ -123,7 +125,7 @@ void oscilloscopeReader (void *parameters) {
     do {
 
       unsigned int newSampleTime = microSeconds ? micros () : millis ();
-      uint16_t sampleTimeOffset = newSampleTime - lastSampleTime;
+      int16_t sampleTimeOffset = newSampleTime - lastSampleTime;
       screenTimeOffset += sampleTimeOffset;      
       lastSampleTime = newSampleTime;        
 
@@ -139,7 +141,7 @@ void oscilloscopeReader (void *parameters) {
         readBuffer->count = 0; 
       } // if (screenTimeOffset >= screenRefreshTimeCommonUnit)
       // take the next sample
-      readBuffer->samples [readBuffer->count] = {analog ? analogRead (gpio) : digitalRead (gpio), sampleTimeOffset};
+      readBuffer->samples [readBuffer->count] = {(int16_t) (analog ? analogRead (gpio) : digitalRead (gpio)), sampleTimeOffset};
       readBuffer->count = (readBuffer->count + 1) & 0b00111111; // 0 .. 63 max (which is inside buffer size) - just in case, number of samples will never exceed 41  
       // stop reading if sender is not running any more
       if (!((oscilloscopeSharedMemoryType *) parameters)->senderIsRunning) { 
@@ -343,9 +345,9 @@ void runOscilloscope (WebSocket *webSocket) {
     return;    
   }
   if (!strcmp (oscilloscopeSharedMemory.screenWidthTimeUnit, "ms")) 
-    oscilloscopeSharedMemory.screenRefreshTimeCommonUnit =  oscilloscopeSharedMemory.screenRefreshTime;
+    oscilloscopeSharedMemory.screenRefreshTimeCommonUnit = oscilloscopeSharedMemory.screenRefreshTime;
   else
-    oscilloscopeSharedMemory.screenRefreshTimeCommonUnit =  oscilloscopeSharedMemory.screenRefreshTime * 1000;
+    oscilloscopeSharedMemory.screenRefreshTimeCommonUnit = oscilloscopeSharedMemory.screenRefreshTime * 1000;
   oscilloscopeSharedMemory.screenRefreshModulus = oscilloscopeSharedMemory.screenRefreshTimeCommonUnit / oscilloscopeSharedMemory.screenWidthTime;
   if (oscilloscopeSharedMemory.screenRefreshModulus < 1) // if requested refresh time is less then screen width time then leave it as it is
     oscilloscopeSharedMemory.screenRefreshModulus = 1;
@@ -356,7 +358,7 @@ void runOscilloscope (WebSocket *webSocket) {
   Serial.printf ("[oscilloscope] screenRefreshModulus = %i\n", oscilloscopeSharedMemory.screenRefreshModulus);
   if (oscilloscopeSharedMemory.screenRefreshTimeCommonUnit > oscilloscopeSharedMemory.screenWidthTime && oscilloscopeSharedMemory.screenRefreshTimeCommonUnit != (long) oscilloscopeSharedMemory.screenRefreshModulus * (long) oscilloscopeSharedMemory.screenWidthTime) 
     Serial.printf ("[oscilloscope] it would be better if screen refresh time is multiple value of screen width time or equal to sampling time\n"); // just a suggestion
-  Serial.printf ("[oscilloscope] screenRefreshTimeCommonUnit = %i (same time unit as screen width time)\n", oscilloscopeSharedMemory.screenRefreshTimeCommonUnit);
+  Serial.printf ("[oscilloscope] screenRefreshTimeCommonUnit = %ld (same time unit as screen width time)\n", oscilloscopeSharedMemory.screenRefreshTimeCommonUnit);
   oscilloscopeSharedMemory.samplingTime -= oscilloscopeSharedMemory.microSecondCorrection;
   if (oscilloscopeSharedMemory.samplingTime >= 1) {
      Serial.printf ("[oscilloscope] samplingTime (after correction) = %i\n", oscilloscopeSharedMemory.samplingTime);

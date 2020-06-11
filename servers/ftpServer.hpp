@@ -21,6 +21,8 @@
  *            September 14, 2019, Bojan Jurca
  *          - replaced gmtime () function that returns ponter to static structure with reentrant solution
  *            October 29, 2019, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca 
  *  
  */
 
@@ -29,7 +31,7 @@
   #define __FTP_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "defaultHostname" // WiFi.getHostname() // use default if not defined
   #endif
 
   #include <WiFi.h>
@@ -47,7 +49,7 @@
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
+      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
@@ -55,7 +57,7 @@
   #include "TcpServer.hpp"        // FTP server.hpp is built upon TcpServer.hpp  
   #include "real_time_clock.hpp"  // FTP server needs time to report file time (in ls), but it is always a fiction since SPIFFS doesn't record file creation time at all
     #ifndef FTP_RTC                 // if not defined earlier define it now but it will only make code to compile, not to work properly
-      real_time_clock __FTP_RTC__ ("", "", "");
+      real_time_clock __FTP_RTC__ ((char *) "", (char *) "", (char *) "");
       #define FTP_RTC __FTP_RTC__
     #endif
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
@@ -114,13 +116,13 @@
           } while (!(endOfCmd = strstr (buffer, "\r\n")));
           *endOfCmd = 0; // mark the end of received command
           // log_v ("[Thread:%lu][Core:%i] new command = %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
-          if (ftpParam = strstr (buffer, " ")) *ftpParam++ = 0; else ftpParam = endOfCmd; // mark the end of command and the beginning of parameter
+          if ((ftpParam = strstr (buffer, " "))) *ftpParam++ = 0; else ftpParam = endOfCmd; // mark the end of command and the beginning of parameter
           
           if (!strcmp        (ftpCmd, "USER")) {  // ---------- USER ----------
             
                 if (strlen (ftpParam) < sizeof (user)) strcpy (user, ftpParam); else *user = *homeDir = 0;
                 loggedIn = false;
-                connection->sendData ("331 enter password\r\n");
+                connection->sendData ((char *) "331 enter password\r\n");
           
           } else if (!strcmp (ftpCmd, "PASS")) {  // ---------- PASS ----------
             
@@ -132,7 +134,7 @@
                   connection->sendData (buffer);
                 } else { 
                   ftpDmesg ("[ftpServer] " + String (user) + " login attempt failed.");
-                  connection->sendData ("530 user name or password incorrect\r\n"); 
+                  connection->sendData ((char *) "530 user name or password incorrect\r\n"); 
                 }
           
           } else if (!strcmp (ftpCmd, "CWD")) {   // ---------- CWD ----------          // "cd directory" command
@@ -142,7 +144,7 @@
                   sprintf (buffer, "250 current directory is \"/\" which referes to your home directory \"%s\"\r\n", homeDir);
                   connection->sendData (buffer);
                 } else {
-                  connection->sendData ("550 path not found\r\n");
+                  connection->sendData ((char *) "550 path not found\r\n");
                 }
           
           } else if (!strcmp (ftpCmd, "PWD")) {      // ---------- PWD ----------          // we have just one directory
@@ -154,17 +156,17 @@
           } else if (!strcmp (ftpCmd, "TYPE")) {     // ---------- TYPE ----------         // just pretend we have done it
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                connection->sendData ("200 ok\r\n");      
+                connection->sendData ((char *) "200 ok\r\n");      
           
           } else if (!strcmp (ftpCmd, "SYST")) {     // ---------- SYST ----------         // pretend this is a UNIX system
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                connection->sendData ("215 UNIX Type: L8\r\n");
+                connection->sendData ((char *) "215 UNIX Type: L8\r\n");
           
           } else if (!strcmp (ftpCmd, "SIZE")) {     // ---------- SIZE ----------      // just report 0, it will do
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                connection->sendData ("213 0\r\n");
+                connection->sendData ((char *) "213 0\r\n");
           
           } else if (!strcmp (ftpCmd, "PASV")) {     // ---------- PASV ----------      // switch to pasive mode, next command (NLST, LIST, RETR STOR) will follow shortly
             
@@ -179,7 +181,7 @@
                   pasiveDataServer = new TcpServer (5000, connection->getThisSideIP (), pasiveDataPort, NULL); // open a new TCP server to accept pasive data connection
                   connection->sendData (reply); // send reply
                 } else {
-                    connection->sendData ("425 can't open data connection\r\n");
+                    connection->sendData ((char *) "425 can't open data connection\r\n");
                 }
           
           } else if (!strcmp (ftpCmd, "PORT")) {     // ---------- PORT ----------     // switch to active mode, next command (NLST, LIST, RETR STOR) will follow shortly
@@ -193,12 +195,12 @@
                   activeDataPort = 256 * p1 + p2;
                   activeDataClient = new TcpClient (activeDataIP, activeDataPort, 5000); // open a new TCP client for active data connection
                 } 
-                connection->sendData ("200 port ok\r\n"); 
+                connection->sendData ((char *) "200 port ok\r\n"); 
           
           } else if (!strcmp (ftpCmd, "NLST") || !strcmp (ftpCmd, "LIST")) {  // ---------- LIST ---------- // "ls" or "dir" command requires ASCII mode data transfer to the client - the content is a list of file names
             
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
-                if (!connection->sendData ("150 starting transfer\r\n")) goto closeFtpConnection; 
+                if (!connection->sendData ((char *) "150 starting transfer\r\n")) goto closeFtpConnection; 
                   // list file as UNIX does
                   String s = "";
                   char d [33]; strcpy (d, homeDir); if (strlen (d) > 1 && *(d + strlen (d) - 1) == '/') *(d + strlen (d) - 1) = 0;
@@ -229,7 +231,7 @@
                           struct tm structNow = timeToStructTime (&rawNow);
                           // char *month [12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Okt", "Nov", "Dec"};
                           // sprintf (c + strlen (c), " %s %02i %02i:%02i      ", month [structNow.tm_mon], structNow.tm_mday, structNow.tm_hour, structNow.tm_min);
-                          strftime (c + strlen (c), 25, " %b %d %H:%M      ", &structNow);
+                          strftime (c + strlen (c), 25, " %b %lu %H:%M      ", &structNow);
                           s += String ("-r-xr-xrwx   1 owner    group        ") + String (c) + String (file.name ()) + "\r\n";
                         }
                         file = dir.openNextFile ();
@@ -247,8 +249,8 @@
                   if (dataConnection) written = dataConnection->sendData (s);
                   if (activeDataClient) { delete (activeDataClient); activeDataClient = NULL; }
                   if (pasiveDataServer) { delete (pasiveDataServer); pasiveDataServer = NULL; }
-                if (written) connection->sendData ("226 transfer complete\r\n");
-                else         connection->sendData ("425 can't open data connection\r\n");
+                if (written) connection->sendData ((char *) "226 transfer complete\r\n");
+                else         connection->sendData ((char *) "425 can't open data connection\r\n");
           
           } else if (!strcmp (ftpCmd, "XRMD")) {     // ---------- XRMD ----------     // "rm filename" command
             
@@ -269,7 +271,7 @@
                 if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
                 if (*ftpParam == '/') ftpParam++; // trim possible prefix
                 int bytesWritten = -1; int bytesRead = 0;
-                if (!connection->sendData ("150 starting transfer\r\n")) goto closeFtpConnection; 
+                if (!connection->sendData ((char *) "150 starting transfer\r\n")) goto closeFtpConnection; 
                   TcpConnection *dataConnection = NULL;
                   if (pasiveDataServer) while (!(dataConnection = pasiveDataServer->connection ()) && !pasiveDataServer->timeOut ()) SPIFFSsafeDelay (1); // wait until a connection arrives to non-threaded server or time-out occurs
                   if (activeDataClient) dataConnection = activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
@@ -309,7 +311,7 @@
               if (!loggedIn) goto closeFtpConnection; // someone is not playing by the rules
                 if (*ftpParam == '/') ftpParam++; // trim possible prefix
                 int bytesRead = -1; int bytesWritten = 0;
-                if (!connection->sendData ("150 starting transfer\r\n")) goto closeFtpConnection; 
+                if (!connection->sendData ((char *) "150 starting transfer\r\n")) goto closeFtpConnection; 
                   TcpConnection *dataConnection = NULL;
                   if (pasiveDataServer) while (!(dataConnection = pasiveDataServer->connection ()) && !pasiveDataServer->timeOut ()) SPIFFSsafeDelay (1); // wait until a connection arrives to non-threaded server or time-out occurs
                   if (activeDataClient) dataConnection = activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
@@ -349,7 +351,7 @@
                 goto closeFtpConnection;                                                // ... close control connection by returning
           
           } else {
-                connection->sendData ("220 unsupported command\r\n");
+                connection->sendData ((char *) "220 unsupported command\r\n");
           }
         }
       closeFtpConnection:

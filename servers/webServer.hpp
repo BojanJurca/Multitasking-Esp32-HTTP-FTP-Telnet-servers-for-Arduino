@@ -28,6 +28,8 @@
  *            October 30, 2019, Bojan Jurca
  *          - webServer is now inherited from TcpServer and renamed to httpServer
  *            February 27.2.2020, Bojan Jurca 
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 11, 2020, Bojan Jurca            
  *
  */
 
@@ -35,7 +37,7 @@
   #define __WEB_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "defaultHostname" // WiFi.getHostname() // use default if not defined
   #endif
 
   // ----- includes, definitions and supporting functions -----
@@ -46,7 +48,7 @@
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-          Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
+          Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* webDmesg) (String) = __webDmesg__; // use this pointer to display / record system messages  
@@ -175,8 +177,9 @@
                                                     case READING_SHORT_HEADER:    { 
                                                                                     // Serial.printf ("[webSocket] READING_SHORT_HEADER, reading 6 bytes of header\n");                
                                                                                     switch (__connection__->available ()) {
-                                                                                      case TcpConnection::NOT_AVAILABLE: return WebSocket::NOT_AVAILABLE;
-                                                                                      case TcpConnection::ERROR:         return WebSocket::ERROR;
+                                                                                      case TcpConnection::NOT_AVAILABLE:  return WebSocket::NOT_AVAILABLE;
+                                                                                      case TcpConnection::ERROR:          return WebSocket::ERROR;
+                                                                                      default:                            break;
                                                                                     }
                                                                     
                                                                                     // read 6 bytes of short header
@@ -411,7 +414,7 @@ readingPayload:
                                   __httpRequestHandler__ = httpRequestHandler;
                                   __wsRequestHandler__ = wsRequestHandler; 
                                   char homeDir [33];
-                                  char *p = getUserHomeDirectory (homeDir, "webserver"); 
+                                  char *p = getUserHomeDirectory (homeDir, (char *) "webserver"); 
                                   if (p && strlen (p) < sizeof (__webHomeDirectory__)) strcpy (__webHomeDirectory__, p);
                                   if (!*__webHomeDirectory__) { 
                                     webDmesg ("[httpServer] home directory for webserver system account is not set.");
@@ -445,12 +448,12 @@ readingPayload:
           if (strstr (buffer, "\r\n\r\n")) { // is the end of HTTP request is reached?
             // log_v ("[Thread:%i][Core:%i] new request:\n%s", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), buffer);
 
-            // ----- make a String copy of http request -----
+            // ----- make a String copy of the http request -----
             String httpRequest = String (buffer);
 
             // ----- first check if this is a websocket request -----
 
-            if (stristr (buffer, "CONNECTION: UPGRADE")) {
+            if (stristr (buffer, (char *) "CONNECTION: UPGRADE")) {
               connection->setTimeOut (300000); // set time-out to 5 minutes fro WebSockets
               WebSocket webSocket (connection, httpRequest); 
               if (ths->__wsRequestHandler__) ths->__wsRequestHandler__ (httpRequest, &webSocket);
@@ -478,7 +481,7 @@ readingPayload:
               char *p; if ((p = strstr (buffer + 4, " ")) && (p - buffer) < (sizeof (htmlFile) + 4)) memcpy (htmlFile, buffer + 4, p - buffer - 4);
               if (*htmlFile == '/') strcpy (htmlFile, htmlFile + 1); if (!*htmlFile) strcpy (htmlFile, "index.html");
               char homeDir [33];
-              if (p = getUserHomeDirectory (homeDir, "webserver")) {
+              if ((p = getUserHomeDirectory (homeDir, (char *) "webserver"))) {
                 if (strlen (p) + strlen (htmlFile) < sizeof (fullHtmlFilePath)) strcat (strcpy (fullHtmlFilePath, p), htmlFile);
                 xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
                   File file;                
@@ -514,12 +517,12 @@ readingPayload:
               goto closeWebConnection;
             } 
 
-reply404:
+// reply404:
           
             // ----- 404 page not found reply -----
             
             #define response404 "HTTP/1.0 404 Not found\r\nContent-Type:text/html;\r\nContent-Length:20\r\n\r\nPage does not exist." // HTTP header and content
-            connection->sendData (response404); // send response
+            connection->sendData ((char *) response404); // send response
             webDmesg (String ("[httpServer] don't know how to handle http request from " + String (connection->getOtherSideIP ()) + "\r\n") + httpRequest);
             
           } else { // is the end of HTTP request is reached?
@@ -547,10 +550,10 @@ reply404:
     TcpConnection *myConnection = myNonThreadedClient.connection ();
     // test if connection is established
     if (myConnection) {
-      // Serial.printf ("[%10d] [webClient] connected.\n", millis ());
+      // Serial.printf ("[%10lu] [webClient] connected.\n", millis ());
       httpRequest += " \r\n\r\n"; // make sure HTTP request ends properly
-      int sentTotal = myConnection->sendData (httpRequest); // send HTTP request
-      // Serial.printf ("[%10d] [webClient] sent %i bytes.\n", millis (), sentTotal);
+      /* int sentTotal = */ myConnection->sendData (httpRequest); // send HTTP request
+      // Serial.printf ("[%10lu] [webClient] sent %i bytes.\n", millis (), sentTotal);
       // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
       // if the response is short enough it will normally arrive in one data block although
       // TCP does not guarantee that it would
@@ -559,17 +562,17 @@ reply404:
         receivedTotal += received;
         buffer [received] = 0; // mark the end of the string we have just read
         retVal += String (buffer);
-        // Serial.printf ("[%10d] [webClient] received %i bytes.\n", millis (), received);
+        // Serial.printf ("[%10lu] [webClient] received %i bytes.\n", millis (), received);
         // search buffer for content-lenght: to check if the whole reply has arrived against receivedTotal
         char *s = (char *) retVal.c_str ();
-        char *c = stristr (s, "CONTENT-LENGTH:");
+        char *c = stristr (s, (char *) "CONTENT-LENGTH:");
         if (c) {
           unsigned long ul;
           if (sscanf (c + 15, "%lu", &ul) == 1) {
-            // Serial.printf ("[%10d] [webClient] content-length %i, receivedTotal %i.\n", millis (), ul, receivedTotal);
-            if (c = strstr (c + 15, "\r\n\r\n")) 
+            // Serial.printf ("[%10lu] [webClient] content-length %i, receivedTotal %i.\n", millis (), ul, receivedTotal);
+            if ((c = strstr (c + 15, "\r\n\r\n"))) 
               if (receivedTotal == ul + c - s + 4) {
-                // Serial.printf ("[%10d] [webClient] whole HTTP response of content-length %i bytes and total length of %i bytes has arrived.\n", millis (), ul, retVal.length ());
+                // Serial.printf ("[%10lu] [webClient] whole HTTP response of content-length %i bytes and total length of %i bytes has arrived.\n", millis (), ul, retVal.length ());
                 return retVal; // the response is complete
               }
           }

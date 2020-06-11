@@ -1,4 +1,4 @@
-/*
+ /*
  * 
  * telnetServer.hpp
  * 
@@ -35,7 +35,9 @@
  *          - added curl command
  *            December 22, 2019, Bojan Jurca
  *          - telnetServer is now inherited from TcpServer
- *            February 27.2.2020, Bojan Jurca
+ *            February 27, 2020, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 11, 2020, Bojan Jurca 
  *            
  */
 
@@ -46,13 +48,13 @@
   // ----- define basic project information -----
 
   #ifndef HOSTNAME
-    #define WiFi.getHostname() // use default if not defined
+    #define "defaultHostname" // WiFi.getHostname() // use default if not defined
   #endif
   #ifndef MACHINETYPE
     #define MACHINETYPE "ESP32"
   #endif
   #define ESP_SDK_VERSION ESP.getSdkVersion ()
-  #define SRV_TEMPLATE_VERSION "SRV32-1.21-dev"
+  #define SRV_TEMPLATE_VERSION "SRV32-1.22-dev"
   int __getMHz__ () {
     unsigned long startMicors = micros ();
     unsigned long counter = 0;
@@ -72,8 +74,14 @@
   #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
 
 
+  #include "real_time_clock.hpp"  // some telnet function (like uptime, ...) need real-time clock
+    #ifndef TELNET_RTC              // if not defined earlier define it now but it will only make code to compile, not also to work properly
+      real_time_clock __TELNET_RTC__ ((char *) "", (char *) "", (char *) "");
+      #define TELNET_RTC __TELNET_RTC__
+    #endif
+
   // ----- dmesg data structure and functions -----  
-  typedef struct __dmesgType__ {
+  struct __dmesgType__ {
     unsigned long milliseconds;    
     String        message;
   };
@@ -94,7 +102,7 @@
     do {
       if (s != "") s+= "\r\n";
       char c [15];
-      sprintf (c, "[%10d] ", __dmesgCircularQueue__ [i].milliseconds);
+      sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
       s += String (c) + __dmesgCircularQueue__ [i].message;
     } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
     portEXIT_CRITICAL (&__csDmesg__);
@@ -117,7 +125,7 @@
       do {
         s += "\r\n";
         char c [15];
-        sprintf (c, "[%10d] ", __dmesgCircularQueue__ [i].milliseconds);
+        sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
         s += String (c) + __dmesgCircularQueue__ [i].message;
       } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
       portEXIT_CRITICAL (&__csDmesg__);
@@ -134,7 +142,7 @@
     __dmesgCircularQueue__ [__dmesgEnd__].message = message;
     if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
     portEXIT_CRITICAL (&__csDmesg__);
-    Serial.printf ("[%10d] %s\n", millis (), message.c_str ());
+    Serial.printf ("[%10lu] %s\n", millis (), message.c_str ());
   }
 
   // redirect other moduls' dmesg here before setup () begins
@@ -161,11 +169,6 @@
   }
   bool __redirectedDmesg__ = __redirectDmesg__ ();
 
-  #include "real_time_clock.hpp"  // some telnet function (like uptime, ...) need real-time clock
-    #ifndef TELNET_RTC              // if not defined earlier define it now but it will only make code to compile, not also to work properly
-      real_time_clock __TELNET_RTC__ ("", "", "");
-      #define TELNET_RTC __TELNET_RTC__
-    #endif
   #include "webServer.hpp" // webClient needed for curl command
 
   // needed for ping command
@@ -208,8 +211,8 @@
 
        static void __telnetConnectionHandler__ (TcpConnection *connection, void *telnetCommandHandler) {  // connectionHandler callback function
         // log_i ("[Thread:%i][Core:%i] connection started\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID ());  
-        #define rootPrompt  "\r\n# " 
-        #define otherPrompt "\r\n$ " 
+        #define rootPrompt  (char *) "\r\n# " 
+        #define otherPrompt (char *) "\r\n$ " 
         char *prompt = rootPrompt;
         char cmdLine [256];  // make sure there is enough space for each type of use but be modest - this buffer uses thread stack
         #define IAC 255
@@ -227,7 +230,7 @@
             sprintf (cmdLine, "\r\n\nWelcome,\r\nuse \"/\" to refer to your home directory \"%s\",\r\nuse \"help\" to display available commands.\r\n%s", homeDir, prompt);
             connection->sendData (cmdLine);
           } else { 
-            connection->sendData ("\r\n\nUser name or password incorrect\r\n");
+            connection->sendData ((char *) "\r\n\nUser name or password incorrect\r\n");
             goto closeTelnetConnection;
           }
         #else
@@ -235,7 +238,7 @@
           connection->sendData (cmdLine);
           // read user name
           if (!__readCommandLine__ (user, sizeof (user), true, connection)) goto closeTelnetConnection;
-          connection->sendData ("\r\npassword: ");
+          connection->sendData ((char *) "\r\npassword: ");
           char password [33];
           if (!__readCommandLine__ (password, sizeof (password), false, connection)) goto closeTelnetConnection;
           if (checkUserNameAndPassword (user, password)) getUserHomeDirectory (homeDir, user);
@@ -246,7 +249,7 @@
             connection->sendData (cmdLine);
           } else {
             dmesg ("[telnetServer] " + String (user) + " login attempt failed.");
-            connection->sendData ("\r\n\nUser name or password incorrect.");
+            connection->sendData ((char *) "\r\n\nUser name or password incorrect.");
             SPIFFSsafeDelay (500); // TODO: check why last message doesn't get to the client (without SPIFFSsafeDelay) if we close the connection immediatelly
             goto closeTelnetConnection;
           }
@@ -255,7 +258,7 @@
         while (__readCommandLine__ (cmdLine, sizeof (cmdLine), true, connection)) { // read and process comands in a loop
           if (*cmdLine) {
             
-            connection->sendData ("\r\n");
+            connection->sendData ((char *) "\r\n");
             // log_i ("[Thread:%i][Core:%i] telnet command %s\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), cmdLine);
 
             // ----- prepare command line arguments (max 32 arguments) -----
@@ -293,43 +296,67 @@
               if (telnetArgv [0] == "quit") {
                 
                 if (telnetArgc == 1) goto closeTelnetConnection;
-                else                 connection->sendData ("Unknown option.");
+                else                 connection->sendData ((char *) "Unknown option.");
 
               // ----- uname -a -----
 
               } else if (telnetArgv [0] == "uname") {
 
-                if (telnetArgc == 1 || telnetArgc == 2 && telnetArgv [1] == "-a") connection->sendData (UNAME);
-                else                                                              connection->sendData ("Only option -a is supported.");
+                if (telnetArgc == 1 || (telnetArgc == 2 && telnetArgv [1] == "-a")) connection->sendData (UNAME);
+                else                                                                connection->sendData ((char *) "Only option -a is supported.");
+
+              // ----- get, set date/time -----
+
+              } else if (telnetArgc >= 1 && telnetArgv [0] == "date") {
+                if (telnetArgc == 1) {
+                                          // struct tm structTime = TELNET_RTC.getLocalStructTime ();
+                                          // char cstr [20]; // 2020/03/24 21:06:22
+                                          // sprintf (cstr, "%04i/%02i/%02i %02i:%02i:%02i", structTime.tm_year + 1900, structTime.tm_mon + 1, structTime.tm_mday, structTime.tm_hour, structTime.tm_min, structTime.tm_sec);
+                                          // return String (cstr);
+                                          connection->sendData (timeToString (TELNET_RTC.getLocalTime ()));
+                } else if (telnetArgc == 4 && telnetArgv [1] == "-s") {
+                                          int Y, M, D, h, m, s;
+                                          if (sscanf (telnetArgv [2].c_str (), "%i/%i/%i", &Y, &M, &D) == 3 && Y >= 1900 && M >= 1 && M <= 12 && D >= 1 && D <= 31 && sscanf (telnetArgv [3].c_str (), "%i:%i:%i", &h, &m, &s) == 3 && h >= 0 && h <= 23 && m >= 0 && m <= 59 && s >= 0 && s <= 59) { // TO DO: we still do not catch all possible errors, for exmple 30.2.1966
+                                            struct tm tm;
+                                            tm.tm_year = Y - 1900; tm.tm_mon = M - 1; tm.tm_mday = D;
+                                            tm.tm_hour = h; tm.tm_min = m; tm.tm_sec = s;
+                                            time_t t = mktime (&tm); // time in local time
+                                            if (t != -1) {
+                                              t -= timeToLocalTime (t) - t; // convert local time into GMT time
+                                              TELNET_RTC.setGmtTime (t); // set time in rtc
+                                              connection->sendData (timeToString (TELNET_RTC.getLocalTime ())); // display real time from rtc now
+                                            } else connection->sendData ((char *) "Wrong format of date/time specified");
+                                          } else connection->sendData ((char *) "Wrong format of date/time specified");
+                } else                    connection->sendData ((char *) "Only date and date -s [YYYY/MM/DD hh:mm:ss] formats of date commands are supported");
                               
               // ----- ls or ls directory or dir or dir directory -----
   
               } else if (telnetArgv [0] == "ls" || telnetArgv [0] == "dir") {
                 
                 if (telnetArgc <= 2) __ls__ (connection, String (homeDir) + (telnetArgv [1].charAt (0) ==  '/' ? telnetArgv [1].substring (1) : telnetArgv [1]));
-                else                 connection->sendData ("Unknown option.");
+                else                 connection->sendData ((char *) "Unknown option.");
 
               // ----- cat filename or type filename -----
 
               } else if (telnetArgv [0] == "cat" || telnetArgv [0] == "type") {
                 
-                     if (telnetArgc < 2)  connection->sendData ("Missing fileName.");
+                     if (telnetArgc < 2)  connection->sendData ((char *) "Missing fileName.");
                 else if (telnetArgc == 2) __cat__ (connection, String (homeDir) + (telnetArgv [1].charAt (0) ==  '/' ? telnetArgv [1].substring (1) : telnetArgv [1]));
-                else                      connection->sendData ("Unknown option.");                                
+                else                      connection->sendData ((char *) "Unknown option.");                                
 
               // ----- rm fileName or del fileName -----
 
               } else if (telnetArgv [0] == "rm" || telnetArgv [0] == "del") {
-                     if (telnetArgc < 2)  connection->sendData ("Missing fileName.");
+                     if (telnetArgc < 2)  connection->sendData ((char *) "Missing fileName.");
                 else if (telnetArgc == 2) __rm__ (connection, String (homeDir) + (telnetArgv [1].charAt (0) ==  '/' ? telnetArgv [1].substring (1) : telnetArgv [1]));
-                else                      connection->sendData ("Unknown option.");
+                else                      connection->sendData ((char *) "Unknown option.");
 
               // ----- ifconfig or ipconfig -----
 
               } else if (telnetArgv [0] == "ifconfig" || telnetArgv [0] == "ipconfig") {
 
                 if (telnetArgc == 1) connection->sendData (ifconfig ());
-                else                 connection->sendData ("Unknown option.");
+                else                 connection->sendData ((char *) "Unknown option.");
 
               // ----- arp -a -----
 
@@ -337,22 +364,22 @@
 
                      if (telnetArgc == 1)                             connection->sendData (arp_a ());
                 else if ((telnetArgc == 2 && telnetArgv [1] == "-a")) connection->sendData (arp_a ());
-                else                                                  connection->sendData ("Only option -a is supported.");
+                else                                                  connection->sendData ((char *) "Only option -a is supported.");
 
               // ----- iw -----
 
               } else if (telnetArgv [0] == "iw") {
 
                      if (telnetArgc == 1) __iw__ (connection);
-                     else                 connection->sendData ("Unknown option.");
+                     else                 connection->sendData ((char *) "Unknown option.");
                 
               // ----- ping -----
 
               } else if (telnetArgv [0] == "ping") {
 
-                     if (telnetArgc < 2)  connection->sendData ("Missing target IP.");
+                     if (telnetArgc < 2)  connection->sendData ((char *) "Missing target IP.");
                 else if (telnetArgc == 2) __ping__ (connection, (char *) telnetArgv [1].c_str (), 4, 1, 32, 1);
-                else                      connection->sendData ("Unknown option."); 
+                else                      connection->sendData ((char *) "Unknown option."); 
 
               // ----- uptime -----
 
@@ -381,7 +408,7 @@
                   s += String (cstr);
                   connection->sendData (s);
                 } else  {
-                  connection->sendData ("Unknown option.");
+                  connection->sendData ((char *) "Unknown option.");
                 }
 
                 // ----- reboot ----- reset -----
@@ -389,19 +416,19 @@
                 } else if (telnetArgv [0] == "reboot") {
                   
                   if (telnetArgc == 1) {
-                    connection->sendData ("rebooting ...");
+                    connection->sendData ((char *) "rebooting ...");
                     connection->closeConnection ();
                     Serial.printf ("\r\n\nreboot requested via telnet ...\r\n");
                     SPIFFSsafeDelay (100);
                     ESP.restart ();
                   } else {
-                    connection->sendData ("Unknown option.");
+                    connection->sendData ((char *) "Unknown option.");
                   }
 
                 } else if (telnetArgv [0] == "reset") {
                   
                   if (telnetArgc == 1) {
-                    connection->sendData ("reseting ...");
+                    connection->sendData ((char *) "reseting ...");
                     connection->closeConnection ();
                     Serial.printf ("\r\n\nreset requested via telnet ...\r\n");
                     SPIFFSsafeDelay (100);
@@ -410,7 +437,7 @@
                     esp_task_wdt_add (NULL);
                     while (true);
                   } else {
-                    connection->sendData ("Unknown option.");
+                    connection->sendData ((char *) "Unknown option.");
                   }
 
                 // ----- help -----
@@ -419,15 +446,15 @@
 
                   if (telnetArgc == 1) {
                     *cmdLine = 0;
-                    char homeDir [41]; // 33 for home directory and 8 for help.txt
-                    if (getUserHomeDirectory (homeDir, "telnetserver")) {
+                    char homeDir [41]; // 33 for home directory and 8 for "help.txt"
+                    if (getUserHomeDirectory (homeDir, (char *) "telnetserver")) {
                       if (!__cat__ (connection, String (homeDir) + "help.txt")) // send special reply
-                        connection->sendData (" Please use FTP, loggin as root/rootpassword and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + String (homeDir) + " directory.");
+                        connection->sendData ((char *) " Please use FTP, loggin as root/rootpassword and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + String (homeDir) + " directory.");
                     } else {
-                      connection->sendData ("Unexpected error - telnetserver home directory not found.");
+                      connection->sendData ((char *) "Unexpected error - telnetserver home directory not found.");
                     }                      
                   } else {
-                    connection->sendData ("Unknown option.");
+                    connection->sendData ((char *) "Unknown option.");
                   }
 
                 // ----- format -----
@@ -435,23 +462,23 @@
                 } else if (telnetArgv [0] == "mkfs.spiffs") {
                   if (!strcmp (homeDir, "/")) { // test root home directory instead of root user name - in case of NO_USER_MANAGEMENT
                     if (telnetArgc == 1) {
-                      // connection->sendData ("Formatting flash drive from command line is not supported yet.");
-                      connection->sendData ("formatting, please wait ... "); 
+                      // connection->sendData ((char *) "Formatting flash drive from command line is not supported yet.");
+                      connection->sendData ((char *) "formatting, please wait ... "); 
                       if (SPIFFS.format ()) {
-                        connection->sendData ("formatted.");
+                        connection->sendData ((char *) "formatted.");
                         if (SPIFFS.begin (false)) {
-                          connection->sendData ("\r\nSPIFFS mounted");
+                          connection->sendData ((char *) "\r\nSPIFFS mounted");
                         } else {
-                          connection->sendData ("SPIFFS failed to mount");
+                          connection->sendData ((char *) "SPIFFS failed to mount");
                         }
                       } else {
-                        connection->sendData ("\r\nSPIFFS formatting failed");
+                        connection->sendData ((char *) "\r\nSPIFFS formatting failed");
                       }
                     } else {
-                      connection->sendData ("Unknown option.");
+                      connection->sendData ((char *) "Unknown option.");
                     }
                   } else {
-                    connection->sendData ("You don't have root rights to format ESP flash disk.");
+                    connection->sendData ((char *) "You don't have root rights to format ESP flash disk.");
                   }
 
                 #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
@@ -461,31 +488,31 @@
                   } else if (telnetArgv [0] == "passwd" && (telnetArgc == 1 || (telnetArgc == 2 && telnetArgv [1] == String (user)))) {
 
                     // read current password
-                    connection->sendData ("Enter current password: ");
+                    connection->sendData ((char *) "Enter current password: ");
                     char password1 [33];
                     if (!__readCommandLine__ (password1, sizeof (password1), false, connection)) goto closeTelnetConnection;
                     // check if password is valid for user
                     if (checkUserNameAndPassword (user, password1)) {
                       // read new password twice
-                      connection->sendData ("\r\nEnter new password: ");
+                      connection->sendData ((char *) "\r\nEnter new password: ");
                       if (!__readCommandLine__ (password1, sizeof (password1), false, connection)) goto closeTelnetConnection;
                       if (*password1) {
-                        connection->sendData ("\r\nRe-enter new password: ");
+                        connection->sendData ((char *) "\r\nRe-enter new password: ");
                         char password2 [33];
                         if (!__readCommandLine__ (password2, sizeof (password2), false, connection)) goto closeTelnetConnection;
                           // check passwords
                           if (!strcmp (password1, password2)) // change password
                             if (passwd (String (user), String (password1))) 
-                              connection->sendData ("\r\nPassword changed.\r\n");
+                              connection->sendData ((char *) "\r\nPassword changed.\r\n");
                             else 
-                              connection->sendData ("\r\nError changing password.");  
+                              connection->sendData ((char *) "\r\nError changing password.");  
                           else  // different passwords
-                            connection->sendData ("\r\nPasswords do not match.");    
+                            connection->sendData ((char *) "\r\nPasswords do not match.");    
                       } else { // first password is empty
-                        connection->sendData ("\r\nPassword not changed.\r\n");  
+                        connection->sendData ((char *) "\r\nPassword not changed.\r\n");  
                       }
                     } else { // wrong current pasword
-                      connection->sendData ("\r\nWrong password.");  
+                      connection->sendData ((char *) "\r\nWrong password.");  
                     }
 
                   } else if (telnetArgv [0] == "passwd" && telnetArgc == 2 && telnetArgv [1] != "root") {
@@ -507,20 +534,20 @@
                             // check passwords
                             if (!strcmp (password1, password2)) // change password
                               if (passwd (telnetArgv [1], String (password1)))
-                                connection->sendData ("\r\nPassword changed.\r\n");
+                                connection->sendData ((char *) "\r\nPassword changed.\r\n");
                               else
-                                connection->sendData ("\r\nError changing password.");  
+                                connection->sendData ((char *) "\r\nError changing password.");  
                             else // different passwords
-                              connection->sendData ("\r\nPasswords do not match.");    
+                              connection->sendData ((char *) "\r\nPasswords do not match.");    
                         } else { // first password is empty
-                          connection->sendData ("\r\nPassword not changed.");  
+                          connection->sendData ((char *) "\r\nPassword not changed.");  
                         }
                       } else {
                         sprintf (cmdLine, "User %s does not exist.", telnetArgv [1].c_str ());
                         connection->sendData (cmdLine);
                       }
                     } else {
-                      connection->sendData ("Only root may change password for another user.");
+                      connection->sendData ((char *) "Only root may change password for another user.");
                     }
 
                   // ----- useradd -u userID -d homeDirectory userName -----
@@ -531,13 +558,13 @@
                       int userId;
                       if (telnetArgc == 6 && telnetArgv [1] == "-u" && (userId = atoi (telnetArgv [2].c_str ())) && userId >= 1000 && telnetArgv [3] == "-d")
                         if (userAdd (telnetArgv [5], telnetArgv [2], telnetArgv [4])) 
-                          connection->sendData ("User created with defaul password changeimmediatelly. You may want to change it now.\r\n");
+                          connection->sendData ((char *) "User created with defaul password changeimmediatelly. You may want to change it now.\r\n");
                         else
-                          connection->sendData ("Error creating user. Maybe userName or userId already exist or userId is lower then 1000.");
+                          connection->sendData ((char *) "Error creating user. Maybe userName or userId already exist or userId is lower then 1000.");
                       else 
-                        connection->sendData ("The only useradd syntax supported is useradd -u <userId> -d <userHomeDirectory> <userName>.");
+                        connection->sendData ((char *) "The only useradd syntax supported is useradd -u <userId> -d <userHomeDirectory> <userName>.");
                     } else {
-                      connection->sendData ("Only root may add users.");
+                      connection->sendData ((char *) "Only root may add users.");
                     }
 
                   // ----- userdel  -----
@@ -548,15 +575,15 @@
                       if (telnetArgc == 2) 
                         if (telnetArgv [1] != "root") 
                           if (userDel (telnetArgv [1])) 
-                            connection->sendData ("User deleted.\r\n");
+                            connection->sendData ((char *) "User deleted.\r\n");
                           else
-                            connection->sendData ("Error deleting user.");
+                            connection->sendData ((char *) "Error deleting user.");
                         else
-                          connection->sendData ("A really bad idea."); // deleting root
+                          connection->sendData ((char *) "A really bad idea."); // deleting root
                       else
-                        connection->sendData ("The only userdel syntax supported is userdel <userName>.");
+                        connection->sendData ((char *) "The only userdel syntax supported is userdel <userName>.");
                     else
-                      connection->sendData ("Only root may delete users.");
+                      connection->sendData ((char *) "Only root may delete users.");
                    
                 #endif
 
@@ -566,34 +593,34 @@
                     int n;
                          if (telnetArgc == 1)                                                                           __free__ (connection, 0);
                     else if (telnetArgc == 3 && telnetArgv [1] == "-s" && (n = telnetArgv [2].toInt ()) > 0 && n < 300) __free__ (connection, n);
-                    else                                                                                                connection->sendData ("The only free syntax supported is free (-s <n>   where 0 < n < 300).");
+                    else                                                                                                connection->sendData ((char *) "The only free syntax supported is free (-s <n>   where 0 < n < 300).");
                 
                 // ----- dmesg -----
 
                   } else if (telnetArgv [0] == "dmesg") {
                          if (telnetArgc == 1)                                 __dmesg__ (connection, false);
                     else if (telnetArgc == 2 && telnetArgv [1] == "--follow") __dmesg__ (connection, true);
-                    else                                                      connection->sendData ("The only dmesg syntax supported is dmesg (--follow).");
+                    else                                                      connection->sendData ((char *) "The only dmesg syntax supported is dmesg (--follow).");
 
                   // ----- telnet -----
 
                   } else if (telnetArgv [0] == "telnet") {
                          if (telnetArgc == 2) __telnet__ (connection, telnetArgv [1], 23);
                     else if (telnetArgc == 3) __telnet__ (connection, telnetArgv [1], telnetArgv [2].toInt ());
-                    else                     connection->sendData ("Use telnet <server> (<port>).");
+                    else                     connection->sendData ((char *) "Use telnet <server> (<port>).");
                                            
                   // ----- curl -----
 
                   } else if (telnetArgv [0] == "curl") {
                          if (telnetArgc == 2) __curl__ (connection, "GET", telnetArgv [1]);
                     else if (telnetArgc == 3) __curl__ (connection, telnetArgv [1], telnetArgv [2]);
-                    else                      connection->sendData ("Use curl (method) http://<url>.");
+                    else                      connection->sendData ((char *) "Use curl (method) http://<url>.");
        
                   // ----- invalid command -----
                     
                   } else {
                                         
-                    connection->sendData ("Invalid command, use \"help\" to display available commands.");
+                    connection->sendData ((char *) "Invalid command, use \"help\" to display available commands.");
                   }
               
             } // end of handling built-in comands
@@ -622,8 +649,8 @@
                         break;
               case 8:   // backspace - delete last character from the buffer and from the screen
                         if (i) {
-                          buffer [i--] = 0; // delete last character from buffer
-                          if (echo) if (!connection->sendData ("\x08 \x08")) false; // delete the last character from the screen
+                          buffer [i--] = 0; // delete the last character from buffer
+                          if (echo) if (!connection->sendData ((char *) "\x08 \x08")) return false; // delete the last character from the screen
                         }
                         break;                        
               case 13:  // end of command line
@@ -653,7 +680,7 @@
 
       static bool __ls__ (TcpConnection *connection, String directory) {
         if (!__fileSystemMounted__) {
-          connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+          connection->sendData ((char *) "SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
           return false;
         }
     
@@ -667,12 +694,12 @@
           File dir = SPIFFS.open (d);
           if (!dir) { // TO DO: debug - this doesn't work like expected
             xSemaphoreGive (SPIFFSsemaphore);
-            connection->sendData ("Failed to open directory.");
+            connection->sendData ((char *) "Failed to open directory.");
             return false;
           }
           if (!dir.isDirectory ()) {
             xSemaphoreGive (SPIFFSsemaphore);
-            connection->sendData (directory); connection->sendData (" is a file, not a directory."); 
+            connection->sendData (directory); connection->sendData ((char *) " is a file, not a directory."); 
             return false;
           }
           File file = dir.openNextFile ();
@@ -692,7 +719,7 @@
 
       static bool __cat__ (TcpConnection *connection, String fileName) {
         if (!__fileSystemMounted__) {
-          connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+          connection->sendData ((char *) "SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
           return false;
         }
 
@@ -725,7 +752,7 @@
               } 
               file.close ();
             } else {
-              connection->sendData ("Failed to open " + fileName);
+              connection->sendData ((char *) "Failed to open " + fileName);
             }
             file.close ();
           } 
@@ -735,7 +762,7 @@
 
       static bool __rm__ (TcpConnection *connection, String fileName) {
         if (!__fileSystemMounted__) {
-          connection->sendData ("SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
+          connection->sendData ((char *) "SPIFFS file system not mounted. You may have to use mkfs.spiffs to format flash disk first.");
           return false;
         }
     
@@ -746,7 +773,7 @@
               return true;
           } else {
             xSemaphoreGive (SPIFFSsemaphore);
-              connection->sendData ("Failed to delete " + fileName);
+              connection->sendData ((char *) "Failed to delete " + fileName);
               return false;          
           }
       }
@@ -880,10 +907,11 @@
           sprintf (cstr, "Request timeout for icmp_seq %d\r\n", pds->pingSeqNum);
           telnetConnection->sendData (cstr);
         }
+        return false;
       }  
     
       static bool __ping__ (TcpConnection *telnetConnection, char *targetIP, int pingCount = PING_DEFAULT_COUNT, int pingInterval = PING_DEFAULT_INTERVAL, int pingSize = PING_DEFAULT_SIZE, int timeOut = PING_DEFAULT_TIMEOUT) {
-        struct sockaddr_in address;
+        // struct sockaddr_in address;
         ip4_addr_t pingTarget;
         int s;
         char cstr [256];
@@ -923,7 +951,7 @@
       
         closesocket (s);
       
-        sprintf (cstr, "%d packets transmitted, %d packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
+        sprintf (cstr, "%u packets transmitted, %u packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
         if (!telnetConnection->sendData (cstr)) return false;
       
         if (pds.received) {
@@ -1023,7 +1051,7 @@
           
       // ---- curl -----
       static String __curl__ (TcpConnection *thisTelnetConnection, String method, String url) {
-        Serial.printf ("[%10d] [CURL] %s %s.\n", millis (), method.c_str (), url.c_str ());
+        Serial.printf ("[%10lu] [CURL] %s %s.\n", millis (), method.c_str (), url.c_str ());
         if (method == "GET" || method == "PUT" || method == "POST" || method == "DEELTE") {
           if (url.substring (0, 7) == "http://") {
             url = url.substring (7);
@@ -1041,26 +1069,27 @@
             if (i >= 0) {
               port = server.substring (i + 1).toInt ();
               if (port <= 0) {
-                thisTelnetConnection->sendData ("Invalid port number.");
-                return "";
+                thisTelnetConnection->sendData ((char *) "Invalid port number.");
+                return String ("");
               }
               server = server.substring (0, i);
             } 
     
                 // call webClient
-                Serial.printf ("[%10d] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
+                Serial.printf ("[%10lu] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
                 String r = webClient ((char *) server.c_str (), port, 15000, method + " " + url);
                 if (r > "") thisTelnetConnection->sendData (r);
-                else        thisTelnetConnection->sendData ("Error, check dmesg to get more information.");
+                else        thisTelnetConnection->sendData ((char *) "Error, check dmesg to get more information.");
     
           } else {
-            thisTelnetConnection->sendData ("URL must begin with http://");
-            return "";
+            thisTelnetConnection->sendData ((char *) "URL must begin with http://");
+            return String ("");
           }
         } else {
-          thisTelnetConnection->sendData ("Use GET, PUT, POST or DELETE methods.");
-          return "";
+          thisTelnetConnection->sendData ((char *) "Use GET, PUT, POST or DELETE methods.");
+          return String ("");
         }
+        return String ("");
       }
       
       // ----- system related commands -----
@@ -1157,7 +1186,7 @@
           if (netif_is_up (netif)) {
             if (s != "") s += "\r\n";
             // display the following information for STA and AP interface (similar to ifconfig)
-            s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "     hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
+            s += String (netif->name [0]) + String (netif->name [1]) + "      hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
                  "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
                  "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n";
                     // display the following information for STA interface

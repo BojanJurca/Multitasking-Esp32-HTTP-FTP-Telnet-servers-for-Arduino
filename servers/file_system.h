@@ -14,6 +14,8 @@
  *            April 13, 2019, Bojan Jurca
  *          - added functions __readEntireFileWithoutSemaphore__ and __writeEntireFileWithoutSemaphore__
  *            September 8, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca
  *  
  */
 
@@ -32,7 +34,7 @@
     #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
       dmesg (message);
     #else
-      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
+      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
     #endif
   }
   void (* fileSystemDmesg) (String) = __fileSystemDmesg__; // use this pointer to display / record system messages
@@ -53,7 +55,7 @@
       return true;
     } else {
       if (formatIfUnformatted) {
-        Serial.printf ("[%10d] [file system] formatting, please wait ...\n", millis ()); 
+        Serial.printf ("[%10lu] [file system] formatting, please wait ...\n", millis ()); 
         if (SPIFFS.format ()) {
           fileSystemDmesg ("[file system] formatted.");
           if (SPIFFS.begin (false)) {
@@ -66,24 +68,23 @@
           
             xSemaphoreGive (SPIFFSsemaphore);
           
-            fileSystemDmesg ("[file system] SPIFFS failed to mount.");
-            return false;      
+            fileSystemDmesg ("[file system] SPIFFS failed to mount.");  
           }
         } else {
         
           xSemaphoreGive (SPIFFSsemaphore);
         
           fileSystemDmesg ("[file system] SPIFFS formatting failed.");
-          return false;
         }
       } else {
         fileSystemDmesg ("[file system] SPIFFS failed to mount.");
       }
     }
+    return false;
   }
 
   // reads entire file into String without using sempahore - it is expected that calling functions would provide it - returns success
-  bool __readEntireFileWithoutSemaphore__ (String *fileContent, char *fileName) {
+  bool __readEntireFileWithoutSemaphore__ (String *fileContent, const char *fileName) {
     *fileContent = "";
     
     File file;
@@ -92,19 +93,19 @@
       file.close ();
       return true;
     } else { 
-      Serial.printf ("[%10d] [file_system] can't read %s\n", millis (), fileName);
+      Serial.printf ("[%10lu] [file_system] can't read %s\n", millis (), fileName);
       file.close ();
       return false;      
     }
   }  
 
   // writes String into file file without using sempahore - it is expected that calling functions would provide it - returns success
-  bool __writeEntireFileWithoutSemaphore__ (String fileContent, char *fileName) {
+  bool __writeEntireFileWithoutSemaphore__ (String fileContent, const char *fileName) {
     File file;
     if ((bool) (file = SPIFFS.open (fileName, "w")) && !file.isDirectory ()) {
       if (file.printf (fileContent.c_str ()) != strlen (fileContent.c_str ())) { // can't write file
         file.close ();
-        Serial.printf ("[%10d] [file_system] can't write %s\n", millis (), fileName);
+        Serial.printf ("[%10lu] [file_system] can't write %s\n", millis (), fileName);
         return false;                
       } else {
         file.close ();
@@ -115,7 +116,7 @@
   }  
 
   // reads entire file into String, returns success
-  bool readEntireFile (String *fileContent, char *fileName) {
+  bool readEntireFile (String *fileContent, const char *fileName) {
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
       bool b = __readEntireFileWithoutSemaphore__ (fileContent, fileName);
     xSemaphoreGive (SPIFFSsemaphore);
@@ -123,14 +124,14 @@
   }
 
   // writes String into file file, returns success
-  bool writeEntireFile (String& fileContent, char *fileName) {
+  bool writeEntireFile (String& fileContent, const char *fileName) {
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
       bool b = __writeEntireFileWithoutSemaphore__ (fileContent, fileName);
     xSemaphoreGive (SPIFFSsemaphore);
     return b;  
   }  
   
-  String readEntireTextFile (char *fileName) { // reads entire file into String (ignoring \r) - it is supposed to be used for small files
+  String readEntireTextFile (const char *fileName) { // reads entire file into String (ignoring \r) - it is supposed to be used for small files
     String s = "";
     char c;
     File file;
@@ -140,7 +141,7 @@
         while (file.available ()) if ((c = file.read ()) != '\r') s += String (c);
         file.close (); 
       } else {
-        Serial.printf ("[%10d] [file system] can't read %s\n", millis (), fileName);
+        Serial.printf ("[%10lu] [file system] can't read %s\n", millis (), fileName);
       }
     xSemaphoreGive (SPIFFSsemaphore);
     
@@ -156,7 +157,7 @@
       File file;
       if ((bool) (file = SPIFFS.open (fileName, "r")) && !file.isDirectory ()) {
         *buffSize = file.size ();
-        if (retVal = (byte *) malloc (*buffSize)) {
+        if ((retVal = (byte *) malloc (*buffSize))) {
           char *p = (char *) retVal;
           int i = 0;
           while (file.available () && i++ < *buffSize) *(p++) = file.read ();

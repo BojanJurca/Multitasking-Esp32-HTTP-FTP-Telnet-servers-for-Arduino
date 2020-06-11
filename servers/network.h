@@ -35,13 +35,15 @@
  *          - simplifyed entry of default parameters,
  *            simplifyed format of configuration files 
  *            December 1, Bojan Jurca
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca
  *            
  */
 
 
-// define host name (only works for station)
+// define host name
 #ifndef HOSTNAME
-  #define HOSTNAME WiFi.getHostname() // use default if not defined
+  #define HOSTNAME "defaultHostname" // WiFi.getHostname() // use default if not defined
 #endif
 
 // define default STAtion mode parameters to be written into /etc/wpa_supplicant.conf if you want to use ESP as WiFi station
@@ -88,7 +90,7 @@
     #ifdef __TELNET_SERVER__ 
       dmesg (message);                                            // use dmesg from telnet server if possible (if telnet server is in use)
     #else
-      Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); // just print the message to serial console window otherwise
+      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); // just print the message to serial console window otherwise
     #endif
   }
   void (* networkDmesg) (String) = __networkDmesg__; // use this pointer to display / record system messages - it will be redirected to telnet dmesg function if telnet server will be included later
@@ -269,7 +271,7 @@
           networkDmesg ("[network] [AP] initializing access point: " + apSSID + "/" + apPassword + ", " + apIP + ", " + apGateway + ", " + apSubnetMask); 
           WiFi.softAPConfig (IPAddressFromString (apIP), IPAddressFromString (apGateway), IPAddressFromString (apSubnetMask));
           WiFi.begin ();
-          // Serial.printf ("[%10d] [network] [AP] IP: %s\n", millis (), WiFi.softAPIP ().toString ().c_str ());
+          // Serial.printf ("[%10lu] [network] [AP] IP: %s\n", millis (), WiFi.softAPIP ().toString ().c_str ());
         } else {
           // ESP.restart ();
           networkDmesg ("[network] [AP] failed to initialize access point mode."); 
@@ -381,7 +383,7 @@
     bool inComment = false;  
     bool inQuotation = false;
     String c;
-    bool lastCharacterIsSpace = false;
+    
     for (int i = 0; i < inp.length (); i++) {
       c = inp.substring (i, i + 1);
   
@@ -461,7 +463,7 @@
     for (netif = netif_list; netif; netif = netif->next) {
       if (netif_is_up (netif)) {
         if (s != "") s += "\r\n";
-        s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + "     hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" + 
+        s += String (netif->name [0]) + String (netif->name [1]) + "      hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" + 
                  "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
                  "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n" + 
                  "        mtu: " + String (netif->mtu) + "\r\n";
@@ -526,14 +528,14 @@
     struct etharp_entry *arpTablePointer = __getArpTablePointer__ ();
 
     struct netif *netif;
-    ip4_addr_t *ipaddr;
+    // ip4_addr_t *ipaddr;
     // scan ARP table it for each netif  
     String s = "";
     for (netif = netif_list; netif; netif = netif->next) {
       struct etharp_entry *p = arpTablePointer; // start scan of ARP table from the beginning with the next netif
       if (netif_is_up (netif)) {
         if (s != "") s += "\r\n\r\n";
-        s += String (netif->name [0]) + String (netif->name [1]) + String ((int) netif->name [2]) + ": " + inet_ntos (netif->ip_addr) + "\r\n  Internet Address      Physical Address      Type";
+        s += String (netif->name [0]) + String (netif->name [1]) + ": " + inet_ntos (netif->ip_addr) + "\r\n  Internet Address      Physical Address      Type";
         if (arpTablePointer) { // we have got a valid pointer to ARP table
           for (int i = 0; i < ARP_TABLE_SIZE; i++) { // scan through ARP table
             if (p->state != ETHARP_STATE_EMPTY) {

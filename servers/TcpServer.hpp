@@ -36,7 +36,9 @@
  *          - added TcpDmesg to log/display system messages/errors
  *            added support for SSL extensions, SSL extensions themselves included yet
  *            February 26, 2020, Bojan Jurca
- *  
+ *          - elimination of compiler warnings and some bugs
+ *            Jun 10, 2020, Bojan Jurca            
+ *          
  */
 
 
@@ -45,7 +47,7 @@
 
   // dmesg
   void __TcpDmesg__ (String message) { 
-    Serial.printf ("[%10d] %s\n", millis (), message.c_str ()); 
+    Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
   }
   void (* TcpDmesg) (String) = __TcpDmesg__; // use this pointer to display / record system messages
 
@@ -139,7 +141,7 @@
                                                                                 this, // pass "this" pointer to static member function
                                                                                 tskNORMAL_PRIORITY,
                                                                                 NULL)) {
-                                                      __connectionState__ == TcpConnection::NOT_STARTED;
+                                                      this->__connectionState__ = TcpConnection::NOT_STARTED;
                                                       // log_e ("[Thread:%lu][Core:%i][Socket:%i] threaded constructor: xTaskCreate () error\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket);
                                                       // TO DO: make constructor return NULL
                                                     } 
@@ -182,7 +184,8 @@
                                                   portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
                                                   if (connectionSocket != -1) { // can not close socket inside of critical section, close it now
                                                     // if (shutdown (connectionSocket, SHUT_RD) == -1) log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: shutdown () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__, errno);
-                                                    if (close (connectionSocket) == -1);            // log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__, errno); 
+                                                    // if (close (connectionSocket) == -1);            // log_e ("[Thread:%i][Core:%i][Socket:%i] closeConnection: close () error %i\n", xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__, errno); 
+                                                    close (connectionSocket);
                                                   }  
                                                   // log_v ("[Thread:%lu][Core:%i][Socket:%i] } closeConnection\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__);  
                                                 }
@@ -313,7 +316,7 @@
   
       bool timeOut ()                           { return __timeOut__; } // returns true if time-out has occured
   
-      bool setTimeOut (unsigned long timeOutMillis)                 // user defined time-out if it differs from default one
+      void setTimeOut (unsigned long timeOutMillis)                 // user defined time-out if it differs from default one
                                                 {
                                                   __timeOutMillis__ = timeOutMillis;
                                                   __lastActiveMillis__ = millis ();
@@ -339,7 +342,7 @@
         RUNNING = 1,                                                    // connection thread has started
         FINISHED = 2                                                    // connection thread has finished, instance can unload
       };
-      CONNECTION_THREAD_STATE_TYPE __connectionState__ = NOT_STARTED;          
+      CONNECTION_THREAD_STATE_TYPE __connectionState__ = TcpConnection::NOT_STARTED;          
       
       virtual void __callConnectionHandlerCallback__ () {               // calls connection handler function (just one time from another thread)
                                                           // log_i ("[Thread:%lu][Core:%i][Socket:%i] connection started\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__);
@@ -437,7 +440,7 @@
                                                   // log_v ("[Thread:%lu][Core:%i] } non-threaded constructor\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                 }
   
-      ~TcpServer ()                             {
+      virtual ~TcpServer ()                     {
                                                   // log_v ("[Thread:%lu] destructor {\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID ());
                                                   if (__connection__) delete (__connection__); // close non-threaded mode connection if it has been established
                                                   __instanceUnloading__ = true; // signal __listener__ to stop
