@@ -7,6 +7,7 @@ You can use the following commands:
   stop telnet server      /* added just as an example here */
   digitalRead <pinNumber> /* added just as an example here */
   analogRead <pinNumber>  /* added just as an example here */
+  date (-s <YYYY/MM/DD hh:mm:ss>)
   uname (-a)
   mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
   ls (<directoryName>) or dir (<directoryName>)
@@ -24,6 +25,7 @@ You can use the following commands:
   free (-s <n>)
   dmesg (--follow)
   uptime
-  reboot
+  reboot /* soft reset */
+  reset  /* hard reset */
   help
   quit
