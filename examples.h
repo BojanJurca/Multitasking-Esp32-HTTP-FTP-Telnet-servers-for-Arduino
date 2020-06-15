@@ -130,6 +130,11 @@ errorInCommunication:
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameter); // connection handler callback function
 
 void example11_morseEchoServer () {
+  if (getWiFiMode () == WIFI_OFF) {
+    Serial.printf ("[%10lu] [example 11] Could not start Morse server since there is no network.\n", millis ());
+    return;
+  }
+  
   // start new TCP server
   TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler,  // function that is going to handle the connections
                                        NULL,                              // no additional parameter will be passed to morseEchoServerConnectionHandler function

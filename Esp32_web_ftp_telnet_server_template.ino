@@ -45,12 +45,12 @@
 
 // define TIMEZONE  KAL_TIMEZONE
 // ...
-#define TIMEZONE  EASTERN_TIMEZONE
+// #define TIMEZONE  EASTERN_TIMEZONE
 // (default) #define TIMEZONE  CET_TIMEZONE               // choose your time zone or modify timeToLocalTime function
 #include "./servers/real_time_clock.hpp"                  // Telnet server needs rtc to execute certain commands such as uptime
-real_time_clock rtc ((char *) "1.si.pool.ntp.org",  // first NTP server
-                     (char *) "2.si.pool.ntp.org",  // second NTP server if the first one is not accessible
-                     (char *) "3.si.pool.ntp.org"); // third NTP server if the first two are not accessible
+real_time_clock rtc ((char *) "1.si.pool.ntp.org",        // first NTP server
+                     (char *) "2.si.pool.ntp.org",        // second NTP server if the first one is not accessible
+                     (char *) "3.si.pool.ntp.org");       // third NTP server if the first two are not accessible
 
 #include "./servers/oscilloscope.h"
 
@@ -65,13 +65,18 @@ measurements rssi (60);                     // measure WiFi signal quality
 
 
 #include "./servers/webServer.hpp"                      // Web server
-httpServer  *httpSrv = NULL;  // pointer to Web server
+httpServer  *httpSrv = NULL;                            // pointer to Web server
 String httpRequestHandler (String& httpRequest);
 void wsRequestHandler (String& wsRequest, WebSocket *webSocket);
 String startWebServer () {
+  if (getWiFiMode () == WIFI_OFF) {
+    webDmesg ("Could not start HTTP server since there is no network.");
+    return "Could not start HTTP server since there is no network.";
+  }
+ 
   if (!httpSrv) {
     httpSrv = new httpServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
-                              wsRequestHandler,           // a callback function that will handle WS requests, NULL if WS requests are to be ignored
+                              wsRequestHandler,           // a callback function that will handle WS requests, NULL to ignore WS requests
                               8192,                       // 8 KB stack size is usually enough, if httpRequestHandler uses more stack increase this value until server is stable
                               (char *) "0.0.0.0",         // start HTTP server on all available ip addresses
                               80,                         // HTTP port
@@ -86,7 +91,7 @@ String stopWebServer () {
   if (httpSrv) { delete (httpSrv); httpSrv = NULL; return "HTTP server stopped. Active connections will continue to run anyway."; } 
   else                                             return "HTTP server is not running.";
 }
-String httpRequestHandler (String& httpRequest) {  // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
+String httpRequestHandler (String& httpRequest) { // - normally httpRequest is HTTP request, webSocket is NULL, function returns a reply in HTML, json, ... formats or "" if request is unhandeled
                                                   // httpRequestHandler is supposed to be used with smaller replies,
                                                   // if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (/var/www/html/ by default)
                                                   // - has to be reentrant!
@@ -157,7 +162,7 @@ String httpRequestHandler (String& httpRequest) {  // - normally httpRequest is 
                                                                             return "{\"id\":\"niceSlider3\",\"value\":\"" + String (niceSlider3) + "\"}"; // read slider value from variable or in some other way
                                                                           }
   else if (httpRequest.substring (0, 17) == "PUT /niceSlider3/")          { // used by example05.html
-                                                                          niceSlider3 = httpRequest.substring (17, 19).toInt (); // 0 .. 10
+                                                                            niceSlider3 = httpRequest.substring (17, 19).toInt (); // 0 .. 10
                                                                             Serial.printf ("[Got request from web browser for niceSlider3]: %i\n", niceSlider3);
                                                                             goto returnNiceSlider3Value; // return success (or possible failure) back to the client
                                                                           }
@@ -215,6 +220,11 @@ bool telnetAndFtpFirewall (char *IP) {          // firewall callback function, r
 #include "./servers/ftpServer.hpp"                      // SPIFFS doesn't record file creation time so this information will be false anyway
 ftpServer *ftpSrv = NULL;                               // pointer to FTP server (it doesn't call external handling function so it doesn't have to be defined)
 String startFtpServer () {
+  if (getWiFiMode () == WIFI_OFF) {
+    ftpDmesg ("Could not start FTP server since there is no network.");
+    return "Could not start FTP server since there is no network.";
+  }
+    
   if (!ftpSrv) {
     ftpSrv = new ftpServer ((char *) "0.0.0.0",         // start FTP server on all available ip addresses
                             21,                         // controll connection FTP port
@@ -236,8 +246,13 @@ String stopFtpServer () {
 telnetServer *telnetSrv = NULL; // pointer to Telnet server
 String telnetCommandHandler (int argc, String argv [], String homeDirectory);
 String startTelnetServer () {
+  if (getWiFiMode () == WIFI_OFF) {
+    dmesg ("Could not start Telnet server since there is no network.");
+    return "Could not start Telnet server since there is no network.";
+  }
+    
   if (!telnetSrv) {
-    telnetSrv = new telnetServer (telnetCommandHandler, // a callback function tht will handle telnet commands that are not handled by telnet server itself
+    telnetSrv = new telnetServer (telnetCommandHandler, // a callback function that will handle telnet commands that are not handled by telnet server itself
                                   8192,                 // 8 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
                                   (char *) "0.0.0.0",   // start telnt server on all available ip addresses
                                   23,                   // telnet port
@@ -350,16 +365,15 @@ void setup () {
     default:                        dmesg ("[ESP32] wakeup was not caused by deep sleep: " + String (wakeup_reason) + "."); break;
   }
 
-  // SPIFFS.format ();
+  // SPIFFS.format (); // uncomment this line and run sketch only one time on ESP32 then comment it again 
 
-  if (mountSPIFFS (true)) dmesg ("[SPIFFS] mounted.");    // this is the first thing that you should do
-  else                dmesg ("[SPIFFS] mount failed.");
+  mountSPIFFS (true);                             // this is the first thing that you should do
 
-  usersInitialization ();                             // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
+  usersInitialization ();                         // creates user management files with "root", "webadmin" and "webserver" users (only needed for initialization)
 
-  // SPIFFS.remove ("/etc/wpa_supplicant.conf"); // deleting wpa_supplicant.conf would cause creating a new one with default WiFi settings - see network.h
+  // SPIFFS.remove ("/etc/wpa_supplicant.conf");  // deleting wpa_supplicant.conf willd cause creating a new one with default WiFi settings - see network.h
 
-  connectNetwork ();                                  // network should be connected after file system is mounted since it reads its configuration from file system
+  connectNetwork ();                              // network should be connected after file system is mounted since it reads its configuration from file system
 
   // listFilesOnFlashDrive ();
 
@@ -369,10 +383,10 @@ void setup () {
 
   // ----- examples -----
   
-  pinMode (2, OUTPUT);                                // this is just for demonstration purpose - prepare built-in LED
+  pinMode (2, OUTPUT);                            // this is just for demonstration purpose - prepare built-in LED
   digitalWrite (2, LOW);
-  pinMode (22, INPUT_PULLUP);                         // this is just for demonstration purpose - oscilloscope
-  if (pdPASS != xTaskCreate ([] (void *) {            // start examples in separate thread
+  pinMode (22, INPUT_PULLUP);                     // this is just for demonstration purpose - oscilloscope
+  if (pdPASS != xTaskCreate ([] (void *) {        // start examples in separate thread
                                             example07_filesAndDelays ();
                                             example08_realTimeClock ();
                                             example09_makeRestCall ();
