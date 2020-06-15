@@ -4,8 +4,7 @@
  * 
  *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
  *
- *  Only flash disk formating and mounting of SPIFFS file system is defined here, a documentation on SPIFFS
- *  can be found here: http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html
+ *  A documentation on SPIFFS can be found here: http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html
  * 
  * History:
  *          - first release, 
@@ -43,44 +42,19 @@
 
 
   bool mountSPIFFS (bool formatIfUnformatted) {                                           // mount file system by calling this function
+    bool b;
     
+      fileSystemDmesg ("[file system] mounting SPIFFS ...");
     xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY);
-
-    if (SPIFFS.begin (false)) {
-      
-      xSemaphoreGive (SPIFFSsemaphore);
-
-      fileSystemDmesg ("[file system] SPIFFS mounted.");
-      __fileSystemMounted__ = true;
-      return true;
-    } else {
-      if (formatIfUnformatted) {
-        Serial.printf ("[%10lu] [file system] formatting, please wait ...\n", millis ()); 
-        if (SPIFFS.format ()) {
-          fileSystemDmesg ("[file system] formatted.");
-          if (SPIFFS.begin (false)) {
-          
-            xSemaphoreGive (SPIFFSsemaphore);
-          
-            fileSystemDmesg ("[file system] SPIFFS mounted.");
-            return true;
-          } else {
-          
-            xSemaphoreGive (SPIFFSsemaphore);
-          
-            fileSystemDmesg ("[file system] SPIFFS failed to mount.");  
-          }
-        } else {
-        
-          xSemaphoreGive (SPIFFSsemaphore);
-        
-          fileSystemDmesg ("[file system] SPIFFS formatting failed.");
-        }
+      b = SPIFFS.begin (formatIfUnformatted);
+    xSemaphoreGive (SPIFFSsemaphore);
+      if (b) {
+        __fileSystemMounted__ = true;
+        fileSystemDmesg ("[file system] SPIFFS mounted.");
       } else {
         fileSystemDmesg ("[file system] SPIFFS failed to mount.");
       }
-    }
-    return false;
+      return b;
   }
 
   // reads entire file into String without using sempahore - it is expected that calling functions would provide it - returns success

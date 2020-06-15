@@ -31,7 +31,7 @@
   #define __FTP_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME "defaultHostname" // WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "MyESP32Server" // WiFi.getHostname() // use default if not defined
   #endif
 
   #include <WiFi.h>

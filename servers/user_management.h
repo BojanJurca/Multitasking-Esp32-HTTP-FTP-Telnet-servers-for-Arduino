@@ -115,6 +115,11 @@
     void usersInitialization () {                                            // creates user management files with "root", "webadmin" and "webserver" users
                                                                              // only 3 fields are used: user name, hashed password and home directory
 
+      if (!__fileSystemMounted__) {
+        Serial.printf ("[%10lu] [user management] file system is not mounted, can't read or write user configuration files.\n", millis ()); 
+        return; // if there is no file system we can not write configuration files
+      }
+
       String fileContent = "";
       
       // create /etc/passwd if it doesn't exist

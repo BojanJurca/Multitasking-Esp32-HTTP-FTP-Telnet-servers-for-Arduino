@@ -630,9 +630,7 @@
                                                                     this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
                                                                     return;
                                                                   }
-                                                                  
                                                                   if (this->__udp__.parsePacket () != sizeof (this->__ntpPacket__)) return; // keep waiting for reply
-                                                                  
                                                                   // change state although we are not sure yet that reply is OK
                                                                   this->__state__ = real_time_clock::WAITING_FOR_NTP_SYNC;
                                                                   // read NTP response back into the same packet we used for NTP request (different bytes are used for request and reply)

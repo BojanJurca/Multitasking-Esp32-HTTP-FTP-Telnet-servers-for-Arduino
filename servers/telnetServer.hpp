@@ -54,7 +54,7 @@
     #define MACHINETYPE "ESP32"
   #endif
   #define ESP_SDK_VERSION ESP.getSdkVersion ()
-  #define SRV_TEMPLATE_VERSION "SRV32-1.22-dev"
+  #define SRV_TEMPLATE_VERSION "SRV32-1.22"
   int __getMHz__ () {
     unsigned long startMicors = micros ();
     unsigned long counter = 0;

@@ -43,7 +43,7 @@
 
 // define host name
 #ifndef HOSTNAME
-  #define HOSTNAME "defaultHostname" // WiFi.getHostname() // use default if not defined
+  #define HOSTNAME "MyESP32Server" // WiFi.getHostname() // use default if not defined
 #endif
 
 // define default STAtion mode parameters to be written into /etc/wpa_supplicant.conf if you want to use ESP as WiFi station
@@ -95,8 +95,15 @@
   }
   void (* networkDmesg) (String) = __networkDmesg__; // use this pointer to display / record system messages - it will be redirected to telnet dmesg function if telnet server will be included later
   
-  
   void connectNetwork () {                                        // connect to the network by calling this function
+    // connect STA and AP if defined
+    WiFi.disconnect (true);
+    WiFi.mode (WIFI_OFF);
+
+    if (!__fileSystemMounted__) {
+      networkDmesg ("[network] file system is not mounted, can't read or write network configuration files.");
+      return; // if there is no file system we can not read configuration files
+    }
   
     // it is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used
 
@@ -253,8 +260,6 @@
     }
   
     // connect STA and AP if defined
-    WiFi.disconnect (true);
-    WiFi.mode (WIFI_OFF);
 
     if (staSSID > "") { // setup STA
       if (staIP > "") { // configure static IP address
@@ -302,7 +307,6 @@
         // networkDmesg ("[network] mounting " + apSSID + ".");
       }
     }  
-
 
     // network event logging - see: https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/examples/WiFiClientEvents/WiFiClientEvents.ino
     WiFi.onEvent ([] (WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -376,6 +380,12 @@
       }
     });    
     
+  }
+
+  wifi_mode_t getWiFiMode () {
+    wifi_mode_t retVal = WIFI_OFF;
+    if (esp_wifi_get_mode (&retVal) != ESP_OK); // networkDmesg ("[network] couldn't get WiFi mode.");
+    return retVal;
   }
 
   String __compactNetworkConfiguration__ (String inp) { // skips comments, ...

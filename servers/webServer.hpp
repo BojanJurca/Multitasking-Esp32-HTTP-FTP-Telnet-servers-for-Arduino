@@ -37,7 +37,7 @@
   #define __WEB_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME "defaultHostname" // WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "MyESP32Server" // WiFi.getHostname() // use default if not defined
   #endif
 
   // ----- includes, definitions and supporting functions -----
@@ -56,6 +56,7 @@
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp  
   #include "user_management.h"    // webServer.hpp needs user_management.h to get www home directory
   #include "file_system.h"        // webServer.hpp needs file_system.h to read files  from home directory
+  #include "network.h"            // webServer.hpp needs network.h
 
   // missing C function in Arduino, but we are going to need it
   char *stristr (char *haystack, char *needle) { 
@@ -542,6 +543,11 @@ readingPayload:
  */
 
   String webClient (char *serverIP, int serverPort, unsigned int timeOutMillis, String httpRequest) {
+    if (getWiFiMode () == WIFI_OFF) {
+      webDmesg ("Could not start webClient since there is no network.");
+      return "";
+    }
+  
     char buffer [256]; *buffer = 0; // reserve some space to hold the response
     String retVal = ""; // place for response
     // create non-threaded TCP client instance
@@ -602,6 +608,11 @@ readingPayload:
   #include <esp_wifi.h>
 
   String webClientCallMAC (char *serverMAC, int serverPort, unsigned int timeOutMillis, String httpRequest) {
+    if (getWiFiMode () == WIFI_OFF) {
+      webDmesg ("Could not start webClient since there is no network.");
+      return "";
+    }
+    
     // scan through list of connected stations
     wifi_sta_list_t wifi_sta_list = {};
     tcpip_adapter_sta_list_t adapter_sta_list = {};
