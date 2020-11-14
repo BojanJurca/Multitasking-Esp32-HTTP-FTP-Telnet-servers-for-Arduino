@@ -12,6 +12,9 @@
  *          - elimination of compiler warnings and some bugs
  *            Jun 11, 2020, Bojan Jurca 
  *            
+ * TO DO:
+ *          - when WiFi is WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working in higher frequenceses
+ *            
  */
 
 
@@ -69,7 +72,7 @@ void oscilloscopeReader (void *parameters) {
   int16_t samplingTime =              ((oscilloscopeSharedMemoryType *) parameters)->samplingTime;
   bool microSeconds =                 ((oscilloscopeSharedMemoryType *) parameters)->microSeconds;
   int screenWidthTime =               ((oscilloscopeSharedMemoryType *) parameters)->screenWidthTime; 
-  int screenRefreshTime =             ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshTime;  
+  // int screenRefreshTime =             ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshTime;  
   long screenRefreshTimeCommonUnit =  ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshTimeCommonUnit;  
   int screenRefreshModulus =          ((oscilloscopeSharedMemoryType *) parameters)->screenRefreshModulus;  
   oscilloscopeSamples *readBuffer =   &((oscilloscopeSharedMemoryType *) parameters)->readBuffer;
@@ -79,6 +82,8 @@ void oscilloscopeReader (void *parameters) {
   bool negativeTrigger =              ((oscilloscopeSharedMemoryType *) parameters)->negativeTrigger;
   int16_t negativeTriggerTreshold =   ((oscilloscopeSharedMemoryType *) parameters)->negativeTriggerTreshold;
   portMUX_TYPE *csSendBuffer =        &((oscilloscopeSharedMemoryType *) parameters)->csSendBuffer;
+
+esp_task_wdt_delete (NULL);
   
   int screenTimeOffset = 0;
   int16_t sampleTimeOffset; // = 0;
@@ -94,13 +99,13 @@ void oscilloscopeReader (void *parameters) {
     bool triggeredMode = positiveTrigger || negativeTrigger;
 
     if (triggeredMode) { // if no trigger is set then skip this part and start sampling immediatelly
-      // Serial.printf ("[oscilloscope] waiting to be triggered ...\n");
       int16_t lastSample = analog ? analogRead (gpio) : digitalRead (gpio);
       lastSampleTime = microSeconds ? micros () : millis ();
 
       while (true) { 
-        if (microSeconds) SPIFFSsafeDelayMicroseconds (samplingTime);
-        else              SPIFFSsafeDelay (samplingTime);
+        if (microSeconds) delayMicroseconds (samplingTime);
+        else              delay (samplingTime);
+esp_task_wdt_reset();        
         int16_t newSample = analog ? analogRead (gpio) : digitalRead (gpio);
         unsigned int newSampleTime = microSeconds ? micros () : millis ();
         if ((positiveTrigger && lastSample < positiveTriggerTreshold && newSample >= positiveTriggerTreshold) || 
@@ -123,9 +128,8 @@ void oscilloscopeReader (void *parameters) {
 
     // take (the rest of the) samples that fit into one screen
     do {
-
       unsigned int newSampleTime = microSeconds ? micros () : millis ();
-      int16_t sampleTimeOffset = newSampleTime - lastSampleTime;
+      sampleTimeOffset = newSampleTime - lastSampleTime;
       screenTimeOffset += sampleTimeOffset;      
       lastSampleTime = newSampleTime;        
 
@@ -142,15 +146,15 @@ void oscilloscopeReader (void *parameters) {
       } // if (screenTimeOffset >= screenRefreshTimeCommonUnit)
       // take the next sample
       readBuffer->samples [readBuffer->count] = {(int16_t) (analog ? analogRead (gpio) : digitalRead (gpio)), sampleTimeOffset};
-      readBuffer->count = (readBuffer->count + 1) & 0b00111111; // 0 .. 63 max (which is inside buffer size) - just in case, number of samples will never exceed 41  
+      readBuffer->count = (readBuffer->count + 1) & 0b00111111; // 0 .. 63 max (which is inside buffer size) - just in case, the number of samples will never exceed 41  
       // stop reading if sender is not running any more
       if (!((oscilloscopeSharedMemoryType *) parameters)->senderIsRunning) { 
         ((oscilloscopeSharedMemoryType *) parameters)->readerIsRunning = false;
         vTaskDelete (NULL); // instead of return; - stop this thread
       }
 
-      if (microSeconds) SPIFFSsafeDelayMicroseconds (samplingTime); 
-      else              SPIFFSsafeDelay (samplingTime);
+      if (microSeconds) delayMicroseconds (samplingTime); 
+      else              delay (samplingTime);
 
     } while (screenTimeOffset < screenWidthTime);
 
@@ -160,8 +164,8 @@ void oscilloscopeReader (void *parameters) {
       // one screen frame has already been sent, we have to wait yet screenRefreshModulus - 1 screen frames
       // for the whole screen refresh time to pass
       for (int i = 1; i < screenRefreshModulus; i++) {
-        if (microSeconds) SPIFFSsafeDelayMicroseconds (screenRefreshTimeCommonUnit); 
-        else              SPIFFSsafeDelay (screenRefreshTimeCommonUnit);        
+        if (microSeconds) delayMicroseconds (screenRefreshTimeCommonUnit); 
+        else              delay (screenRefreshTimeCommonUnit);        
       }
     } else {
       // correct sampleTimeOffset for the first sample int the next screen frame in non triggered mode
@@ -177,7 +181,7 @@ void oscilloscopeSender (void *parameters) {
   portMUX_TYPE *csSendBuffer =      &((oscilloscopeSharedMemoryType *) parameters)->csSendBuffer;
 
   while (true) {
-    SPIFFSsafeDelay (1);
+    delay (1);
     // send samples to javascript client if they are ready
     if (sendBuffer->ready) {
       oscilloscopeSamples samples;
@@ -196,7 +200,6 @@ void oscilloscopeSender (void *parameters) {
         ((oscilloscopeSharedMemoryType *) parameters)->senderIsRunning = false; // notify oscilloscope functions that session is finished
         vTaskDelete (NULL); // instead of return; - stop this task
       }
-      // Serial.printf ("[oscilloscope] send %i samples, %i bytes to the client\n", samples.count, size8_t);
     }
     // read command form javscrip client if it arrives
     if (webSocket->available () == WebSocket::STRING) { // according to oscilloscope protocol the string could only be 'stop' - so there is no need checking it
@@ -209,6 +212,9 @@ void oscilloscopeSender (void *parameters) {
 }
 
 void runOscilloscope (WebSocket *webSocket) {
+
+esp_task_wdt_delete (NULL);
+  
   // set up oscilloscope memory that will be shared among oscilloscope threads
   oscilloscopeSharedMemoryType oscilloscopeSharedMemory = {}; // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
   oscilloscopeSharedMemory.webSocket = webSocket;             // put webSocket rference into shared memory
@@ -220,11 +226,9 @@ void runOscilloscope (WebSocket *webSocket) {
   if (webSocket->readBinary ((byte *) &endianIdentification, sizeof (endianIdentification)) == sizeof (endianIdentification)) {
     oscilloscopeSharedMemory.clientIsBigEndian = (endianIdentification == 0xBBAA); // cient has sent 0xAABB
   } 
-  if (endianIdentification == 0xAABB || endianIdentification == 0xBBAA) {
-    Serial.printf ("[oscilloscope] clientIsBigEndian = %i\n", oscilloscopeSharedMemory.clientIsBigEndian);
-  } else {
-    Serial.printf ("[oscilloscope] communication does not follow oscilloscope protocol - expected endian identification\n");
-    webSocket->sendString ("Oscilloscope error. Expected endian identification bytes but got something else."); // send error also to javascript client
+  if (!(endianIdentification == 0xAABB || endianIdentification == 0xBBAA)) {
+    Serial.println ("[oscilloscope] communication does not follow oscilloscope protocol - expected endian identification.");
+    webSocket->sendString ("[oscilloscope] communication does not follow oscilloscope protocol - expected endian identification."); // send error also to javascript client
     return;
   }
 
@@ -247,13 +251,9 @@ void runOscilloscope (WebSocket *webSocket) {
                                 &oscilloscopeSharedMemory.screenRefreshTime, 
                                 oscilloscopeSharedMemory.screenRefreshTimeUnit,
                                 posNeg1, &treshold1, posNeg2, &treshold2)) {
-                                  
     case 8:   // no trigger
-              // Serial.printf ("No trigger\n");
               break;
-
     case 12:  // two triggers
-              // Serial.printf ("Two triggers\n");
               if (!strcmp (posNeg2, "positive")) {
                 oscilloscopeSharedMemory.positiveTrigger = true;
                 oscilloscopeSharedMemory.positiveTriggerTreshold = treshold2;
@@ -262,10 +262,8 @@ void runOscilloscope (WebSocket *webSocket) {
                 oscilloscopeSharedMemory.negativeTrigger = true;
                 oscilloscopeSharedMemory.negativeTriggerTreshold = treshold2;
               }    
-              // break; // no break;
-
+              // no break, continue
     case 10:  // one trigger
-              // Serial.printf ("One trigger\n");
               if (!strcmp (posNeg1, "positive")) {
                 oscilloscopeSharedMemory.positiveTrigger = true;
                 oscilloscopeSharedMemory.positiveTriggerTreshold = treshold1;
@@ -275,73 +273,54 @@ void runOscilloscope (WebSocket *webSocket) {
                 oscilloscopeSharedMemory.negativeTriggerTreshold = treshold1;
               }
               break;
-              
     default:
-              Serial.printf ("[oscilloscope] communication does not follow oscilloscope protocol\n");
+              Serial.println ("[oscilloscope] communication does not follow oscilloscope protocol.");
+              webSocket->sendString ("[oscilloscope] communication does not follow oscilloscope protocol."); // send error also to javascript client
               return;
   }
 
   // check the values and calculate derived values
-  if (!strcmp (oscilloscopeSharedMemory.readType, "analog") || !strcmp (oscilloscopeSharedMemory.readType, "digital")) {
-    Serial.printf ("[oscilloscope] readType = %s\n", oscilloscopeSharedMemory.readType);
-    oscilloscopeSharedMemory.analog = !strcmp (oscilloscopeSharedMemory.readType, "analog");
-    Serial.printf ("[oscilloscope] analog = %i\n", oscilloscopeSharedMemory.analog);
-  } else {
-    Serial.printf ("[oscilloscope] wrong readType\n");
-    webSocket->sendString ("Oscilloscope error. Read type can only be analog or digital."); // send error also to javascript client
+  if (!(!strcmp (oscilloscopeSharedMemory.readType, "analog") || !strcmp (oscilloscopeSharedMemory.readType, "digital"))) {
+    Serial.println ("[oscilloscope] wrong readType. Read type can only be analog or digital.");
+    webSocket->sendString ("[oscilloscope] wrong readType. Read type can only be analog or digital."); // send error also to javascript client
     return;    
   }
-  if (oscilloscopeSharedMemory.gpio >= 0 && oscilloscopeSharedMemory.gpio <= 255) {
-     Serial.printf ("[oscilloscope] GPIO = %i\n", oscilloscopeSharedMemory.gpio);
-  } else {
-    Serial.printf ("[oscilloscope] wrong GPIO\n");
-    webSocket->sendString ("Oscilloscope error. GPIO must be between 0 and 255."); // send error also to javascript client
+  if (!(oscilloscopeSharedMemory.gpio >= 0 && oscilloscopeSharedMemory.gpio <= 255)) {
+    Serial.println ("[oscilloscope] wrong GPIO. GPIO must be between 0 and 255.");
+    webSocket->sendString ("[oscilloscope] wrong GPIO. GPIO must be between 0 and 255."); // send error also to javascript client
     return;      
   }
-  if (oscilloscopeSharedMemory.samplingTime >= 1 && oscilloscopeSharedMemory.samplingTime <= 25000) {
-     Serial.printf ("[oscilloscope] samplingTime = %i\n", oscilloscopeSharedMemory.samplingTime);
-  } else {
-    Serial.printf ("[oscilloscope] invalid sampling time\n");
-    webSocket->sendString ("Oscilloscope error. Sampling time must be between 1 and 25000."); // send error also to javascript client
+  if (!(oscilloscopeSharedMemory.samplingTime >= 1 && oscilloscopeSharedMemory.samplingTime <= 25000)) {
+    Serial.println ("[oscilloscope] invalid sampling time. Sampling time must be between 1 and 25000.");
+    webSocket->sendString ("[oscilloscope] invalid sampling time. Sampling time must be between 1 and 25000."); // send error also to javascript client
     return;      
   }
   if (!strcmp (oscilloscopeSharedMemory.samplingTimeUnit, "ms") || !strcmp (oscilloscopeSharedMemory.samplingTimeUnit, "us")) {
-    Serial.printf ("[oscilloscope] samplingTimeUnit = %s\n", oscilloscopeSharedMemory.samplingTimeUnit);
     oscilloscopeSharedMemory.microSeconds = !strcmp (oscilloscopeSharedMemory.samplingTimeUnit, "us");
-    Serial.printf ("[oscilloscope] microSeconds = %i\n", oscilloscopeSharedMemory.microSeconds);
     if (oscilloscopeSharedMemory.microSeconds) oscilloscopeSharedMemory.microSecondCorrection = oscilloscopeSharedMemory.analog ? 12 : 2;   
-    Serial.printf ("[oscilloscope] microSecondCorrection = %i\n", oscilloscopeSharedMemory.microSecondCorrection);
   } else {
-    Serial.printf ("[oscilloscope] wrong samplingTimeUnit\n");
-    webSocket->sendString ("Oscilloscope error. Sampling time unit can only be ms or us."); // send error also to javascript client
+    Serial.println ("[oscilloscope] wrong samplingTimeUnit. Sampling time unit can only be ms or us.");
+    webSocket->sendString ("[oscilloscope] wrong samplingTimeUnit. Sampling time unit can only be ms or us."); // send error also to javascript client
     return;    
   }
-  if (oscilloscopeSharedMemory.screenWidthTime >= 4 * oscilloscopeSharedMemory.samplingTime  && oscilloscopeSharedMemory.screenWidthTime <= 1250000) {
-     Serial.printf ("[oscilloscope] screenWidthTime = %i\n", oscilloscopeSharedMemory.screenWidthTime);
-  } else {
-    Serial.printf ("[oscilloscope] invalid screen width time\n");
-    webSocket->sendString ("Oscilloscope error. Screen width time must be between 4 * sampling time and 125000."); // send error also to javascript client
+  if (!(oscilloscopeSharedMemory.screenWidthTime >= 4 * oscilloscopeSharedMemory.samplingTime  && oscilloscopeSharedMemory.screenWidthTime <= 1250000)) {
+    Serial.println ("[oscilloscope] invalid screen width time. Screen width time must be between 4 * sampling time and 125000.");
+    webSocket->sendString ("[oscilloscope] invalid screen width time. Screen width time must be between 4 * sampling time and 125000."); // send error also to javascript client
     return;      
   }
-  if (!strcmp (oscilloscopeSharedMemory.screenWidthTimeUnit, oscilloscopeSharedMemory.samplingTimeUnit)) {
-    Serial.printf ("[oscilloscope] screenWidthTimeUnit = %s\n", oscilloscopeSharedMemory.screenWidthTimeUnit);
-  } else {
-    Serial.printf ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit\n");
-    webSocket->sendString ("Oscilloscope error. Screen width time unit must be the same as sampling time unit."); // send error also to javascript client
+  if (strcmp (oscilloscopeSharedMemory.screenWidthTimeUnit, oscilloscopeSharedMemory.samplingTimeUnit)) {
+    Serial.println ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit.");
+    webSocket->sendString ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit."); // send error also to javascript client
     return;    
   }
-  if (oscilloscopeSharedMemory.screenRefreshTime >= 40 && oscilloscopeSharedMemory.screenRefreshTime <= 1000) {
-     Serial.printf ("[oscilloscope] screenRefreshTime = %i\n", oscilloscopeSharedMemory.screenRefreshTime);
-  } else {
-    Serial.printf ("[oscilloscope] invalid screen refresh time\n");
-    webSocket->sendString ("Oscilloscope error. Screen refresh time must be between 40 and 1000."); // send error also to javascript client
+  if (!(oscilloscopeSharedMemory.screenRefreshTime >= 40 && oscilloscopeSharedMemory.screenRefreshTime <= 1000)) {
+    Serial.println ("[oscilloscope] invalid screen refresh time. Screen refresh time must be between 40 and 1000.");
+    webSocket->sendString ("[oscilloscope] invalid screen refresh time. Screen refresh time must be between 40 and 1000."); // send error also to javascript client
     return;      
   }
-  if (!strcmp (oscilloscopeSharedMemory.screenRefreshTimeUnit, "ms")) {
-    Serial.printf ("[oscilloscope] screenRefreshTimeUnit = %s\n", oscilloscopeSharedMemory.screenRefreshTimeUnit);
-  } else {
-    Serial.printf ("[oscilloscope] screenRefreshTimeUnit must be ms\n");
-    webSocket->sendString ("Oscilloscope error. Screen refresh time unit must be ms."); // send error also to javascript client
+  if (strcmp (oscilloscopeSharedMemory.screenRefreshTimeUnit, "ms")) {
+    Serial.println ("[oscilloscope] screenRefreshTimeUnit must be ms.");
+    webSocket->sendString ("[oscilloscope] screenRefreshTimeUnit must be ms."); // send error also to javascript client
     return;    
   }
   if (!strcmp (oscilloscopeSharedMemory.screenWidthTimeUnit, "ms")) 
@@ -410,7 +389,7 @@ void runOscilloscope (WebSocket *webSocket) {
     oscilloscopeSharedMemory.readerIsRunning = true;  
   }
 
-  while (oscilloscopeSharedMemory.senderIsRunning || oscilloscopeSharedMemory.readerIsRunning) SPIFFSsafeDelay (100); // check every 1/10 of secod
+  while (oscilloscopeSharedMemory.senderIsRunning || oscilloscopeSharedMemory.readerIsRunning) { esp_task_wdt_reset(); delay (100); } // check every 1/10 of secod
 
   return;
 }
