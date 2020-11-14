@@ -1,31 +1,40 @@
 You can use the following commands:
-  start web server        /* added just as an example here */
-  stop web server         /* added just as an example here */
-  start ftp server        /* added just as an example here */
-  stop ftp server         /* added just as an example here */
-  start telnet server     /* added just as an example here */
-  stop telnet server      /* added just as an example here */
-  digitalRead <pinNumber> /* added just as an example here */
-  analogRead <pinNumber>  /* added just as an example here */
-  date (-s <YYYY/MM/DD hh:mm:ss>)
-  uname (-a)
-  mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
-  ls (<directoryName>) or dir (<directoryName>)
-  cat <fileName> or type <fileName>
-  rm <fileName> or del <fileName>
-  ping <target>
-  ifconfig or ipconfig
-  telnet <otherServerIP> (<otherServerPort>)
-  arp /* synonym for "arp -a" as implemented here */
-  iw
-  curl (GET|PUT|POST|DELETE) http://<IP>/(<page>)
-  useradd -u <userId> -d <userHomeDirectory> <userName>
-  userdel <userName>
-  passwd (<userName>)
-  free (-s <n>)
-  dmesg (--follow)
-  uptime
-  reboot /* soft reset */
-  reset  /* hard reset */
-  help
   quit
+  help
+  uname
+  uptime
+  reboot
+  reset
+  date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
+  free or free -s n (where 0 < n < 300)
+  dmesg or dmesg --follow
+  mkfs.fat
+  fs_info
+  ls or ls directoryName (or use dir instead of ls)
+  tree or tree directoryName
+  mkdir directoryName
+  rmdir directoryName
+  cd directoryName or cd ..
+  pwd
+  cat fileName or cat > fileName (or use type instead of ls)
+  cp existingFileName newFileName (or use copy instead of cp)
+  mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
+  rm fileName
+  passwd or passwd userName
+  useradd -u userId -d userHomeDirectory userName (where userId > 1000)
+  userdel userName
+  ifconfig (or use ipconfig instead of ifconfig)
+  iw
+  arp
+  ping targetIP
+  telnet targetIP
+  curl http://url or curl method http://url (where method is GET, PUT, ...)
+
+Configuration files used by system:
+  /etc/passwd                              contains users' accounts information
+  /etc/shadow                              contains users' passwords
+  /network/interfaces                      contains STA(tion) configuration
+  /etc/wpa_supplicant/wpa_supplicant.conf  contains STA(tion) credentials
+  /etc/dhcpcd.conf                         contains A(ccess) P(oint) configuration
+  /etc/hostapd/hostapd.conf                contains A(ccess) P(oint) credentials
+  /etc/ntp.conf                            contains NTP time servers names
