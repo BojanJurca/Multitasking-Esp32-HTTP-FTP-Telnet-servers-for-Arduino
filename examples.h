@@ -15,54 +15,21 @@
  */
 
 
-// Example 07 shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. 
-// Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: 
-// "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() 
-// and vTaskResumeAll()). The assertion failure you see is vTaskDelay() checking if it was called whilst the scheduler 
-// is disabled." Some SPIFFS functions internally call vTaskSuspendAll() hence no other thread should call delay() 
-// (which internally calls vTaskDelay()) since we cannot predict if this would happen while the scheduler is disabled.
-// Esp32_web_ftp_telnet_server_template introduces a SPIFFSsemaphore mutex that prevents going into delay() and SPIFSS 
-// functions simultaneously from different threads. Calling a delay() function is not thread (when used together with 
-// SPIFFS) safe and would crash ESP32 occasionally. Use SPIFFSsafeDelay() instead.
-
-void example07_filesAndDelays () {
-  for (int i = 0; i < 3; i++) {
-    String s = "";
-    File file;
-  
-    xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY); // always take SPIFFSsemaphore before any SPIFSS operations
-    
-    if ((bool) (file = SPIFFS.open ("/etc/wpa_supplicant.conf", FILE_READ)) && !file.isDirectory ()) {
-      while (file.available ()) s += String ((char) file.read ());
-      file.close (); 
-      Serial.printf ("[%10lu] [example 07] the content of file /etc/wpa_supplicant.conf is\r\n%s\n", millis (), s.c_str ());
-    } else {
-      Serial.printf ("[%10lu] [example 07] can't read file /etc/wpa_supplicant.conf\n", millis ());
-    }
-    
-    xSemaphoreGive (SPIFFSsemaphore); // always give SPIFFSsemaphore when SPIFSS operation completes
-    
-    SPIFFSsafeDelay (1000); // always use SPIFFSsafeDelay() instead of delay()
-  }
-}
-
-
 // Example 08 demonstrates the use of rtc instance (real time clock) built into Esp32_web_ftp_telnet_server_template
 
-void example08_realTimeClock () {
+void example08_time () {
   // since we are running this example at the very start of ESP we have to give it time to connect
   // and get current time from NTP server first - wait max 10 seconds
+  time_t t;
   unsigned long startTime = millis ();
-  while (millis () - startTime < 10000 && !rtc.isGmtTimeSet ()) SPIFFSsafeDelay (1);
+  while (millis () - startTime < 10000 && !(t = getGmt ())) delay (1);
   
-  if (rtc.isGmtTimeSet ()) { // success, got time
-    time_t now = rtc.getGmtTime ();
-    Serial.printf ("[%10lu] [example 08] current UNIX time is %lu\n", millis (), (unsigned long) now);
-  
-    struct tm nowStr = rtc.getLocalStructTime ();
-    Serial.printf ("[%10lu] [example 08] current local time is %02i.%02i.%02i %02i:%02i:%02i\n", millis (), 1900 + nowStr.tm_year, 1 + nowStr.tm_mon, nowStr.tm_mday, nowStr.tm_hour, nowStr.tm_min, nowStr.tm_sec);
-  } else { // faild to get current time so far
-    Serial.printf ("[%10lu] [example 08] rtc has not obtained time from NTP server yet\n", millis ());
+  if (t) { // success, time has been set
+    Serial.printf ("[%10lu] [example 08] current UNIX time is %lu\n", millis (), (unsigned long) t);
+    struct tm localTime = timeToStructTime (timeToLocalTime (t));
+    Serial.printf ("[%10lu] [example 08] current local time is %02i.%02i.%02i %02i:%02i:%02i\n", millis (), 1900 + localTime.tm_year, 1 + localTime.tm_mon, localTime.tm_mday, localTime.tm_hour, localTime.tm_min, localTime.tm_sec);
+  } else { // faild to get current time
+    Serial.printf ("[%10lu] [example 08] couldn't get current time from NTP servers (yet)\n", millis ());
   }
 }
 
@@ -70,9 +37,7 @@ void example08_realTimeClock () {
 // Example 09 shows how we can use TcpServer objects to make HTTP requests
 
 void example09_makeRestCall () {
-  String s = webClient ((char *) "127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
-  // alternatively, you can use webClientCallMAC if you prefer to address stations connected to the AP network interface
-  // by MAC rather then IP addresses - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
+  String s = webClient ((char *) "127.0.0.1", 80, 5000, "GET /builtInLed"); // send request to local loopback port 80, wait max 5 s (time-out)
   if (s > "")
     Serial.printf ("[%10lu] [example 09] %s\r\n", millis (), s.c_str ());
   else
@@ -86,7 +51,7 @@ void example09_makeRestCall () {
 void example10_webSockets (WebSocket *webSocket) {
   while (true) {
     switch (webSocket->available ()) {
-      case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
+      case WebSocket::NOT_AVAILABLE:  delay (1);
                                       break;
       case WebSocket::STRING:       { // text received
                                       String s = webSocket->readString ();
@@ -145,10 +110,10 @@ void example11_morseEchoServer () {
                                        NULL);                             // don't use firewall in this example
   // check success
   if (myServer->started ()) {
-    Serial.printf ("[%10lu] [example 11] Morse echo server started, try \"telnet <server IP> 24\" to try it\n", millis ());
+    Serial.printf ("[%10lu] [example 11] Morse echo server started, type telnet serverIP 24 to try it\n", millis ());
   
     // let the server run for 30 seconds - this much time you have to connect to it to test how it works
-    SPIFFSsafeDelay (30000);
+    delay (30000);
   
     // shut down the server - is any connection is still active it will continue to run anyway
     delete (myServer);
@@ -179,10 +144,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
   int index;  
   
   // send welcome reply first as soon as new connection arrives - in a readable form
-  #define IAC 255
-  #define DONT 254
-  #define ECHO 1
-  sprintf (outputBuffer, "Type anything except quit. Quit will end the connection.%c%c%c\r\n", IAC, DONT, ECHO); 
+  sprintf (outputBuffer, "Type anything except quit. Quit will end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
   // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
   // to test this example it is a good idea to communicate with it in the way it understands
   bytesToSend = strlen (outputBuffer);
