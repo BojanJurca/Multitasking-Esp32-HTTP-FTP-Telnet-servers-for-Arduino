@@ -22,7 +22,7 @@ What is new?
 
 What is still planned for the next release?
 
-  - a simple text editor for small configuration files that would work over telnet
+  - a simple text editor for small configuration files that would work over telnet.
 
 In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
@@ -32,7 +32,7 @@ You can go directly to Setup instructions and examples now or continue reading t
 
 ## Features
 
-- **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
+**webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
    - WS protocol – only basic support for WebSockets is included so far,
@@ -42,89 +42,89 @@ You can go directly to Setup instructions and examples now or continue reading t
    - support for HTTP 1.1 keep-alive directive,
    - optional firewall for incoming requests.
 
-- **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Built-in commands implemented so far:
+**telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Built-in commands implemented so far:
 
 You can use the following commands:
-  quit
-  help
-  uname
-  uptime
-  reboot
-  reset
-  date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
-  free or free -s n (where 0 < n < 300)
-  dmesg or dmesg --follow
-  mkfs.fat
-  fs_info
-  ls or ls directoryName (or use dir instead of ls)
-  tree or tree directoryName
-  mkdir directoryName
-  rmdir directoryName
-  cd directoryName or cd ..
-  pwd
-  cat fileName or cat > fileName (or use type instead of ls)
-  cp existingFileName newFileName (or use copy instead of cp)
-  mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
-  rm fileName
-  passwd or passwd userName
+   - quit
+   - help
+   - uname
+   - uptime
+   - reboot
+   - reset
+   - date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
+   - free or free -s n (where 0 < n < 300)
+   - dmesg or dmesg --follow
+   - mkfs.fat
+   - fs_info
+   - ls or ls directoryName (or use dir instead of ls)
+   - tree or tree directoryName
+   - mkdir directoryName
+   - rmdir directoryName
+   - cd directoryName or cd ..
+   - pwd
+   - cat fileName or cat > fileName (or use type instead of ls)
+   - cp existingFileName newFileName (or use copy instead of cp)
+   - mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
+   - rm fileName
+   - passwd or passwd userName
   useradd -u userId -d userHomeDirectory userName (where userId > 1000)
-  userdel userName
-  ifconfig (or use ipconfig instead of ifconfig)
-  iw
-  arp
-  ping targetIP
-  telnet tergetIP
-  curl http://url or curl method http://url (where method is GET, PUT, ...)
+   - userdel userName
+   - ifconfig (or use ipconfig instead of ifconfig)
+   - iw
+   - arp
+   - ping targetIP
+   - telnet tergetIP
+   - curl http://url or curl method http://url (where method is GET, PUT, ...)
 
 Other features:
 
-  - threaded Telnet sessions,
-  - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
-  - optional firewall for incoming connections.
+   - threaded Telnet sessions,
+   - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
+   - optional firewall for incoming connections.
 
-- **ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
+**ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
 
-  pwd
-  cd
-  ls
-  rmdir
-  mkdir
-  rm
-  put osFileName esp32FileName
-  get esp32FileName osFileName
+   - pwd
+   - cd
+   - ls
+   - rmdir
+   - mkdir
+   - rm
+   - put osFileName esp32FileName
+   - get esp32FileName osFileName
 
 Other features:
 
-  - active and passive data connections (you can use command line FTP client or Windows Explorer for example) 
-  - threaded FTP sessions,
-  - time-out set to 5 minutes to free up limited ESP32 the resources used by inactive sessions,  
-  - optional firewall for incoming connections.
+   - active and passive data connections (you can use command line FTP client or Windows Explorer for example) 
+   - threaded FTP sessions,
+   - time-out set to 5 minutes to free up limited ESP32 the resources used by inactive sessions,  
+   - optional firewall for incoming connections.
 
-- **TcpServer** is the heart of all three servers mentioned above but it can also be used as stand-alone (see example). 
+**TcpServer** is the heart of all three servers mentioned above but it can also be used as stand-alone (see example). 
 
 Features:
 
-  - threaded TCP server,
-  - non-threaded TCP server,
-  - non-threaded TCP client,
-  - optional time-out to free up limited ESP32 resources used by inactive sessions,  
-  - optional firewall for incoming connections.
+   - threaded TCP server,
+   - non-threaded TCP server,
+   - non-threaded TCP client,
+   - optional time-out to free up limited ESP32 resources used by inactive sessions,  
+   - optional firewall for incoming connections.
 
-- **File system** is needed for storing configuration files, .html files used by web server, etc. FAT flash file system is used. Make sure you compile your sketch for one of FAT partition schemas (Tool | Partition Scheme).
+**File system** is needed for storing configuration files, .html files used by web server, etc. FAT flash file system is used. Make sure you compile your sketch for one of FAT partition schemas (Tool | Partition Scheme).
 
-- **Configuration files** Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files:
+**Configuration files** Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files:
 
-  /etc/passwd contains users' accounts information
-  /etc/shadow contains users' passwords
-  /network/interfaces contains STA(tion) configuration
-  /etc/wpa_supplicant/wpa_supplicant.conf contains STA(tion) credentials
-  /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
-  /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
-  /etc/ntp.conf contains NTP time servers' names
+   - /etc/passwd contains users' accounts information
+   - /etc/shadow contains users' passwords
+   - /network/interfaces contains STA(tion) configuration
+   - /etc/wpa_supplicant/wpa_supplicant.conf contains STA(tion) credentials
+   - /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
+   - /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
+   - /etc/ntp.conf contains NTP time servers' names
 
 These files are created at first run of your sketch with default settings (you can modify default settings in source code before you run the sketch for the first time). 
 
-- **User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
+**User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
 
    - UNIX, LINUX, Raspbian like (using user management files - this is the default setting) - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT,
    - hardcoded (username is root, password is hardcoded in to Arduino sketch constants) - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT,
@@ -132,10 +132,10 @@ These files are created at first run of your sketch with default settings (you c
 
 Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" (with no password, this is system account intended only to hold webserver home directory) and "telnetserver" (with no password, this is system account intended only to hold telnetserver home directory) users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code in user_management.h) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
 
-  /etc/passwd contains users' accounts information
-  /etc/shadow contains users' passwords
+   - /etc/passwd contains users' accounts information
+   - /etc/shadow contains users' passwords
 
-- **Time functions**. Time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the following (or add your own and modify timeToLocalTime function appropriately): 
+**Time functions**. Time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the following (or add your own and modify timeToLocalTime function appropriately): 
 
 KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
@@ -166,15 +166,15 @@ At this point, you can already test if everything is going on as planned by http
 
 6. FTP to your ESP32 as webadmin / webadminpassword and upload the following files into /var/www/html/ directory:
 
-  - index.html,
-  - android-192.png,
-  - apple-180.png,
-  - example02.html,
-  - example03.html,
-  - example04.html,
-  - example05.html,
-  - example10.html,
-  - oscilloscope.html.
+   - index.html,
+   - android-192.png,
+   - apple-180.png,
+   - example02.html,
+   - example03.html,
+   - example04.html,
+   - example05.html,
+   - example10.html,
+   - oscilloscope.html.
 
 ```
 C:\esp32_web_ftp_telnet_server_template>ftp yourEsp32IP
@@ -215,6 +215,7 @@ ftp> ls /var/www/html/
 -rw-rw-rw-   1 root     root             9355  Nov 14 21:34      example05.html
 -rw-rw-rw-   1 root     root             3177  Nov 14 21:34      example10.html
 226 transfer complete
+```
 
 Files will be placed into webadmin home directory, which is /var/www/html/.
 
