@@ -19,10 +19,7 @@ What is new?
   - Telnet server: additional commands (fs_info, tree, cd, mkdir, rmdir, ...), additional possibility for file upload via cat > fileName command.
   - FTP server: additional commands (cd, mkdir, rmdir, ...), support for Windows Explorer
   - time_functions.h instead of rtc.hpp that is easier to use and rely on /etc/ntp.conf configuration file.
-
-What is still planned for the next release?
-
-  - a simple text editor for small configuration files that would work over telnet.
+  - a simple vi telnet text editor for small configuration files.
 
 In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
@@ -46,6 +43,7 @@ You can go directly to Setup instructions and examples now or continue reading t
 
 You can use the following commands:
    - quit
+   - clear (or use cls instead of clear)
    - help
    - uname
    - uptime
@@ -63,6 +61,7 @@ You can use the following commands:
    - cd directoryName or cd ..
    - pwd
    - cat fileName or cat > fileName (or use type instead of ls)
+   - vi fileName
    - cp existingFileName newFileName (or use copy instead of cp)
    - mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
    - rm fileName

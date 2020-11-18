@@ -15,7 +15,7 @@
  *            April 13, 2019, Bojan Jurca
  *          - telnetCommandHandler parameters are now easier to access 
  *            September 4, Bojan Jurca   
- *          - elimination of compiler warnings and some bugs
+ *          - elimination of compiler warnings and some bugst
  *            Jun 10, 2020, Bojan Jurca
  *          - port from SPIFFS to fileSystem, adjustment for Arduino 1.8.13,
  *            improvements of web, FTP and telnet server,
@@ -201,6 +201,15 @@ void setup () {
   // FFat.format ();
   mountFileSystem (true);                                           // this is the first thing to do - all configuration files are on file system
 
+
+
+
+
+
+
+
+
+
   synchronizeTimeAndInitializeItAtFirstCall ();                     // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
 
   // deleteFile ("/etc/passwd");                                    // contains users' accounts information     - deleting this file would cause creating default one
@@ -215,7 +224,7 @@ void setup () {
   // start web server 
   httpServer *httpSrv = new httpServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
                                         wsRequestHandler,           // a callback function that will handle WS requests, NULL to ignore WS requests
-                                        8192,                       // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        8 * 1024,                   // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
                                         (char *) "0.0.0.0",         // start HTTP server on all available ip addresses
                                         80,                         // HTTP port
                                         NULL);                      // we won't use firewall callback function for HTTP server
@@ -229,7 +238,7 @@ void setup () {
 
   // start telnet server
   telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, // a callback function that will handle telnet commands that are not handled by telnet server itself
-                                              8192,                 // 8 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
+                                              16 * 1024,            // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
                                               (char *) "0.0.0.0",   // start telnt server on all available ip addresses
                                               23,                   // telnet port
                                               NULL);                // use firewall callback function for telnet server (replace with NULL if not needed)
@@ -254,26 +263,6 @@ void setup () {
                 Serial.printf ("[%10lu] [examples] finished.\n", millis ());
                 vTaskDelete (NULL); // end this thread
               }, "examples", 4069, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10lu] [examples] couldn't start examples\n", millis ());
-
-
-// !!!!!!!!!!!!!!!!!!!!!!
-
-    if (pdPASS != xTaskCreate ([] (void *) {  // test branja datotek
-      while (true) {
-        delay (100);
-        readTextFile ("/test.txt");
-      }
-      vTaskDelete (NULL); // end this thread
-    }, "fileTest", 4069, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("NE MOREM ZAGNATI TESTA 1\n");
-
-    if (pdPASS != xTaskCreate ([] (void *) {  // test delaya
-      byte b = 0;
-      while (true) {
-        delay (1000 + b ++);
-      }
-      vTaskDelete (NULL); // end this thread
-    }, "delayTest", 4069, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("NE MOREM ZAGNATI TESTA 2\n");
-
 
 }
 
