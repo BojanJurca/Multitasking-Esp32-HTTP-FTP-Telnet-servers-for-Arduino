@@ -218,6 +218,7 @@ class TcpConnection {
               }
             }
             // else close and continue to case 0
+            // Serial.printf ("[%s] TcpConnection time-out\n", __func__);
             __timeOut__ = true;
             closeConnection ();
           // log_e ("[Thread:%lu][Core:%i][Socket:%i] recvData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__);
@@ -242,7 +243,8 @@ class TcpConnection {
       if (-1 == recv (__socket__, &buffer, sizeof (buffer), MSG_PEEK)) {
         #define EAGAIN 11
         if (errno == EAGAIN || errno == EBADF) {
-          if ((__timeOutMillis__ == TcpConnection::INFINITE) || (millis () - __lastActiveMillis__ >= __timeOutMillis__)) {
+          if ((__timeOutMillis__ != TcpConnection::INFINITE) && (millis () - __lastActiveMillis__ >= __timeOutMillis__)) {
+            // Serial.printf ("[%s] TcpConnection time-out\n", __func__);
             __timeOut__ = true;
             closeConnection ();
             // log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__);
@@ -279,6 +281,7 @@ class TcpConnection {
               }
             }
             // else close and continue to case 0
+            // Serial.printf ("[%s] TcpConnection time-out\n", __func__);
             __timeOut__ = true;
             closeConnection ();
           // log_e ("[Thread:%lu][Core:%i][Socket:%i] sendData: time-out\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __socket__);
@@ -304,7 +307,7 @@ class TcpConnection {
       return __connectionState__ == TcpConnection::RUNNING || !__connectionHandlerCallback__;  // returns true if connection thread has already started - this flag is set before the constructor returns - or if connection runs in non-threaded mode
     }
 
-    bool timeOut ()                           { return __timeOut__; }
+    bool timeOut ()                           { return __timeOut__; } // if time-out occured
 
     void setTimeOut (unsigned long timeOutMillis)                 // user defined time-out if it differs from default one
     {

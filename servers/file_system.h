@@ -126,13 +126,13 @@
   }
 
   // reads entire file into String without using sempahore - it is expected that calling functions would provide it - returns success
-  bool __readFileWithoutSemaphore__ (String *fileContent, const char *fileName, bool ignoreCR = false) {
-    *fileContent = "";
+  bool __readFileWithoutSemaphore__ (String& fileContent, String fileName, bool ignoreCR = false) {
+    fileContent = "";
     
     File f = FFat.open (fileName, FILE_READ);
     if (f) {
       if (!f.isDirectory ()) {
-        while (f.available ()) { char c = (char) f.read (); if (c != '\r' || !ignoreCR) *fileContent += c; }
+        while (f.available ()) { char c = (char) f.read (); if (c != '\r' || !ignoreCR) fileContent += c; }
         f.close ();
         return true;
       } else { 
@@ -144,7 +144,7 @@
   }  
 
   // writes String into file file without using sempahore - it is expected that calling functions would provide it - returns success
-  bool __writeFileWithoutSemaphore__ (String fileContent, const char *fileName) {
+  bool __writeFileWithoutSemaphore__ (String& fileContent, String fileName) {
     File f = FFat.open (fileName, FILE_WRITE);
     if (f) {
       if (!f.isDirectory ()) {
@@ -161,8 +161,8 @@
   }  
 
   // reads entire file into String, returns success
-  bool readFile (String *fileContent, const char *fileName, bool ignoreCR = false) {
-    *fileContent = "";
+  bool readFile (String& fileContent, String fileName, bool ignoreCR = false) {
+    fileContent = "";
     bool b;
     if (!__fileSystemMounted__) { fileSystemDmesg ("[file system] requested to read a file but file system is not mounted."); return false; }
     // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
@@ -172,7 +172,7 @@
   }
 
   // writes String into file file, returns success
-  bool writeFile (String& fileContent, const char *fileName) {
+  bool writeFile (String& fileContent, String fileName) {
     if (!__fileSystemMounted__) { fileSystemDmesg ("[file system] requested to write a file but file system is not mounted."); return false; }
     bool b; 
     // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
@@ -181,9 +181,9 @@
     return b;  
   }  
   
-  String readTextFile (const char *fileName) { // reads entire, ignoring \r
+  String readTextFile (String fileName) { // reads entire file, ignoring \r
     String fileContent;
-    readFile (&fileContent, fileName, true);
+    readFile (fileContent, fileName, true);
     return fileContent;
   }
 

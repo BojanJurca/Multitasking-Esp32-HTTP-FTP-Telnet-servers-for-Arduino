@@ -38,9 +38,7 @@
  *            February 27, 2020, Bojan Jurca
  *          - elimination of compiler warnings and some bugs
  *            Jun 11, 2020, Bojan Jurca 
- *          - port from SPIFFS to FAT file system, 
- *            adjustment for Arduino 1.8.13,
- *            added telnet commands (pwd, cd, mkdir,rmdir, clear, vi, ...)
+ *          - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
  *            October 10, 2020, Bojan Jurca
  *            
  */
@@ -512,13 +510,8 @@
 
         } else if (argv [0] == "vi") { //-------------------------------------- VI
 
-          if (argc == 2)  {
-                            unsigned long to = tsp->connection->getTimeOut (); tsp->connection->setTimeOut (TcpConnection::INFINITE); // we don't want TcpConnection to break during editing
-                            String s = this->__vi__ (argv [1], tsp);
-                            tsp->connection->setTimeOut (to); // restore time-out
-                            return s;
-                          }
-                          return "Wrong syntax. Use vi fileName";                         
+          if (argc == 2) return this->__vi__ (argv [1], tsp);
+                         return "Wrong syntax. Use vi fileName";                         
 
         #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
 
@@ -1447,55 +1440,35 @@
 
       // not really a vi but small and simple text editor
 
-      String __vi__ (String& fileName, telnetSessionParameters *tsp) {
+      inline String __vi__ (String& fileName, telnetSessionParameters *tsp) __attribute__((always_inline)) {
         // a good reference for telnet ESC codes: https://en.wikipedia.org/wiki/ANSI_escape_code
-        // and: https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullFilePath (fileName, tsp->workingDir);
         if (fp == "" || isDirectory (fp))             return "Invalid file name " + fileName;
         if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
 
-        // 1. create a new file one if it doesn't exist (yet)
-        String emptyContent = "";
-        if (!isFile (fp)) { if (!writeFile (emptyContent, fp)) return "Can't create " + fp; else tsp->connection->sendData (fp + " created.\r\n"); }
-
-        // 2. read the file content into internal vi data structure (lines of Strings)
-        #define MAX_LINES 512 // may increase up to < 998 but this would require even more stack for telnet server and works slow
+        // 1. read the whole file into String or create a new one if it doesn't exist (yet)
+        String fileContent = "";
+        if (!isFile (fp)) { if (!writeFile (fileContent, fp)) return "Can't create " + fp; else tsp->connection->sendData (fp + " created.\r\n"); }
+        if (!readFile (fileContent, fp)) return "Can't read " + fp;
+        // 2. parse fileContent into lines
+        #define MAX_LINES 300 // must be < 1000
         String line [MAX_LINES]; for (int i = 0; i < MAX_LINES; i++) line [i] = "";
         int fileLines = 0;
+        for (int i = 0; i < fileContent.length (); i++) {        
+          if (!(i % 1000)) delay (1); // reset watchdog
+          char c = fileContent.charAt (i);
+          switch (c) {
+            case '\r': break; // ignore
+            case '\n': if (++fileLines >= MAX_LINES) return fp + " has too many lines for this simple version of vi."; break;// go to the next line
+            case '\t': line [fileLines] += "  "; break; // replace tab with 2 spaces
+            default:   line [fileLines] += c; break; // append last line
+          }
+        }
+        fileLines++; // there is always at least one empty line
+        fileContent = ""; // free memmory, we don't need this any more        
         bool dirty = false;
-        {
-          bool e = true;
-          File f = FFat.open (fp, FILE_READ);
-          if (f) {
-            if (!f.isDirectory ()) {
-              while (f.available ()) { 
-                if (ESP.getFreeHeap () < 32768) { // always leave at least 32 KB free for other things that may be running on ESP32
-                  f.close (); 
-                  return "Out of memory."; 
-                }
-                char c = (char) f.read (); 
-                switch (c) {
-                  case '\r':  break; // ignore
-                  case '\n':  if (++fileLines >= MAX_LINES) { 
-                                f.close (); 
-                                return fp + " has too many lines for this simple version of vi."; 
-                              }
-                              // tsp->connection->sendData ("\rreading line " + String (fileLines + 1) + " ");
-                              break; 
-                  case '\t':  line [fileLines] += "  "; break; // treat tab as 2 spaces
-                  default:    line [fileLines] += c; break;
-                }
-              }
-              f.close ();
-              e = false;              
-            } else tsp->connection->sendData ((char *) "Can't edit a directory.");
-            f.close ();
-          } else tsp->connection->sendData ("Can't read " + fp);
-          if (e) return "";
-          fileLines++;
-        }    
-
+          // debug: for (int i = 0; i < fileLines; i++) tsp->connection->sendData (__appendString__ (String (i), 3) + " " + line [i] + "\r\n"); // return fp + " has " + String (fileLines + 1) + " lines.";
         // 3. get information about client window size
         byte clientWindowColumns; 
         byte clientWindowRows; 
@@ -1515,89 +1488,72 @@
           clientWindowColumns = 80; 
           clientWindowRows = 25;   
         }
-        // debug: Serial.println ("Clinet window size is " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";
+          // debug: Serial.println ("Clinet window size is " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";
         if (clientWindowColumns < 30 || clientWindowRows < 5) return "Clinent telnet windows is too small for vi.";
 
         // 4. edit 
-        int textCursorX = 0;  // vertical position of cursor in text
-        int textCursorY = 0;  // horizontal position of cursor in text
-        int textScrollX = 0;  // vertical text scroll offset
-        int textScrollY = 0;  // horizontal text scroll offset
+        int textCursorX = 0;  // position of cursor in text
+        int textCursorY = 0;  // position of cursor in text
+        int textOffsetX = 0;  // vertical text scroll 
+        int textOffsetY = 0;  // horizontal text scroll
 
-        bool redrawHeader = true;
-        bool redrawAllLines = true;
+        bool redrawScreen = true;
+        bool redrawHeader = false;
+        bool redrawFooter = false;
+        bool redrawAllLines = false;
         bool redrawLineAtCursor = false; 
-        bool redrawFooter = true;
-        String message = " " + String (fileLines) + " lines ";
-
-                              // clear screen
-                              if (!tsp->connection->sendData ((char *) "\x1b[2J")) return ""; // ESC[2J = clear screen
+        String message = "";
 
         while (true) {
           // a. redraw screen 
           String s = ""; 
-       
-          if (redrawHeader)   { 
-                                s = "---+"; for (int i = 4; i < clientWindowColumns; i++) s += '-'; 
-                                if (!tsp->connection->sendData ("\x1b[H" + s.substring (0, clientWindowColumns - 28) + " Save: Ctrl-S, Exit: Ctrl-X")) return "";  // ESC[H = move cursor home
-                                redrawHeader = false;
-                              }
-          if (redrawAllLines) {
-
-                                // Redrawing algorithm: straight forward idea is to scan screen lines with text i ∈ [2 .. clientWindowRows - 1], calculate text line on
-                                // this possition: i - 2 + textScrollY and draw visible part of it: line [...].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4).
-                                // When there are frequent redraws the user experience is not so good since we often do not have enough time to redraw the whole screen
-                                // between two key strokes. Therefore we'll always redraw just the line at cursor position: textCursorY + 2 - textScrollY and then
-                                // alternate around this line until we finish or there is another key waiting to be read - this would interrupt the algorithm and
-                                // redrawing will repeat after ne next character is processed.
-                                {
-                                  int nextScreenLine = textCursorY + 2 - textScrollY;
-                                  int nextTextLine = nextScreenLine - 2 + textScrollY;
-                                  bool topReached = false;
-                                  bool bottomReached = false;
-                                  for (int i = 0; (!topReached || !bottomReached) && !(tsp->connection->available () == TcpConnection::AVAILABLE); i++) { 
-                                    if (i % 2 == 0) { nextScreenLine -= i; nextTextLine -= i; } else { nextScreenLine += i; nextTextLine += i; }
-                                    if (nextScreenLine == 2) topReached = true;
-                                    if (nextScreenLine == clientWindowRows - 1) bottomReached = true;
-                                    if (nextScreenLine > 1 && nextScreenLine < clientWindowRows) {
-                                      // draw nextTextLine at nextScreenLine 
-                                      char c [15];
-                                      if (nextTextLine < fileLines) {
-                                        sprintf (c, "\x1b[%i;0H%3i|", nextScreenLine, nextTextLine + 1);  // display line number - users would count lines from 1 on whereas program counts them from 0 on
-                                        s = String (c) + __appendString__ (line [nextTextLine].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
-                                      } else {
-                                        sprintf (c, "\x1b[%i;0H   |", nextScreenLine) + __appendString__ (" ", clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
-                                        s = String (c);
-                                      }
-                                      if (!tsp->connection->sendData (s)) return "";
-                                    }
-                                  }
-                                  if (topReached && bottomReached) redrawAllLines = false; // if we have drown all the lines we don't have to run this code again 
-                                }
-                                
-          } else if (redrawLineAtCursor) {
-                                // calculate screen line from text cursor position
-                                s = "\x1b[" + String (textCursorY + 2 - textScrollY) + ";5H" + __appendString__ (line [textCursorY].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column (columns go from 1 to clientWindowsColumns - inclusive), it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
-                                if (!tsp->connection->sendData (s)) return ""; 
-                                redrawLineAtCursor = false;
-                              }
-         
-          if (redrawFooter)   {                                  
-                                s = "\x1b[" + String (clientWindowRows) + ";0H---+"; for (int i = 4; i < clientWindowColumns; i++) s += '-'; // ESC[line;columnH = move cursor to line;column
-                                if (!tsp->connection->sendData (s)) return ""; 
-                                redrawFooter = false;
-                              }
-          if (message != "")  {
-                                tsp->connection->sendData ("\x1b[" + String (clientWindowRows) + ";2H" + message);         
-                                message = ""; redrawFooter = true; // we'll clear the message the next time screen redraws
-                              }
+          if (redrawScreen)               { 
+                                            if (!tsp->connection->sendData ((char *) "\x1b[2J")) return ""; // ESC[2J = clear screen
+                                          }
+          if (redrawScreen || redrawHeader) { 
+                                              // s = ""; for (int i = 0; i < clientWindowColumns; i++) s += ((i + 7 + textOffsetX) % 10 == 0) ? '+' : '-'; 
+                                              s = "---+"; for (int i = 4; i < clientWindowColumns; i++) s += '-'; 
+                                              s = "\x1b[H" + s.substring (0, clientWindowColumns - 28) + " Save: Ctrl-S, Exit: Ctrl-X"; // ESC[H = move cursor home
+                                              if (!tsp->connection->sendData (s)) return "";
+                                            }
+          if (redrawScreen || redrawAllLines) {
+                                                  char c [15];
+                                                  // debug: Serial.printf ("clientWindowRows=%i, fileLines=%i\n", clientWindowRows, fileLines);
+                                                  for (int i = 2; i < clientWindowRows; i++) { // for all client window rows (i is a screen line, they go from 1 .. clientWindowRows - inclusive)
+                                                    if (!(i % 10)) delay (1); // reset watchdog
+                                                    int textLine = i - 2 + textOffsetY; // calculate text line from screen line
+                                                    if (textLine < fileLines) {
+                                                      // debug: Serial.printf ("drawing screen line %i with text %i\n", i, textLine);                                                       
+                                                      sprintf (c, "\x1b[%i;0H%3i|", i, textLine + 1);  // display line number - users would count lines from 1 on whereas program counts them from 0 on
+                                                      s = String (c) + __appendString__ (line [textLine].substring (textOffsetX, clientWindowColumns - 4 + textOffsetX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                                    } else {
+                                                      // debug: Serial.printf ("drawing empty screen line %i\n", i);
+                                                      sprintf (c, "\x1b[%i;0H   |", i) + __appendString__ (" ", clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                                      s = String (c);
+                                                    }
+                                                    if (!tsp->connection->sendData (s)) return "";
+                                                  }
+                                                } else if (redrawLineAtCursor) {
+                                                    // calculate screen line from text cursor position
+                                                    s = "\x1b[" + String (textCursorY + 2 - textOffsetY) + ";5H" + __appendString__ (line [textCursorY].substring (textOffsetX, clientWindowColumns - 4 + textOffsetX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column (columns go from 1 to clientWindowsColumns - inclusive), it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                                    if (!tsp->connection->sendData (s)) return ""; 
+                                                }
+          if (redrawScreen || redrawFooter) {                                  
+                                              // s = "\x1b[" + String (clientWindowRows) + ";0H"; for (int i = 0; i < clientWindowColumns; i++) s += ((i + 7 + textOffsetX) % 10 == 0) ? '+' : '-'; // ESC[line;columnH = move cursor to line;column
+                                              s = "\x1b[" + String (clientWindowRows) + ";0H---+"; for (int i = 4; i < clientWindowColumns; i++) s += '-'; // ESC[line;columnH = move cursor to line;column
+                                              if (!tsp->connection->sendData (s)) return ""; 
+                                            }
+          if (message != "")                {
+                                              tsp->connection->sendData ("\x1b[" + String (clientWindowRows) + ";2H" + message);         
+                                            }
+          redrawScreen = redrawHeader = redrawFooter = redrawAllLines = redrawLineAtCursor = false; 
+          if (message != "") { message = ""; redrawFooter = true; }; // we'll clear the message the next time screen redraws
           
           // b. restore cursor position - calculate screen coordinates from text coordinates
-          if (!tsp->connection->sendData ("\x1b[" + String (textCursorY - textScrollY + 2) + ";" + String (textCursorX - textScrollX + 5) + "H")) return ""; // ESC[line;columnH = move cursor to line;column
+          if (!tsp->connection->sendData ("\x1b[" + String (textCursorY - textOffsetY + 2) + ";" + String (textCursorX - textOffsetX + 5) + "H")) return ""; // ESC[line;columnH = move cursor to line;column
 
-          // c. read and process incoming stream of characters
+          // c. read and process incoming stream fo characters
           char c = 0;
-          delay (1);
           if (!tsp->connection->recvData (&c, 1)) return "";
           // debug: Serial.printf ("%c = %i\n", c, c);
           switch (c) {
@@ -1616,21 +1572,9 @@
 
             case 19:  // Ctrl-S
 saveChanges:
-                      // save changes into fp
-                      {
-                        bool e = false;
-                        File f = FFat.open (fp, FILE_WRITE);
-                        if (f) {
-                          if (!f.isDirectory ()) {
-                            for (int i = 0; i < fileLines; i++) {
-                              int toWrite = strlen (line [i].c_str ()); if (i) toWrite += 2;
-                              if (toWrite != f.write (i ? (uint8_t *) ("\r\n" + line [i]).c_str (): (uint8_t *) line [i].c_str (), toWrite)) { e = true; break; }
-                            }
-                          }
-                          f.close ();
-                        }
-                        if (e) { message = " Could't save changes "; } else { message = " Changes saved "; dirty = 0; }
-                      }
+                      // poskusi shraniti, opozorilo, če ni šlo, ...
+                      message = " Changes saved ";
+                      dirty = 0;
                       break;
 
             case 27:  // ESC [ 65 = up arrow, ESC [ 66 = down arrow, ESC[C = right arrow, ESC[D = left arrow, 
@@ -1640,12 +1584,36 @@ saveChanges:
                         // debug: Serial.printf ("%c = %i\n", c, c);
                         switch (c) {
                           case 'A':  // up arrow
-                                    if (textCursorY > 0) textCursorY--; 
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
+                                    if (textCursorY > 0) textCursorY--; /*{
+                                      if (--textCursorY - textOffsetY < 0) {
+                                         textOffsetY--; // scroll down if the cursor fell out of top client window border
+                                         redrawAllLines = true; // we need to redraw all visible lines
+                                      }
+                                      // don't let cursor go past the (new) line it is in
+                                      if (textCursorX > line [textCursorY].length ()) {
+                                        if ((textCursorX = line [textCursorY].length ()) - textOffsetX < 0) {
+                                          textOffsetX = textCursorX; // scroll right if the cursor fell out of left client window border
+                                          redrawAllLines = true; // we need to redraw all visible lines
+                                        }
+                                      }
+                                    }
+                                    */
                                     break;                          
                           case 'B':  // down arrow
                                     if (textCursorY < fileLines - 1) textCursorY++;
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
+                                    /* 
+                                      if (++textCursorY - textOffsetY >= clientWindowRows - 2) {
+                                         textOffsetY++; // scroll up if the cursor fell out of bottom client window border
+                                         redrawAllLines = true; // we need to redraw all visible lines
+                                      }
+                                      // don't let cursor go past the (new) line it is in
+                                      if (textCursorX > line [textCursorY].length ()) {
+                                        if ((textCursorX = line [textCursorY].length ()) - textOffsetX < 0) {
+                                          textOffsetX = textCursorX; // scroll right if the cursor fell out of left client window border
+                                          redrawAllLines = true; // we need to redraw all visible lines
+                                        }
+                                      } 
+                                      */                                  
                                     break;
                           case 'C':  // right arrow
                                     if (textCursorX < line [textCursorY].length ()) textCursorX++;
@@ -1664,12 +1632,10 @@ saveChanges:
                           case '5': // pgup
                                     tsp->connection->recvData (&c, 1); // read final '~'
                                     textCursorY -= (clientWindowRows - 2); if (textCursorY < 0) textCursorY = 0;
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
                                     break;
                           case '6': // pgdn
                                     tsp->connection->recvData (&c, 1); // read final '~'
                                     textCursorY += (clientWindowRows - 2); if (textCursorY >= fileLines) textCursorY = fileLines - 1;
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
                                     break;                                                                        
                           default:  // ignore
                                     // debug: Serial.printf ("ESC[%c (%i)\n", c, c);
@@ -1682,11 +1648,15 @@ saveChanges:
                       if (textCursorX > 0) { // delete one character left of cursor position
                         line [textCursorY] = line [textCursorY].substring (0, textCursorX - 1) + line [textCursorY].substring (textCursorX);
                         dirty = redrawLineAtCursor = true; // we only have to redraw this line
-                        textCursorX--;
+                        if (--textCursorX - textOffsetX < 0) {
+                           textOffsetX--; // scroll right if the cursor fell out of left client window border
+                           redrawAllLines = true; // we need to redraw all visible lines
+                        }
                       } else if (textCursorY > 0) { // combine 2 lines
-                        textCursorY--;
-                        textCursorX = line [textCursorY].length (); 
-                        line [textCursorY] += line [textCursorY + 1];
+                        textCursorX = line [textCursorY - 1].length ();
+                        line [textCursorY - 1] += line [textCursorY];
+                        if (--textCursorY - textOffsetY < 0) textOffsetY--; // scroll down if the cursor fell out of the top client window border
+                        if (textCursorX >= clientWindowColumns - 4) textOffsetX = clientWindowColumns - 4; // scroll left if the cursor fell out of right client window border
                         for (int i = textCursorY + 1; i <= fileLines - 2; i++) line [i] = line [i + 1]; line [--fileLines] = ""; // shift lines up and free memory if the last one used
                         dirty = redrawAllLines = true; // we need to redraw all visible lines (at least lines from testCursorY down but we wont write special cede for this case)
                       }
@@ -1716,37 +1686,43 @@ saveChanges:
                         textCursorX = 0;
                         dirty = redrawAllLines = true; // we need to redraw all visible lines (at least lines from testCursorY down but we wont write special cede for this case)
                         textCursorY++;
+                        textOffsetX = textCursorX; // scroll right if the cursor fell out of the left client window border
                       }
                       break;
                       
             case '\r':  // ignore
                       break;
                       
+            case '\t':   // tab - treat as space
+                      c = ' ';
+                      // continue
             default:  // normal character
-                      if (c == '\t') s = "  "; else s = String (c); // treat tab sa 2 spaces
-                      line [textCursorY] = line [textCursorY].substring (0, textCursorX) + s + line [textCursorY].substring (textCursorX); // inser character into line textCurrorY at textCursorX position
+                      line [textCursorY] = line [textCursorY].substring (0, textCursorX) + c + line [textCursorY].substring (textCursorX); // inser character into line textCurrorY at textCursorX position
                       dirty = redrawLineAtCursor = true; // we only have to redraw this line
-                      textCursorX += s.length ();
+                      if (++textCursorX - textOffsetX >= clientWindowColumns - 4) {
+                         textOffsetX++; // scroll left if the cursor fell out of right client window border
+                         redrawAllLines = true; // we need to redraw all visible lines
+                      }
                       break;
                       
           }         
-          // if cursor has moved - should we scroll?
+          // text cursor has moved - check if we should scroll?
           {
-            if (textCursorX - textScrollX >= clientWindowColumns - 4) {
-              textScrollX = textCursorX - (clientWindowColumns - 4) + 1; // scroll left if the cursor fell out of right client window border
+            if (textCursorX - textOffsetX >= clientWindowColumns - 4) {
+              textOffsetX = textCursorX - (clientWindowColumns - 4) + 1; // scroll left if the cursor fell out of right client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
-            if (textCursorX - textScrollX < 0) {
-              textScrollX = textCursorX; // scroll right if the cursor fell out of left client window border
+            if (textCursorX - textOffsetX < 0) {
+              textOffsetX = textCursorX; // scroll right if the cursor fell out of left client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
-            if (textCursorY - textScrollY >= clientWindowRows - 2) {
+            if (textCursorY - textOffsetY >= clientWindowRows - 2) {
               // Serial.println ("scroll up");
-              textScrollY = textCursorY - (clientWindowRows - 2) + 1; // scroll up if the cursor fell out of bottom client window border
+              textOffsetY = textCursorY - (clientWindowRows - 2) + 1; // scroll up if the cursor fell out of bottom client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
-            if (textCursorY - textScrollY < 0) {
-              textScrollY = textCursorY; // scroll down if the cursor fell out of top client window border
+            if (textCursorY - textOffsetY < 0) {
+              textOffsetY = textCursorY; // scroll down if the cursor fell out of top client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
           }

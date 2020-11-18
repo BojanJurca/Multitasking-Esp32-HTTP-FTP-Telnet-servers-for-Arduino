@@ -111,7 +111,7 @@
       String fileContent = "";
       
       // create /etc/passwd if it doesn't exist
-      readFile (&fileContent, "/etc/passwd");
+      readFile (fileContent, "/etc/passwd");
       if (fileContent == "") {
         // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
         FFat.mkdir ("/etc"); // location of this file
@@ -132,7 +132,7 @@
       }
 
       // create /etc/shadow if it doesn't exist
-      readFile (&fileContent, "/etc/shadow");
+      readFile (fileContent, "/etc/shadow");
       if (fileContent == "") {
         Serial.printf ("[%10lu] [user_management] /etc/shadow does not exist or it is empty, creating a new one ... ", millis ());
 
@@ -161,7 +161,7 @@
       String fileContent;
       bool retVal = true;
       
-      if (__readFileWithoutSemaphore__ (&fileContent, "/etc/shadow")) {
+      if (__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
         fileContent.trim (); // just in case ...
         char c; int l; 
         while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
@@ -208,7 +208,7 @@
       // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
 
         // --- add userName, userId and userHomeDirectory into /etc/passwd ---
-        if (!__readFileWithoutSemaphore__ (&fileContent, "/etc/passwd")) {
+        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
           // xSemaphoreGive (fileSystemSemaphore);
           return "Can't read /etc/passwd";
         }
@@ -229,7 +229,7 @@
         }
 
         // --- add default password into /etc/shadow ---
-        if (!__readFileWithoutSemaphore__ (&fileContent, "/etc/shadow")) {
+        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
           // xSemaphoreGive (fileSystemSemaphore);
           return "Can't read /etc/shadow";          
         }
@@ -272,7 +272,7 @@
       // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
 
         // --- remove userName from /etc/passwd ---
-        if (!__readFileWithoutSemaphore__ (&fileContent, "/etc/passwd")) {
+        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
           // xSemaphoreGive (fileSystemSemaphore);
           return "Can't read /etc/passwd";          
         }
@@ -291,7 +291,7 @@
         }
  
         // --- remove userName from /etc/shadow ---
-        if (!__readFileWithoutSemaphore__ (&fileContent, "/etc/shadow")) {
+        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
           // xSemaphoreGive (fileSystemSemaphore);
           return "Can't read /etc/shadow";          
         }

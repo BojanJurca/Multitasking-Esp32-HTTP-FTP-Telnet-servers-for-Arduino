@@ -13,7 +13,7 @@
  *            Jun 11, 2020, Bojan Jurca 
  *            
  * TO DO:
- *          - when WiFi is WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working in higher frequenceses
+ *          - when WiFi is WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
  *            
  */
 

@@ -149,7 +149,7 @@
     String fileContent = "";
 
     // /network/interfaces contation STA(tion) configuration
-    readFile (&fileContent, "/network/interfaces");
+    readFile (fileContent, "/network/interfaces");
     if (fileContent != "") { // parse configuration
 
       fileContent = __compactNetworkConfiguration__ (fileContent) + "\n"; 
@@ -197,7 +197,7 @@
     }
 
     // /etc/wpa_supplicant/wpa_supplicant.conf contation STA(tion) credentials
-    readFile (&fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
+    readFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
     if (fileContent != "") {
 
       fileContent = __insideBrackets__ (__compactNetworkConfiguration__ (fileContent), "network\n{", "}") + '\n'; 
@@ -233,7 +233,7 @@
     }
 
     // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
-    readFile (&fileContent, "/etc/dhcpcd.conf");
+    readFile (fileContent, "/etc/dhcpcd.conf");
     if (fileContent != "") {
 
       fileContent = __compactNetworkConfiguration__ (fileContent) + "\n"; 
@@ -276,7 +276,7 @@
     }
 
     // /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
-    readFile (&fileContent, "/etc/hostapd/hostapd.conf");
+    readFile (fileContent, "/etc/hostapd/hostapd.conf");
     if (fileContent != "") {
 
       fileContent = __compactNetworkConfiguration__ (fileContent) + "\n"; 
