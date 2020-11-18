@@ -1,5 +1,6 @@
 You can use the following commands:
   quit
+  cleaar (or use cls instead of clear)
   help
   uname
   uptime
@@ -17,6 +18,7 @@ You can use the following commands:
   cd directoryName or cd ..
   pwd
   cat fileName or cat > fileName (or use type instead of ls)
+  vi fileName
   cp existingFileName newFileName (or use copy instead of cp)
   mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
   rm fileName
