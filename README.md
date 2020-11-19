@@ -8,7 +8,7 @@ Very briefly why would you use Esp32_web_ftp_telnet_server_template:
 - **run-time monitoring of ESP32 behaviour with built-in dmesg Telnet command**
 - **run-time monitoring of ESP32 signals with built-in Web-based oscilloscope**
 
-![Screenshot](presentation.png)
+![Screenshot](presentation.gif)
 
 - **Please note that this is development version that still needs to be tested. If you are looking for stable version download latest release. This readme.md file may be different there**
 
