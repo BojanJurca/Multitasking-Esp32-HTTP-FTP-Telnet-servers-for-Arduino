@@ -158,12 +158,21 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
 #include "./servers/oscilloscope.h"
 void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be reentrant!
 
+Serial.println (wsRequest);
 
               // ----- example WebSockets & Oscilloscope - delete this code if it is not needed -----
 
                    if (wsRequest.substring (0, 21) == "GET /runOscilloscope ")      runOscilloscope (webSocket);      // used by oscilloscope.html
-              else if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") example10_webSockets (webSocket); // used by Example10.html
-             
+              else if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") example10_webSockets (webSocket); // used by example10.html
+              else if (wsRequest.substring (0, 16) == "GET /rssiReader ") {                                           // data streaming used by index.html
+                                                                            char c;
+                                                                            do {
+                                                                              delay (100);
+                                                                              int i = WiFi.RSSI ();
+                                                                              c = (char) i;
+                                                                              // Serial.printf ("[WebSocket data streaming] sending %i to web client\n", i);
+                                                                            } while (webSocket->sendBinary ((byte *) &c,  sizeof (c))); // send RSSI information as long as web browser is willing tzo receive it
+                                                                          }
 }
 
 
