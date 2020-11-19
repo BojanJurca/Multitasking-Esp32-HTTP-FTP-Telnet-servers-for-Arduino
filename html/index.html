@@ -13,11 +13,12 @@
 
 			h1 {font-family: verdana; font-size: 40px; text-align: center}
 
-			div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px}
-			div.d2 {position: relative; float: left; width: 41%; font-family: verdana; font-size: 30px; color: gray;}
-			div.d3 {position: relative; float: left; width: 26%; font-family: verdana; font-size: 30px; color: gray;}
-			div.d4 {position: relative; float: left; width: 25%; font-family: verdana; font-size: 30px; color: black;}
-			div.d5 {position: relative; float: left; width: 49%;}
+			/* define grid for controls - we'll use d2 + d5 or d3 + d4 + d5 */
+			div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px; font-family: verdana; font-size: 30px; color: #2597f4;}
+			div.d2 {position: relative; float: left; width: 60%; font-family: verdana; font-size: 30px; color: gray;}
+			div.d3 {position: relative; float: left; width: 45%; font-family: verdana; font-size: 30px; color: gray;}
+			div.d4 {position: relative; float: left; width: 15%; font-family: verdana; font-size: 30px; color: black;}
+			div.d5 {position: relative; float: left; width: 40%; font-family: verdana; font-size: 30px; color: black;}
 
 			/* nice switch control */
 			.switch {position: relative; display: inline-block; width: 60px; height: 34px}
@@ -34,35 +35,44 @@
 		</style>
 	</head>
 	<body>
-		<br><h1>HTML demo</h1>
+		
+		<br><h1><small>A brief demonstration of Esp32_web_ftp_telnet_server_template web user interface capabilities</small></h1>
+		<div class='d1'>
+			<b>HTML/REST/JSON <small>bi-directional communication with ESP32</small></b>
+		</div>
 		<hr />
 		<div class='d1'>
-			<div class='d2'>&nbspLed - REST/JSON demo</div>
-			<div class='d4'>
+			<div class='d2'>&nbspBuilt-in LED <small>(the use of nice controls)</small></div>
+			<div class='d5'>
 				<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed(this.checked)'><div class='slider round'></div></label>
 			</div>
 		</div>
 		<hr />
 		<div class='d1'>
-			<div class='d2'>&nbspUp time - stability testing</div>
-			<div class='d4' id='upTime'>...</div>
+			<div class='d2'>&nbspUp time <small>(test code stability)</small></div>
+			<div class='d5' id='upTime'>...</div>
 		</div>
 		<hr />
 		<div class='d1' style='height: 48px;'>
-			<div class='d3'>&nbspFree heap</div>
+			<div class='d3'>&nbspFree heap <small>(find memory leaks)</small></div>
 			<div class='d4' id='freeHeap'>...</div>
 			<div class='d5'><canvas id='freeHeapGraph' width='480' height='46';></canvas></div>
 		</div>
 		<hr />
 		<div class='d1' style='height: 48px;'>
-			<div class='d3'>&nbspHTTP requests</div>
+			<div class='d3'>&nbspHTTP requests <small>(display measurements)</small></div>
 			<div class='d4' id='httpRequestCount'>...</div>
 			<div class='d5'><canvas id='httpRequestCountGraph' width='480' height='46';></canvas></div>	
 		</div>
 		<hr />
 
+		<br><br>
+		<div class='d1'>
+			<b>HTML/WebSocket <small>data streaming from ESP32</small></b>
+		</div>
+		<hr />
 		<div class='d1' style='height: 48px;'>
-			<div class='d3'>&nbspRSSI</div>
+			<div class='d3'>&nbspRSSI <small>(find connectivity problems)</small></div>
 			<div class='d4' id='rssi'>...</div>
 			<div class='d5'><canvas id='rssiGraph' width='480' height='46';></canvas></div>	
 		</div>
@@ -89,17 +99,11 @@
 				client.request(switchIsOn ? '/builtInLed/on' : '/builtInLed/off' ,'PUT',function(json){refreshLedState(json);});
 			}
 
-			function turnLedOnFor10s(){ // send request to ESP and refresh GUI
-				document.getElementById('ledSwitch').checked=true; // this is just a simulation
-				client.request('/builtInLed/on10s' ,'PUT',function(json){refreshLedState(json);}); // this is a real response
-			}
-
 			function refreshLedState(json){ // refresh ledSwitch state with latest information from ESP
-				var sts=JSON.parse(json);
 				var obj=document.getElementById('ledSwitch'); obj.disabled=false; obj.checked=(sts.builtInLed=='on');
 			}
 
-			getAndRefreshLedState(); // GUI initialisation at load
+			getAndRefreshLedState(); // GUI initialization at load
 
 			function refreshUpTime(json){ // refresh up time with latest information from ESP
 				document.getElementById('upTime').innerText=(JSON.parse(json).upTime);
@@ -155,17 +159,77 @@
 				client.request('/upTime','GET',function(json){refreshUpTime(json);});
 			}, 1000);
 
+			// we can not send all requests to ESP32 at the same time, resources are limited - give ESP32 some time to process previous ones first
+			setTimeout(function(){
+				client.request('/freeHeap','GET',function(json){document.getElementById('freeHeap').innerText=lineGraph(json,'freeHeapGraph','#0961aa') + ' KB';});
+			}, 10);
 			setInterval(function(){
 				client.request('/freeHeap','GET',function(json){document.getElementById('freeHeap').innerText=lineGraph(json,'freeHeapGraph','#0961aa') + ' KB';});
 			}, 60000);
 
+			// we can not send all requests to ESP32 at the same time, resources are limited - give ESP32 some time to process previous ones first
+			setTimeout(function(){
+				client.request('/httpRequestCount','GET',function(json){document.getElementById('httpRequestCount').innerText=lineGraph(json,'httpRequestCountGraph','#2597f4') + ' / min';});
+			}, 20);
 			setInterval(function(){
 				client.request('/httpRequestCount','GET',function(json){document.getElementById('httpRequestCount').innerText=lineGraph(json,'httpRequestCountGraph','#2597f4') + ' / min';});
 			}, 60000);
 
-			setInterval(function(){
-				client.request('/rssi','GET',function(json){document.getElementById('rssi').innerText=lineGraph(json,'rssiGraph','#2597f4') + ' dBm';});
-			}, 60000);
+			// WebSocket streaming:
+			// we should have a circular queue od measurements here but since we already have
+			// a function that dispalys nice graphs from JSON let's just keep all the data in 
+			// JSON
+
+			var rssiSamples = 0;
+			var rssiSeconds = 0;
+			var rssiScaleJson = '';
+			var rssiValueJson = '';
+
+      			if ("WebSocket" in window) {
+			        var ws = new WebSocket ("ws://" + self.location.host + "/rssiReader"); // open webSocket connection
+			        ws.onopen = function () {;};
+			        ws.onmessage = function (evt) { 
+					if (evt.data instanceof Blob) { // RSSI readings as 1 byte binary data
+						// receive binary data as blob and then convert it into array
+            					var myByteArray = null;
+            					var myArrayBuffer = null;
+						var myFileReader = new FileReader ();
+            					myFileReader.onload = function (event) 	{
+              						myArrayBuffer = event.target.result;
+              						myByteArray = new Int8Array (myArrayBuffer); // <= RSSI information is now in the array of size 1
+							// document.getElementById('rssi').innerText = myByteArray [0].toString () + ' dBm';
+							// insert new data into JSON and display graph from it
+							if (rssiSamples == 0) {
+								rssiSamples = 1;
+								rssiScaleJson = '"|"';
+								rssiValueJson = '"' + myByteArray [0].toString () + '"';
+							} else {
+								rssiSamples ++;
+								if (++ rssiSeconds == 9) {
+									rssiScaleJson += ',"|"';
+									rssiSeconds = 0;
+								} else {
+									rssiScaleJson += ',""';
+								}
+								rssiValueJson += ',"' + myByteArray [0].toString () + '"';
+								if (rssiSamples >= 60) {
+									rssiSamples --;
+									var i;
+									i = rssiScaleJson.indexOf (','); rssiScaleJson = rssiScaleJson.substring (i + 1);
+									i = rssiValueJson.indexOf (','); rssiValueJson = rssiValueJson.substring (i + 1);
+								}
+							}
+
+							document.getElementById('rssi').innerText=lineGraph('{"scale":[' + rssiScaleJson + '],"value":[' + rssiValueJson + ']}','rssiGraph','#ff8533') + ' dBm';
+
+            					};
+						myFileReader.readAsArrayBuffer (evt.data);
+	         			}
+        			};
+      			} else {
+        			alert ("WebSockets are not supported by your browser.");
+      			}
+
 		</script>
 	</body>
 </html>
