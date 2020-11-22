@@ -7,6 +7,8 @@ You can use the following commands:
   reboot
   reset
   date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
+  ntpdate or ntpdate -u or ntpdate -u ntpServer
+  crontab or crontab -l
   free or free -s n (where 0 < n < 300)
   dmesg or dmesg --follow
   mkfs.fat
@@ -40,3 +42,4 @@ Configuration files used by system:
   /etc/dhcpcd.conf                         contains A(ccess) P(oint) configuration
   /etc/hostapd/hostapd.conf                contains A(ccess) P(oint) credentials
   /etc/ntp.conf                            contains NTP time servers names
+  /etc/crontab                             contains scheduled tasks
