@@ -23,7 +23,7 @@ void setup () {
   // __TEST_DST_TIME_CHANGE__ ();
 
   mountFileSystem (false);
-  synchronizeTimeAndInitializeItAtFirstCall ();
+  startCronDaemonAndInitializeItAtFirstCall (NULL, 3 * 1024);
   
 }
 

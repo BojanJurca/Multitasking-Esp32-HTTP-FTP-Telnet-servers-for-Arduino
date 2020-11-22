@@ -602,13 +602,13 @@ readingPayload:
           }
         }
       }
-      if (receivedTotal) webDmesg ("[webClient] error in HTTP response regarding content-length.");
-      else               webDmesg ("[webClient] time-out.");
+      if (receivedTotal) webDmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
+      else               webDmesg ("[webClient] time-out, httpRequest = " + httpRequest);
     } else {
-      webDmesg ("[webClient] unable to connect.");
+      webDmesg ("[webClient] unable to connect to " + String (serverIP) + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
     }     
     free (buffer);
-    return ""; // response arrived, it may evend be OK but it doesn't match content-length field
+    return ""; // response arrived, it may even be OK but it doesn't match content-length field
   }
  
 #endif

@@ -115,8 +115,6 @@
   
   String __appendString__ (String s, int toLenght);
   
-  String __compactNetworkConfiguration__ (String inp);
-  
   String __insideBrackets__ (String inp, String opening, String closing);
   
   void __networkDmesg__ (String message) { 
@@ -152,7 +150,7 @@
     readFile (fileContent, "/network/interfaces");
     if (fileContent != "") { // parse configuration
 
-      fileContent = __compactNetworkConfiguration__ (fileContent) + "\n"; 
+      fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
       int i = fileContent.indexOf ("iface STA inet static");
       if (i >= 0) {
         fileContent = fileContent.substring (i);
@@ -200,7 +198,10 @@
     readFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
     if (fileContent != "") {
 
-      fileContent = __insideBrackets__ (__compactNetworkConfiguration__ (fileContent), "network\n{", "}") + '\n'; 
+      // fileContent = __insideBrackets__ (compactConfigurationFileContent (fileContent), "network\n{", "}") + '\n'; 
+      fileContent = compactConfigurationFileContent (fileContent); 
+      fileContent = __insideBrackets__ (fileContent, "network", "}") + "}";
+      fileContent = __insideBrackets__ (fileContent, "{", "}") + "\n";
       staSSID     = __insideBrackets__ (fileContent, "ssid ", "\n");
       staPassword = __insideBrackets__ (fileContent, "psk ", "\n");
       // Serial.printf ("[%10lu] [network] staSSID       = %s\n", millis (), staSSID.c_str ());      
@@ -236,7 +237,7 @@
     readFile (fileContent, "/etc/dhcpcd.conf");
     if (fileContent != "") {
 
-      fileContent = __compactNetworkConfiguration__ (fileContent) + "\n"; 
+      fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
       int i = fileContent.indexOf ("iface AP");
       if (i >= 0) {
         fileContent = fileContent.substring (i);
@@ -279,7 +280,7 @@
     readFile (fileContent, "/etc/hostapd/hostapd.conf");
     if (fileContent != "") {
 
-      fileContent = __compactNetworkConfiguration__ (fileContent) + "\n"; 
+      fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
       int i = fileContent.indexOf ("iface AP");
       if (i >= 0) {
         fileContent = fileContent.substring (i);
@@ -446,28 +447,6 @@
     wifi_mode_t retVal = WIFI_OFF;
     if (esp_wifi_get_mode (&retVal) != ESP_OK) {;} // networkDmesg ("[network] couldn't get WiFi mode.");
     return retVal;
-  }
-
-  String __compactNetworkConfiguration__ (String inp) { // skips comments, ...
-    String outp = "";
-    bool inComment = false;  
-    bool inQuotation = false;
-    String c;
-    
-    for (int i = 0; i < inp.length (); i++) {
-      c = inp.substring (i, i + 1);
-  
-           if (c == "#")                                        {inComment = true;}
-      else if (c == "\"")                                       {inQuotation = !inQuotation;}
-      else if (c == "\n")                                       {if (!outp.endsWith ("\n")) {if (!inQuotation && outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1); outp += "\n";} inComment = inQuotation = false;}
-      else if (c == "{")                                        {if (!inComment) {while (outp.endsWith ("\n") || outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1); outp += "\n{\n";}}
-      else if (c == "}")                                        {if (!inComment) {while (outp.endsWith ("\n") || outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1); outp += "\n}\n";}}    
-      else if (c == " " || c == "\t" || c == "=" || c == "\r")  {if (!inComment && !outp.endsWith (" ") && !outp.endsWith ("\n")) outp += " ";}
-      else if (!inComment) {outp += c;}
-   
-    }
-    if (outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1);
-    return outp;
   }
   
   String inet_ntos (ip_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 

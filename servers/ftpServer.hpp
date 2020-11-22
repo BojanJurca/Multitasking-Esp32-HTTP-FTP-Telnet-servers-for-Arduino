@@ -135,15 +135,13 @@
               }
             }
 
-              //debug FTP protocol: 
-              Serial.print ("<--"); for (int i = 0; i < argc; i++) Serial.print (argv [i] + " "); Serial.println ();
+              //debug FTP protocol: Serial.print ("<--"); for (int i = 0; i < argc; i++) Serial.print (argv [i] + " "); Serial.println ();
 
             // ----- try to handle ftp command -----
             String s = ths->__internalFtpCommandHandler__ (argc, argv, param, &fsp);
             connection->sendData (s); // send reply to telnet client
               
-              //debug FTP protocol: 
-              Serial.println ("-->" + s);
+              //debug FTP protocol: Serial.println ("-->" + s);
 
           } // if cmdLine is not empty
         } // read and process comands in a loop

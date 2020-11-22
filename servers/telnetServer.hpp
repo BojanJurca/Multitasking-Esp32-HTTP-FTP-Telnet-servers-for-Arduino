@@ -431,6 +431,16 @@
           if (argc == 4 && argv [1] == "-s") return this->__setDateTime__ (argv [2], argv [3]);
                                              return "Wrong syntax. Use date or date -s YYYY/MM/DD hh:mm:ss (use hh in 24 hours time format).";
 
+        } else if (argc >= 1 && argv [0] == "ntpdate") { //-------------------- NTPDATE
+          
+          if (argc == 1 || ((argc == 2 || argc == 3) && argv [1] == "-u")) return this->__ntpdate__ (argv [2]);
+                                                                           return "Wrong syntax. Use ntpdate or ntpdate -u or ntpdate -u ntpServer.";
+
+        } else if (argc >= 1 && argv [0] == "crontab") { //-------------------- CRONTAB
+          
+          if (argc == 1 || (argc == 2 && argv [1] == "-l")) return cronTab ();
+                                                            return "Wrong syntax. Use crontab or crontab -l.";
+
         } else if (argv [0] == "free") { //------------------------------------ FREE
     
           long n;
@@ -669,6 +679,12 @@
         }
         return "Wrong format of date/time specified.";
       }         
+
+      inline String __ntpdate__ (String ntpServer) __attribute__((always_inline)) {
+        String s = ntpServer == "" ? ntpDate () : ntpDate (ntpServer);
+        if (s != "") return s;
+        return "Time synchronized, currrent time is " + timeToString (getLocalTime ()) + ".";
+      }
 
       inline String __free__ (int delaySeconds, telnetSessionParameters *tsp) __attribute__((always_inline)) {
         char *nl = (char *) "";

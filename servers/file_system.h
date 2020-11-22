@@ -410,6 +410,34 @@
     return "";
   }
 
+  String compactConfigurationFileContent (String inp) { // skips comments, empty lines, ...
+    String outp = "";
+    bool inComment = false;  
+    bool inQuotation = false;
+    char c;
+    char lastc = '\n';
+    
+    for (int i = 0; i < inp.length (); i++) {
+      switch ((c = inp.charAt (i))) {
+        case '#':   c = 0; inComment = true; break;
+        case '\"':  c = 0; inQuotation = !inQuotation; break;
+        case '\r':  c = 0; break;        
+        case '\n':  if (lastc != '\n') { if (outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1); }
+                    else c = 0;
+                    inComment = inQuotation = false;
+                    break;        
+        case '\t':  c = ' ';
+        case '=':   c = ' ';
+        case ' ':   if (lastc == '\n' || lastc == ' ') c = 0;
+        default:    break;
+      }
+      if (!inComment && c) outp += (lastc = c); 
+    }
+    if (outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1);
+    if (outp.endsWith ("\n")) outp = outp.substring (0, outp.length () - 1);
+    return outp;
+  }
+  
   #include "time_functions.h"
   
 #endif
