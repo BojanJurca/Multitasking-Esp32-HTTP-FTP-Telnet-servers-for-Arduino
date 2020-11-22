@@ -10,16 +10,6 @@ Very briefly why would you use Esp32_web_ftp_telnet_server_template:
 
 ![Screenshot](presentation.gif)
 
-- **Please note that this is development version that still needs to be tested. If you are looking for stable version download latest release. This readme.md file may be different there**
-
-What is new?
-
-  - The use of FAT instead of SPIFFS file system allows longer file names.
-  - Web server: support for keep-alive directive in Web server
-  - Telnet server: additional commands (fs_info, tree, cd, mkdir, rmdir, ...), additional possibility for file upload via cat > fileName command.
-  - FTP server: additional commands (cd, mkdir, rmdir, ...), support for Windows Explorer
-  - time_functions.h instead of rtc.hpp that is easier to use and rely on /etc/ntp.conf configuration file.
-  - a simple vi telnet text editor for small configuration files.
 
 In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
@@ -50,6 +40,8 @@ You can use the following commands:
    - reboot
    - reset
    - date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
+   - ntpdate or ntpdate -u or ntpdate -u ntpServer
+   - crontab or crontab -l
    - free or free -s n (where 0 < n < 300)
    - dmesg or dmesg --follow
    - mkfs.fat
@@ -120,6 +112,7 @@ Features:
    - /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
    - /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
    - /etc/ntp.conf contains NTP time servers' names
+   - /etc/crontab contains cheduled tasks  
 
 These files are created at first run of your sketch with default settings (you can modify default settings in source code before you run the sketch for the first time). 
 
@@ -139,6 +132,9 @@ Only "root" user with "rootpassword" password, "webadmin" user with "webadminpas
 KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
 By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functions.h also takes care of synchronizing ESP32 clock with NTP servers once a day.
+
+**cronDaemon** scans crontab table and executes tasks at specified time. You can schedule tasks from code or write them in to /etc/crontab file (see examples). 
+
 
 ## Setup instructions
 

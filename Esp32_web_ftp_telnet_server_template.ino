@@ -30,17 +30,18 @@
 
 #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
 #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
-#define DEFAULT_STA_SSID          "YOUR-STA-SSID"               // define default WiFi settings
+
+#define DEFAULT_STA_SSID          "YOUR-STA-SSID"               // define default WiFi settings (see network.h)
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
 #define DEFAULT_AP_SSID           HOSTNAME 
 #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
 #include "./servers/file_system.h"
 #include "./servers/network.h"
-// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
 #include "./servers/user_management.h"
-// define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in
+// define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
 // ...
 // #define TIMEZONE  EASTERN_TIMEZONE
 // (default) #define TIMEZONE  CET_TIMEZONE               
@@ -58,12 +59,11 @@
               #include "measurements.hpp"
               measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
               measurements httpRequestCount (60);         // measure how many web connections arrive each minute
-              measurements rssi (60);                     // measure WiFi signal quality
               // ...
               #include "examples.h" // example 07, example 08, example 09, example 10, example 11
 
 
-// ----- HTTP request handler example - if you don't want to handle HTTP requests just delete this function and pass NULL to httpSrv instead if its address -----
+// ----- HTTP request handler example - if you don't want to handle HTTP requests just delete this function and pass NULL to httpSrv instead of its address -----
 //       normally httpRequest is HTTP request, function returns a reply in HTML, json, ... formats or "" if request is unhandeled by httpRequestHandler
 //       httpRequestHandler is supposed to be used with smaller replies,
 //       if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (into /var/www/html/ directory)
@@ -97,16 +97,22 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
                                                                                         goto getBuiltInLed;
                                                                                       }
               else if (httpRequest.substring (0, 12) == "GET /upTime ")               { // used by index.html
-                                                                                        return "{\"id\":\"" + String (HOSTNAME) + "\",\"upTime\":\"" + String (getUptime ()) + " sec\"}\r\n";
+                                                                                        time_t t = getUptime ();       // t holds seconds
+                                                                                        int seconds = t % 60; t /= 60; // t now holds minutes
+                                                                                        int minutes = t % 60; t /= 60; // t now holds hours
+                                                                                        int hours = t % 24;   t /= 24; // t now holds days
+                                                                                        char c [10];
+                                                                                        sprintf (c, "%02i:%02i:%02i", hours, minutes, seconds);
+                                                                                        String s = "";
+                                                                                        if (t) s += String ((unsigned long) t) + " days, ";
+                                                                                        s += String (c);
+                                                                                        return "{\"id\":\"" + String (HOSTNAME) + "\",\"upTime\":\"" + s + "\"}";
                                                                                       }                                                                    
               else if (httpRequest.substring (0, 14) == "GET /freeHeap ")             { // used by index.html
                                                                                         return freeHeap.toJson (5);
                                                                                       }
               else if (httpRequest.substring (0, 22) == "GET /httpRequestCount ")     { // used by index.html
                                                                                         return httpRequestCount.toJson (5);
-                                                                                      }
-              else if (httpRequest.substring (0, 10) == "GET /rssi ")                 { // used by index.html
-                                                                                        return rssi.toJson (5);
                                                                                       }
               else if (httpRequest.substring (0, 17) == "GET /niceSwitch1 ")          { // used by example 05.html
                                                                                       returnNiceSwitch1State:
@@ -154,11 +160,10 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
 }
 
 
-// ----- WebSocket request handler example - if you don't want to handle WebSocket requests just delete this function and pass NULL to httpSrv instead if its address -----
+// ----- WebSocket request handler example - if you don't want to handle WebSocket requests just delete this function and pass NULL to httpSrv instead of its address -----
 #include "./servers/oscilloscope.h"
 void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be reentrant!
 
-Serial.println (wsRequest);
 
               // ----- example WebSockets & Oscilloscope - delete this code if it is not needed -----
 
@@ -176,7 +181,7 @@ Serial.println (wsRequest);
 }
 
 
-// ----- telnet command handler example - if you don't want to handle telnet commands yourself just delete this function and pass NULL to telnetSrv instead if its address -----
+// ----- telnet command handler example - if you don't want to handle telnet commands yourself just delete this function and pass NULL to telnetSrv instead of its address -----
 String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { // - must be reentrant!
 
               
@@ -197,67 +202,79 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
 }
 
 
-              // ----- firewall example - if you don't need firewall just delete this function and pass NULL to the servers instead if its address -----
+              // ----- firewall example - if you don't need firewall just delete this function and pass NULL to the servers instead of its address -----
           
               bool firewall (char *IP) {                            // firewall callback function, return true if IP is accepted or false if not - must be reentrant!
                 if (!strcmp (IP, "10.0.0.2")) return false;         // block 10.0.0.2 (for the purpose of this example) 
                 else                          return true;          // ... but let every other client through
               }
 
+
+// ----- cron command handler example - if you don't want to handle cron tasks just delete this function and pass NULL to startCronDaemon... instead of its address -----
+void cronHandler (String& cronCommand) {
+  // debug: Serial.printf ("[%10lu] [cronDaemon] %s\n", millis (), cronCommand.c_str ());    
+
+         if (cronCommand == "newYear'sGreetingsToProgrammer") { 
+          
+                Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
+
+         }
+         
+}
+
+
 void setup () {
   Serial.begin (115200);
  
   // FFat.format ();
-  mountFileSystem (true);                                           // this is the first thing to do - all configuration files are on file system
+  mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
 
+  // deleteFile ("/etc/ntp.conf");                                    // contains ntp server names form time sync - deleting this file would cause creating default one
+  // deleteFile ("/etc/crontab");                                     // contains cheduled tasks                  - deleting this file would cause creating empty one
+  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 3 * 1024);  // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
+                                                                      // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
+                                                                      // 3 KB stack size is miniman requirement for NTP time synchronization, add more if your cronHandler requires more
 
+  // deleteFile ("/etc/passwd");                                      // contains users' accounts information     - deleting this file would cause creating default one
+  // deleteFile ("/etc/shadow");                                      // contains users' passwords                - deleting this file would cause creating default one
+  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
 
-
-
-
-
-
-
-
-  synchronizeTimeAndInitializeItAtFirstCall ();                     // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
-
-  // deleteFile ("/etc/passwd");                                    // contains users' accounts information     - deleting this file would cause creating default one
-  // deleteFile ("/etc/shadow");                                    // contains users' passwords                - deleting this file would cause creating default one
-  initializeUsersAtFirstCall ();                                    // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
-
-  // deleteFile ("/network/interfaces");                            // contation STA(tion) configuration        - deleting this file would cause creating default one
-  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");        // contation STA(tion) credentials          - deleting this file would cause creating default one
-  // deleteFile ("/etc/dhcpcd.conf");                               // contains A(ccess) P(oint) configuration  - deleting this file would cause creating default one
-  // deleteFile ("/etc/hostapd/hostapd.conf");                      // contains A(ccess) P(oint) credentials    - deleting this file would cause creating default one
-  startNetworkAndInitializeItAtFirstCall ();                        // starts WiFi according to configuration files, creates configuration files if they don't exist
+  // deleteFile ("/network/interfaces");                              // contation STA(tion) configuration        - deleting this file would cause creating default one
+  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");          // contation STA(tion) credentials          - deleting this file would cause creating default one
+  // deleteFile ("/etc/dhcpcd.conf");                                 // contains A(ccess) P(oint) configuration  - deleting this file would cause creating default one
+  // deleteFile ("/etc/hostapd/hostapd.conf");                        // contains A(ccess) P(oint) credentials    - deleting this file would cause creating default one
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
   // start web server 
-  httpServer *httpSrv = new httpServer (httpRequestHandler,         // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                        wsRequestHandler,           // a callback function that will handle WS requests, NULL to ignore WS requests
-                                        8 * 1024,                   // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
-                                        (char *) "0.0.0.0",         // start HTTP server on all available ip addresses
-                                        80,                         // HTTP port
-                                        NULL);                      // we won't use firewall callback function for HTTP server
+  httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                        wsRequestHandler,             // a callback function that will handle WS requests, NULL to ignore WS requests
+                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        (char *) "0.0.0.0",           // start HTTP server on all available ip addresses
+                                        80,                           // HTTP port
+                                        NULL);                        // we won't use firewall callback function for HTTP server
   if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
 
   // start FTP server
-  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",            // start FTP server on all available ip addresses
-                                     21,                            // controll connection FTP port
-                                     firewall);                     // use firewall callback function for FTP server (replace with NULL if not needed)
+  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",              // start FTP server on all available ip addresses
+                                     21,                              // controll connection FTP port
+                                     firewall);                       // use firewall callback function for FTP server (replace with NULL if not needed)
   if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
 
   // start telnet server
-  telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, // a callback function that will handle telnet commands that are not handled by telnet server itself
-                                              16 * 1024,            // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
-                                              (char *) "0.0.0.0",   // start telnt server on all available ip addresses
-                                              23,                   // telnet port
-                                              NULL);                // use firewall callback function for telnet server (replace with NULL if not needed)
+  telnetServer *telnetSrv = new telnetServer (telnetCommandHandler,   // a callback function that will handle telnet commands that are not handled by telnet server itself
+                                              16 * 1024,              // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
+                                              (char *) "0.0.0.0",     // start telnt server on all available ip addresses
+                                              23,                     // telnet port
+                                              NULL);                  // use firewall callback function for telnet server (replace with NULL if not needed)
   if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) dmesg ("[telnetServer] did not start.");
 
   // ----- add your own code here -----
   
 
               // ----- some examples - delete this code if it is not needed -----
-              #define LED_BUILTIN 2                     // buildin led blinking is used in examples 01, 03 and 04
+
+              cronTabAdd ("0 0 0 1 1 * newYear'sGreetingsToProgrammer"); // you can add entries in crontab from code or you can write them into /etc/crontab file
+              
+              #define LED_BUILTIN 2                     // built-in led blinking is used in examples 01, 03 and 04
               pinMode (LED_BUILTIN, OUTPUT);         
               digitalWrite (LED_BUILTIN, LOW);
 
@@ -296,7 +313,6 @@ void loop () {
                 lastScale = (lastScale + 1) % 60;
                 freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB 
                 httpRequestCount.addCounterToMeasurements (lastScale);          // take sample of number of web connections that arrived last minute
-                rssi.addMeasurement (lastScale, WiFi.RSSI ());                  // take RSSI sample
                 Serial.printf ("[%10lu] [%s] free heap: %6i bytes.\n", millis (), __func__, ESP.getFreeHeap ());
               }
                 
