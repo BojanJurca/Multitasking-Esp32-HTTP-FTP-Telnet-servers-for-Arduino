@@ -100,7 +100,9 @@
 			}
 
 			function refreshLedState(json){ // refresh ledSwitch state with latest information from ESP
-				var obj=document.getElementById('ledSwitch'); obj.disabled=false; obj.checked=(sts.builtInLed=='on');
+				var obj=JSON.parse(json);
+				document.getElementById('ledSwitch').disabled=false; 
+				document.getElementById('ledSwitch').checked=(obj.builtInLed=='on');
 			}
 
 			getAndRefreshLedState(); // GUI initialization at load
