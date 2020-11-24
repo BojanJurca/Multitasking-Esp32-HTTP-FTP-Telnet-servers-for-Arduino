@@ -260,20 +260,20 @@
       return false;
     }
   }
-  
+    
   int cronTabDel (String cronCommand) { // returns the number of cron commands being deleted
     int cnt = 0;
     portENTER_CRITICAL (&csCron);
       for (int i = 0; i < __cronTabEntries__; i ++)
-        if (__cronEntry__ [i].cronCommand == cronCommand) {
-          for (int j = i; i < __cronTabEntries__ - 1; j ++) __cronEntry__ [j] = __cronEntry__ [j + 1];
+        if (__cronEntry__ [i].cronCommand == cronCommand) {        
+          for (int j = i; j < __cronTabEntries__ - 1; j ++) { __cronEntry__ [j] = __cronEntry__ [j + 1]; }
           __cronTabEntries__ --;
           cnt ++;
         }
     portEXIT_CRITICAL (&csCron);
     if (!cnt) timeDmesg ("[cronDaemon] there are no " + cronCommand + " commands to delete from cron table.");
     return cnt;
-  }  
+  }
 
   String cronTab () { // returns crontab content as a string
     String s = "";
@@ -321,6 +321,7 @@
       if (!now) continue; // if the time is not known cronDaemon can't do anythig
       static time_t previous = now;
       for (time_t l = previous + 1; l <= now; l++) {
+        delay (1);
         struct tm slt = timeToStructTime (l);
         //scan through cron entries and find commands that needs to be executed (at time l)
         String commands = "\n";
