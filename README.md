@@ -671,36 +671,32 @@ if (myServer->started ()) {
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[example 11] new connection arrived from %s\n", connection->getOtherSideIP ());
+  Serial.printf ("[%10lu] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
   int bytesToSend;
   // construct Morse table. Make it static so it won't use the stack
-  static char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
-                             "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
-                             "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
-                             ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
-                             "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
-                             "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
-                             ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
-                             "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
-                             "--.. "};                                         // Z
-  char finiteState = ' '; // finite state machine to detect quit, valid states are ' ', 'q', 'u', 'i', 't'
+  static const char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
+                                   "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
+                                   "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
+                                   ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
+                                   "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
+                                   "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
+                                   ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
+                                   "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
+                                   "--.. "};                                         // Z
   unsigned char c;
   int index;  
   
   // send welcome reply first as soon as new connection arrives - in a readable form
-  #define IAC 255
-  #define DONT 254
-  #define ECHO 1
-  sprintf (outputBuffer, "Type anything except quit. Quit will end the connection.%c%c%c\r\n", IAC, DONT, ECHO); 
+  sprintf (outputBuffer, "Type anything except Ctrl-C - this would end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
   // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
   // to test this example it is a good idea to communicate with it in the way it understands
   bytesToSend = strlen (outputBuffer);
   if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
     *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[example 11] error while sending response\n");
+    Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
     goto endThisConnection;
   }
   *outputBuffer = 0; // mark outputBuffer as empty
@@ -712,7 +708,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     for (int i = 0; i < received; i ++) {
       // calculate index of morse table entry
       c = inputBuffer [i];
-
+      if (c == 3) goto endThisConnection; // Ctrl-C
       index = 11;                                     // no character in morse table
       if (c == ' ') index = 10;                       // space in morse table
       else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
@@ -723,7 +719,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         bytesToSend = strlen (outputBuffer);
         if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
           *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[example 11] error while sending response\n");
+          Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
           goto endThisConnection;
         }
         strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
@@ -731,29 +727,11 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         strcat (outputBuffer, morse [index]); // append morse letter to outputBuffer
       }
 
-      // calculat finite machine state to detect if "quit" has been entered
-      switch (c /* inputBuffer [i] */) {
-        case 'Q':
-        case 'q': finiteState = 'q';
-                  break;
-        case 'U':
-        case 'u': if (finiteState == 'q') finiteState = 'u'; else finiteState = ' ';
-                  break;
-        case 'I':
-        case 'i': if (finiteState == 'u') finiteState = 'i'; else finiteState = ' ';
-                  break;
-        case 'T':
-        case 't': if (finiteState == 'i') goto endThisConnection; // quit has been entered
-                  else finiteState = ' ';
-                  break; 
-        default:  finiteState = ' ';
-                  break;
-      }
     } // for loop
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
       *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[example 11] error while sending response\n");
+      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
       goto endThisConnection;
     }    
     *outputBuffer = 0; // mark outputBuffer as empty
@@ -763,9 +741,9 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   if (*outputBuffer) {
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[example 11] error while sending response\n");
+      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
   }
-  Serial.printf ("[example 11] connection has just ended\n");
+  Serial.printf ("[%10lu] [example 11] connection has just ended\n", millis ());
 }
 ```
 

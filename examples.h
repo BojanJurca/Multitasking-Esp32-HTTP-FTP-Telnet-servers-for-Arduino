@@ -139,12 +139,11 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
                                    ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
                                    "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
                                    "--.. "};                                         // Z
-  char finiteState = ' '; // finite state machine to detect quit, valid states are ' ', 'q', 'u', 'i', 't'
   unsigned char c;
   int index;  
   
   // send welcome reply first as soon as new connection arrives - in a readable form
-  sprintf (outputBuffer, "Type anything except quit. Quit will end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
+  sprintf (outputBuffer, "Type anything except Ctrl-C - this would end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
   // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
   // to test this example it is a good idea to communicate with it in the way it understands
   bytesToSend = strlen (outputBuffer);
@@ -162,7 +161,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     for (int i = 0; i < received; i ++) {
       // calculate index of morse table entry
       c = inputBuffer [i];
-
+      if (c == 3) goto endThisConnection; // Ctrl-C
       index = 11;                                     // no character in morse table
       if (c == ' ') index = 10;                       // space in morse table
       else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
@@ -181,24 +180,6 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         strcat (outputBuffer, morse [index]); // append morse letter to outputBuffer
       }
 
-      // calculat finite machine state to detect if "quit" has been entered
-      switch (c /* inputBuffer [i] */) {
-        case 'Q':
-        case 'q': finiteState = 'q';
-                  break;
-        case 'U':
-        case 'u': if (finiteState == 'q') finiteState = 'u'; else finiteState = ' ';
-                  break;
-        case 'I':
-        case 'i': if (finiteState == 'u') finiteState = 'i'; else finiteState = ' ';
-                  break;
-        case 'T':
-        case 't': if (finiteState == 'i') goto endThisConnection; // quit has been entered
-                  else finiteState = ' ';
-                  break; 
-        default:  finiteState = ' ';
-                  break;
-      }
     } // for loop
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
