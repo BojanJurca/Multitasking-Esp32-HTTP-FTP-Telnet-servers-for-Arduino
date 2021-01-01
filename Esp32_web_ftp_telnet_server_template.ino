@@ -31,7 +31,7 @@
 #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
 #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
 
-#define DEFAULT_STA_SSID          "YOUR-STA-SSID"               // define default WiFi settings (see network.h)
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
 #define DEFAULT_AP_SSID           HOSTNAME 
 #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
@@ -214,11 +214,19 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
 void cronHandler (String& cronCommand) {
   // debug: Serial.printf ("[%10lu] [cronDaemon] %s\n", millis (), cronCommand.c_str ());    
 
-         if (cronCommand == "newYear'sGreetingsToProgrammer") { 
+          // handle your cron commands/events here
+          
+          if (cronCommand == "gotTime") { // triggers only once - when ESP32 reads time from NTP servers for the first time
+
+            time_t t = getLocalTime ();
+            struct tm st = timeToStructTime (t);
+            Serial.println ("Got time at " + timeToString (t) + " (local time), do whatever needs to be done the first time the time is known.");
+
+          } else if (cronCommand == "newYear'sGreetingsToProgrammer") { // triggers at the beginning of each year
           
                 Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
 
-         }
+          }
          
 }
 
@@ -231,9 +239,9 @@ void setup () {
 
   // deleteFile ("/etc/ntp.conf");                                    // contains ntp server names form time sync - deleting this file would cause creating default one
   // deleteFile ("/etc/crontab");                                     // contains cheduled tasks                  - deleting this file would cause creating empty one
-  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 3 * 1024);  // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
+  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
                                                                       // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
-                                                                      // 3 KB stack size is miniman requirement for NTP time synchronization, add more if your cronHandler requires more
+                                                                      // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
   // deleteFile ("/etc/passwd");                                      // contains users' accounts information     - deleting this file would cause creating default one
   // deleteFile ("/etc/shadow");                                      // contains users' passwords                - deleting this file would cause creating default one
@@ -272,7 +280,13 @@ void setup () {
 
               // ----- some examples - delete this code if it is not needed -----
 
-              cronTabAdd ("0 0 0 1 1 * newYear'sGreetingsToProgrammer"); // you can add entries in crontab from code or you can write them into /etc/crontab file
+              // crontab examples: you can add entries in crontab from code or you can write them into /etc/crontab file,
+              // fromat is in both cases the same: second minute hour day month day_of_week command
+
+              cronTabAdd ("* * * * * * gotTime");  // triggers only once - when ESP32 reads time from NTP servers for the first time
+              cronTabAdd ("0 0 0 1 1 * newYear'sGreetingsToProgrammer");  // triggers at the beginning of each year
+
+              // other examples:
               
               #define LED_BUILTIN 2                     // built-in led blinking is used in examples 01, 03 and 04
               pinMode (LED_BUILTIN, OUTPUT);         

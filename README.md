@@ -1,6 +1,6 @@
 # ESP32 with Web Server, Telnet Server, file system and FTP Server
 
-Very briefly why would you use Esp32_web_ftp_telnet_server_template:
+It is more or less about user interface:
 
 - **very fast and easy development of Telnet command-line user interface for your project** 
 - **easy development of nice-looking Web user interface for your project**

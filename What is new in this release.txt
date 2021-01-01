@@ -1,9 +1,3 @@
-New in release 1.24 
+New in release 1.25 
 
-  - The use of FAT instead of SPIFFS file system allows longer file names.
-  - Web server: support for HTTP 1.1. keep-alive directive
-  - Telnet server: many additional commands are supported (fs_info, tree, cd, mkdir, rmdir, crontab, ...).
-  - FTP server: additional commands are supported (cd, mkdir, rmdir, ...), you can also use Windows Explorer to FTP to ESP32.
-  - Time_functions.h (instead of rtc.hpp) is easier to use and rely on /etc/ntp.conf configuration file.
-  - A simple vi telnet text editor for small configuration files.
-  - Cron tasks and /etc/crontab cron table.
+  - bug fixes
