@@ -80,7 +80,7 @@
       ftpServer (char *serverIP,                                       // FTP server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
                  int serverPort,                                       // FTP server port
                  bool (* firewallCallback) (char *)                    // a reference to callback function that will be celled when new connection arrives 
-                ): TcpServer (__ftpConnectionHandler__, (void *) this, 8192, 300000, serverIP, serverPort, firewallCallback)
+                ): TcpServer (__ftpConnectionHandler__, (void *) this, 8 * 1024, 300000, serverIP, serverPort, firewallCallback)
                                                 {
                                                   if (started ()) ftpDmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
                                                   else            ftpDmesg ("[ftpServer] couldn't start.");
@@ -116,12 +116,12 @@
 
             // ----- parse command line into arguments (max 32) -----
             
-            int argc = 0; String argv [32] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}; 
+            int argc = 0; String argv [8] = {"", "", "", "", "", "", "", ""}; 
             argv [0] = String (cmdLine); argv [0].trim ();
             String param = ""; // everything behind argv [0]
             if (argv [0] != "") {
               argc = 1;
-              while (argc < 32) {
+              while (argc < 8) {
                 int l = argv [argc - 1].indexOf (" ");
                 if (l > 0) {
                   argv [argc] = argv [argc - 1].substring (l + 1);

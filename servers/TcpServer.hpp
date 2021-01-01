@@ -179,6 +179,8 @@ class TcpConnection {
 
     virtual bool isOpened ()                  { return __socket__ != -1; }
 
+    int getSocket () { return __socket__; }
+    
     char *getThisSideIP ()                    {
       // we can not get this information from constructor since connection is not necessarily established when constructor is called
       // if this is a server then we are looking for server side IP, if this is a client then we are looking for client side IP

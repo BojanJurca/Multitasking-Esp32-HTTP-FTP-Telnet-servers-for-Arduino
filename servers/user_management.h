@@ -82,7 +82,6 @@
   #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT    // ----- UNIX_LIKE_USER_MANAGEMENT -----
   
     #include "file_system.h"  // user_management.h needs file_system.h to read/store configuration files
-    #include "TcpServer.hpp"  // user_management.h needs fileSystemSemaphore for FAT file operations (already #included in file_system.h anyway) 
     
     #include "mbedtls/md.h"   // needed to calculate hashed passwords
   

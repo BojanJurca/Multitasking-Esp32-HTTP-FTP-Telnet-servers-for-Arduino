@@ -110,8 +110,6 @@
 
   void setGmt (time_t t);
 
-  time_t setgmt ();                       // returns the number of seconds ESP32 has been running
-
   time_t getLocalTime ();                 // returns current local time or 0 it the time has not been set yet 
 
   void setLocalTime (time_t t);
@@ -209,9 +207,9 @@
 
   String ntpDate () { // synchronizes time with NTP servers, returns error message
     String s;
-    s = ntpDate (__ntpServer1__); if (s == "") return ""; else timeDmesg (s);
-    s = ntpDate (__ntpServer2__); if (s == "") return ""; else timeDmesg (s);
-    s = ntpDate (__ntpServer3__); if (s == "") return ""; else timeDmesg (s);
+    s = ntpDate (__ntpServer1__); if (s == "") return ""; else timeDmesg (s); delay (1);
+    s = ntpDate (__ntpServer2__); if (s == "") return ""; else timeDmesg (s); delay (1);
+    s = ntpDate (__ntpServer3__); if (s == "") return ""; else timeDmesg (s); delay (1);
     return "NTP servers are not available.";
   }
   
@@ -356,7 +354,7 @@
           int j = commands.indexOf ('\n', i + 1);
           if (j > i) {
             String s = commands.substring (i, j);
-            if (cronHandler != NULL) cronHandler (s);
+            if (cronHandler != NULL) cronHandler (s); delay (1);
             i = j + 1;
           } else {
             break;
@@ -421,6 +419,8 @@
               }
             }
         }
+      } else {
+        timeDmesg ("[time] file system not mounted, can't read or write configuration files.");
       }
     #endif    
     
@@ -628,7 +628,7 @@
     time_t timeToLocalTime (time_t t) { return t - 12 * 3600; }
   #endif
   #if TIMEZONE == WAKE_ISLAND_TIMEZONE // GMT + 12
-    time_t timeToLocalTime (time_t t) { return t + 12 * 3600; }          }
+    time_t timeToLocalTime (time_t t) { return t + 12 * 3600; } 
   #endif
   #if TIMEZONE == CHAMORRO_TIMEZONE // GMT + 10
     time_t timeToLocalTime (time_t t) { return t + 10 * 3600; }

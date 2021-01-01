@@ -461,16 +461,20 @@ readingPayload:
 
         wwwSessionParameters wsp = {ths->__webServerHomeDirectory__, connection};
 
+        // Serial.printf ("   DEBUG {socket %i} started\n", connection->getSocket () );
+
         char buffer [2048 + 1]; *buffer = 0;
         String incomingRequests = "";
         int received;
         while ((received = connection->recvData (buffer, sizeof (buffer) - 1))) { // read block of incoming HTTP request(s)
+          // Serial.printf ("   DEBUG {socket %i} received %i bytes\n", connection->getSocket (), received );
           buffer [received] = 0;
           // append it to already existing part of HTTP request
           incomingRequests += String (buffer);
           // check if the end of HTTP request has already arrived
           int i = incomingRequests.indexOf ("\r\n\r\n");
           if (i >= 0) {
+            // Serial.printf ("   DEBUG {socket %i} received HTTP request\n", connection->getSocket () );
             String httpRequest = incomingRequests.substring (0, i + 4);
 
             // debug HTTP: Serial.println (httpRequest.substring (4, httpRequest.indexOf (' ', 4)));
@@ -495,54 +499,64 @@ readingPayload:
             }
 
             String r;
-            if (ths->__externalHttpRequestHandler__ && (r = ths->__externalHttpRequestHandler__ (httpRequest, &wsp)) != "") 
+            if (ths->__externalHttpRequestHandler__ && (r = ths->__externalHttpRequestHandler__ (httpRequest, &wsp)) != "") {
               connection->sendData ("HTTP/1.1 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:" + String (r.length ()) + "\r\n\r\n" + r); // add header and send reply to telnet client
-            else connection->sendData (ths->__internalHttpRequestHandler__ (httpRequest, &wsp)); // send reply to telnet client
+              // Serial.printf ("   DEBUG {socket %i} sent HTTP reply\n", connection->getSocket () );
+            } else {
+              connection->sendData (ths->__internalHttpRequestHandler__ (httpRequest, &wsp)); // send reply to telnet client
+            }
 
             // if the client wants to keep connection alive for the following requests then let it be so
             
-            if (stristr ((char *) httpRequest.c_str (), (char *) "CONNECTION: KEEP-ALIVE"))             
+            if (stristr ((char *) httpRequest.c_str (), (char *) "CONNECTION: KEEP-ALIVE")) {
               incomingRequests = incomingRequests.substring (i + 4); // read another request on this connection
-            else
+              // Serial.printf ("   DEBUG {socket %i} keeping connection alive\n", connection->getSocket () );
+            } else {
+              // Serial.printf ("   DEBUG {socket %i} not keeping connection alive\n", connection->getSocket () );
               break; // close this connection
+            }
           }
-        } while (received);
+        } // while (received);
+        // Serial.printf ("   DEBUG {socket %i} finished serving this connection\n", connection->getSocket () );
       }
 
       String __internalHttpRequestHandler__ (String& httpRequest, httpServer::wwwSessionParameters *wsp) { 
         // check if HTTP request is file name or report error 404
 
-        int i = httpRequest.indexOf (' ', 4);
-        if (i >= 0) {
-          String fileName = httpRequest.substring (5, i);
-          if (fileName == "") fileName = "index.html";
-          fileName = __webServerHomeDirectory__ + fileName;
-
+        #ifdef __FILE_SYSTEM__
           if (__fileSystemMounted__) {
-            // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-              File f = FFat.open (fileName.c_str (), FILE_READ);           
-              if (f) {
-                if (!f.isDirectory ()) {
-                  char *buff = (char *) malloc (2048); // get 2 KB of memory from heap
-                  if (buff) {
-                    sprintf (buff, "HTTP/1.1 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:%i\r\n\r\n", f.size ());
-                    int i = strlen (buff);
-                    while (f.available ()) {
-                      *(buff + i++) = f.read ();
-                      if (i == 2048) { wsp->connection->sendData ((char *) buff, 2048); i = 0; }
-                    }
-                    if (i) { wsp->connection->sendData (buff, i); }
-                    free (buff);
-                  } 
+
+            int i = httpRequest.indexOf (' ', 4);
+            if (i >= 0) {
+              String fileName = httpRequest.substring (5, i);
+              if (fileName == "") fileName = "index.html";
+              fileName = __webServerHomeDirectory__ + fileName;
+
+              // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
+                File f = FFat.open (fileName.c_str (), FILE_READ);           
+                if (f) {
+                  if (!f.isDirectory ()) {
+                    char *buff = (char *) malloc (2048); // get 2 KB of memory from heap
+                    if (buff) {
+                      sprintf (buff, "HTTP/1.1 200 OK\r\nContent-Type:text/html;\r\nCache-control:no-cache\r\nContent-Length:%i\r\n\r\n", f.size ());
+                      int i = strlen (buff);
+                      while (f.available ()) {
+                        *(buff + i++) = f.read ();
+                        if (i == 2048) { wsp->connection->sendData ((char *) buff, 2048); i = 0; }
+                      }
+                      if (i) { wsp->connection->sendData (buff, i); }
+                      free (buff);
+                    } 
+                    f.close ();
+                    // xSemaphoreGive (fileSystemSemaphore);
+                    return ""; // success
+                  } // if file is a file, not a directory
                   f.close ();
-                  // xSemaphoreGive (fileSystemSemaphore);
-                  return ""; // success
-                } // if file is a file, not a directory
-                f.close ();
-              } // if file is opened
-            // xSemaphoreGive (fileSystemSemaphore);
+                } // if file is opened
+              // xSemaphoreGive (fileSystemSemaphore);
+            }
           }
-        }
+        #endif
 
         return "HTTP/1.1 404 Not found\r\nContent-Type:text/html;\r\nContent-Length:20\r\n\r\nPage does not exist."; // HTTP header and content
       }     

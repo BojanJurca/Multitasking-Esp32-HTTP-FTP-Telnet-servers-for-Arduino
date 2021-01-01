@@ -42,7 +42,7 @@
 
   // SemaphoreHandle_t fileSystemSemaphore = xSemaphoreCreateMutex ();
 
-  #define FILE_PATH_MAX_LENGTH 256 // the number of characters of longest full file path on FAT (not counting closing 0)
+  #define FILE_PATH_MAX_LENGTH (256 - 1) // the number of characters of longest full file path on FAT (not counting closing 0)
 
   bool __fileSystemMounted__ = false;
 

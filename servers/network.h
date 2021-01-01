@@ -63,10 +63,10 @@
   #endif
   // define default STAtion mode parameters to be written into /etc/wpa_supplicant/wpa_supplicant.conf if you want to use ESP as WiFi station
   #ifndef DEFAULT_STA_SSID
-    #define DEFAULT_STA_SSID          "YOUR-STA-SSID"
+    #define DEFAULT_STA_SSID          "YOUR_STA_SSID"
   #endif
   #ifndef DEFAULT_STA_PASSWORD
-    #define DEFAULT_STA_PASSWORD      "YOUR-STA-PASSWORD"
+    #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
   #endif
   // define default static IP, subnet mask and gateway to be written into /network/interfaces if you want ESP to connect to WiFi with static IP instead of using DHCP
   /*
@@ -85,7 +85,7 @@
     #define DEFAULT_AP_SSID           HOSTNAME // change to what you want to name your AP SSID by default
   #endif
   #ifndef DEFAULT_AP_PASSWORD
-    #define DEFAULT_AP_PASSWORD       "YOUR-AP-PASSWORD"
+    #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"
   #endif
   // define default access point IP and subnet mask to be written into /etc/dhcpcd.conf if you want to define them yourself
   #define DEFAULT_AP_IP           "10.0.1.3"
@@ -130,8 +130,6 @@
     // WiFi.disconnect (true);
     WiFi.mode (WIFI_OFF);
 
-    if (!__fileSystemMounted__) { Serial.printf ("[%10lu] [network] file system is not mounted, can't read or write network configuration files.\n", millis ()); return; }
-
     // these parameters are needed to start WiFi in different modes
     String staSSID = "";
     String staPassword = "";
@@ -142,179 +140,216 @@
     String apPassword = "";
     String apIP = "";
     String apSubnetMask = "";
-    String apGateway = "";
-  
-    String fileContent = "";
+    String apGateway = "";    
 
-    // /network/interfaces contation STA(tion) configuration
-    readFile (fileContent, "/network/interfaces");
-    if (fileContent != "") { // parse configuration
-
-      fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
-      int i = fileContent.indexOf ("iface STA inet static");
-      if (i >= 0) {
-        fileContent = fileContent.substring (i);
-        staIP         = __insideBrackets__ (fileContent, "address ", "\n");
-        staSubnetMask = __insideBrackets__ (fileContent, "netmask ", "\n");
-        staGateway    = __insideBrackets__ (fileContent, "gateway ", "\n");
-      }
-      // Serial.printf ("[%10lu] [network] staIP         = %s\n", millis (), staIP.c_str ());
-      // Serial.printf ("[%10lu] [network] staSubnetMask = %s\n", millis (), staSubnetMask.c_str ());
-      // Serial.printf ("[%10lu] [network] staGateway    = %s\n", millis (), staGateway.c_str ());
+    #ifdef __FILE_SYSTEM__
+      if (__fileSystemMounted__) { 
       
-    } else { // save default configuration
-
-      Serial.printf ("[%10lu] [network] /network/interfaces does not exist or it is empty, creating a new one ... ", millis ());
-      // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-        FFat.mkdir ("/network"); // location of this file
-      // xSemaphoreGive (fileSystemSemaphore);
+        String fileContent = "";
     
-      fileContent = "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n";
-                     #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY
-                       fileContent += "# get IP address from DHCP\r\n"
-                                      "#  iface STA inet dhcp\r\n"                  
-                                      "\r\n"
-                                      "# use static IP address\r\n"                   
-                                      "   iface STA inet static\r\n"
-                                      "      address " + (staIP = DEFAULT_STA_IP) + "\r\n"          
-                                      "      netmask " + (staSubnetMask = DEFAULT_STA_SUBNET_MASK) + "\r\n" 
-                                      "      gateway " + (staGateway + DEFAULT_STA_GATEWAY) + "\r\n";    
-                     #else
-                       fileContent += "# get IP address from DHCP\r\n"
-                                      "   iface STA inet dhcp\r\n"                  
-                                      "\r\n"
-                                      "# use static IP address (example below)\r\n"   
-                                      "#  iface STA inet static\r\n"
-                                      "#     address 10.0.0.3\r\n"          
-                                      "#     netmask 255.255.255.0\r\n" 
-                                      "#     gateway 10.0.0.1\r\n";  
-                     #endif
-      if (writeFile (fileContent, "/network/interfaces")) Serial.printf ("created.\n");
-      else                                                Serial.printf ("error.\n");  
+        // /network/interfaces contation STA(tion) configuration
+        readFile (fileContent, "/network/interfaces");
+        if (fileContent != "") { // parse configuration
+    
+          fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
+          int i = fileContent.indexOf ("iface STA inet static");
+          if (i >= 0) {
+            fileContent = fileContent.substring (i);
+            staIP         = __insideBrackets__ (fileContent, "address ", "\n");
+            staSubnetMask = __insideBrackets__ (fileContent, "netmask ", "\n");
+            staGateway    = __insideBrackets__ (fileContent, "gateway ", "\n");
+          }
+          // Serial.printf ("[%10lu] [network] staIP         = %s\n", millis (), staIP.c_str ());
+          // Serial.printf ("[%10lu] [network] staSubnetMask = %s\n", millis (), staSubnetMask.c_str ());
+          // Serial.printf ("[%10lu] [network] staGateway    = %s\n", millis (), staGateway.c_str ());
+          
+        } else { // save default configuration
+    
+          Serial.printf ("[%10lu] [network] /network/interfaces does not exist or it is empty, creating a new one ... ", millis ());
+          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
+            FFat.mkdir ("/network"); // location of this file
+          // xSemaphoreGive (fileSystemSemaphore);
+        
+          fileContent = "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n";
+                         #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY
+                           fileContent += "# get IP address from DHCP\r\n"
+                                          "#  iface STA inet dhcp\r\n"                  
+                                          "\r\n"
+                                          "# use static IP address\r\n"                   
+                                          "   iface STA inet static\r\n"
+                                          "      address " + (staIP = DEFAULT_STA_IP) + "\r\n"          
+                                          "      netmask " + (staSubnetMask = DEFAULT_STA_SUBNET_MASK) + "\r\n" 
+                                          "      gateway " + (staGateway + DEFAULT_STA_GATEWAY) + "\r\n";    
+                         #else
+                           fileContent += "# get IP address from DHCP\r\n"
+                                          "   iface STA inet dhcp\r\n"                  
+                                          "\r\n"
+                                          "# use static IP address (example below)\r\n"   
+                                          "#  iface STA inet static\r\n"
+                                          "#     address 10.0.0.3\r\n"          
+                                          "#     netmask 255.255.255.0\r\n" 
+                                          "#     gateway 10.0.0.1\r\n";  
+                         #endif
+          if (writeFile (fileContent, "/network/interfaces")) Serial.printf ("created.\n");
+          else                                                Serial.printf ("error.\n");  
+          
+        }
+    
+        // /etc/wpa_supplicant/wpa_supplicant.conf contation STA(tion) credentials
+        readFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
+        if (fileContent != "") {
+    
+          // fileContent = __insideBrackets__ (compactConfigurationFileContent (fileContent), "network\n{", "}") + '\n'; 
+          fileContent = compactConfigurationFileContent (fileContent); 
+          fileContent = __insideBrackets__ (fileContent, "network", "}") + "}";
+          fileContent = __insideBrackets__ (fileContent, "{", "}") + "\n";
+          staSSID     = __insideBrackets__ (fileContent, "ssid ", "\n");
+          staPassword = __insideBrackets__ (fileContent, "psk ", "\n");
+          // Serial.printf ("[%10lu] [network] staSSID       = %s\n", millis (), staSSID.c_str ());      
+          // Serial.printf ("[%10lu] [network] staPassword   = %s\n", millis (), staPassword.c_str ());      
       
-    }
-
-    // /etc/wpa_supplicant/wpa_supplicant.conf contation STA(tion) credentials
-    readFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
-    if (fileContent != "") {
-
-      // fileContent = __insideBrackets__ (compactConfigurationFileContent (fileContent), "network\n{", "}") + '\n'; 
-      fileContent = compactConfigurationFileContent (fileContent); 
-      fileContent = __insideBrackets__ (fileContent, "network", "}") + "}";
-      fileContent = __insideBrackets__ (fileContent, "{", "}") + "\n";
-      staSSID     = __insideBrackets__ (fileContent, "ssid ", "\n");
-      staPassword = __insideBrackets__ (fileContent, "psk ", "\n");
-      // Serial.printf ("[%10lu] [network] staSSID       = %s\n", millis (), staSSID.c_str ());      
-      // Serial.printf ("[%10lu] [network] staPassword   = %s\n", millis (), staPassword.c_str ());      
+        } else { // save default configuration
+    
+          Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist or it is empty, creating a new one ... ", millis ());
+          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
+            FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); // location of this file
+          // xSemaphoreGive (fileSystemSemaphore);      
+    
+          fileContent = "# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
+                        "network = {\r\n"
+                        "   ssid " 
+                        #ifdef DEFAULT_STA_SSID
+                           + (staSSID = DEFAULT_STA_SSID) +
+                        #endif
+                        "\r\n"               
+                        "   psk "
+                        #ifdef DEFAULT_STA_PASSWORD
+                          + (staPassword = DEFAULT_STA_PASSWORD) +
+                        #endif
+                        "\r\n"           
+                        "}\r\n";
+    
+          if (writeFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf")) Serial.printf ("created.\n");
+          else                                                                    Serial.printf ("error.\n");  
+          
+        }
+    
+        // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
+        readFile (fileContent, "/etc/dhcpcd.conf");
+        if (fileContent != "") {
+    
+          fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
+          int i = fileContent.indexOf ("iface AP");
+          if (i >= 0) {
+            fileContent = fileContent.substring (i);
+            apIP          = __insideBrackets__ (fileContent, "static ip_address ", "\n");
+            apSubnetMask  = __insideBrackets__ (fileContent, "netmask ", "\n");
+            apGateway     = __insideBrackets__ (fileContent, "gateway ", "\n");
+          }
+          // Serial.printf ("[%10lu] [network] apIP          = %s\n", millis (), apIP.c_str ());      
+          // Serial.printf ("[%10lu] [network] apSubnetMask  = %s\n", millis (), apSubnetMask.c_str ());      
+          // Serial.printf ("[%10lu] [network] apGateway     = %s\n", millis (), apGateway.c_str ());      
+    
+        } else { // save default configuration
+          
+          Serial.printf ("[%10lu] [network] /etc/dhcpcd.conf does not exist or it is empty, creating a new one ... ", millis ());
+          
+          fileContent =  "# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
+                         "iface AP\r\n"
+                         "   static ip_address "
+                         #ifdef DEFAULT_AP_IP
+                           + (apIP = DEFAULT_AP_IP) +
+                         #endif
+                         "\r\n"
+                         "   netmask "
+                         #ifdef DEFAULT_AP_SUBNET_MASK
+                           + (apSubnetMask = DEFAULT_AP_SUBNET_MASK) +
+                         #endif
+                         "\r\n"
+                         "   gateway "
+                         #ifdef DEFAULT_AP_IP
+                           + (apGateway = DEFAULT_AP_IP) +
+                         #endif
+                         "\r\n";
+          
+          if (writeFile (fileContent, "/etc/dhcpcd.conf")) Serial.printf ("created.\n");
+          else                                             Serial.printf ("error.\n");  
+          
+        }
+    
+        // /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
+        readFile (fileContent, "/etc/hostapd/hostapd.conf");
+        if (fileContent != "") {
+    
+          fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
+          int i = fileContent.indexOf ("iface AP");
+          if (i >= 0) {
+            fileContent = fileContent.substring (i);
+            apSSID        = __insideBrackets__ (fileContent, "ssid ", "\n");
+            apPassword    = __insideBrackets__ (fileContent, "wpa_passphrase ", "\n");
+          }
+          // Serial.printf ("[%10lu] [network] apSSID       = %s\n", millis (), apSSID.c_str ());      
+          // Serial.printf ("[%10lu] [network] apPassword   = %s\n", millis (), apPassword.c_str ());      
+      
+        } else { // save default configuration
+    
+          Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist or it is empty, creating a new one ... ", millis ());
+          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
+            FFat.mkdir ("/etc/hostapd"); // location of this file
+          // xSemaphoreGive (fileSystemSemaphore);      
+          
+          fileContent =  "# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
+                         "iface AP\r\n"
+                         "   ssid "                      
+                         #ifdef DEFAULT_AP_SSID
+                           + (apSSID = DEFAULT_AP_SSID) +
+                         #endif
+                         "\r\n"
+                         "   # use at least 8 characters for wpa_passphrase\r\n"
+                         "   wpa_passphrase "
+                         #ifdef DEFAULT_AP_PASSWORD
+                           + (apPassword = DEFAULT_AP_PASSWORD) +
+                         #endif                
+                         "\r\n";    
+    
+          if (writeFile (fileContent, "/etc/hostapd/hostapd.conf")) Serial.printf ("created.\n");
+          else                                                      Serial.printf ("error.\n");  
+          
+        }
   
-    } else { // save default configuration
+      } else 
+    #endif    
+          {
+            networkDmesg ("[network] file system not mounted, can't read or write configuration files.");
 
-      Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist or it is empty, creating a new one ... ", millis ());
-      // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-        FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); // location of this file
-      // xSemaphoreGive (fileSystemSemaphore);      
-
-      fileContent = "# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
-                    "network = {\r\n"
-                    "   ssid " 
-                    #ifdef DEFAULT_STA_SSID
-                       + (staSSID = DEFAULT_STA_SSID) +
-                    #endif
-                    "\r\n"               
-                    "   psk "
-                    #ifdef DEFAULT_STA_PASSWORD
-                      + (staPassword = DEFAULT_STA_PASSWORD) +
-                    #endif
-                    "\r\n"           
-                    "}\r\n";
-
-      if (writeFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf")) Serial.printf ("created.\n");
-      else                                                                    Serial.printf ("error.\n");  
-      
-    }
-
-    // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
-    readFile (fileContent, "/etc/dhcpcd.conf");
-    if (fileContent != "") {
-
-      fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
-      int i = fileContent.indexOf ("iface AP");
-      if (i >= 0) {
-        fileContent = fileContent.substring (i);
-        apIP          = __insideBrackets__ (fileContent, "static ip_address ", "\n");
-        apSubnetMask  = __insideBrackets__ (fileContent, "netmask ", "\n");
-        apGateway     = __insideBrackets__ (fileContent, "gateway ", "\n");
-      }
-      // Serial.printf ("[%10lu] [network] apIP          = %s\n", millis (), apIP.c_str ());      
-      // Serial.printf ("[%10lu] [network] apSubnetMask  = %s\n", millis (), apSubnetMask.c_str ());      
-      // Serial.printf ("[%10lu] [network] apGateway     = %s\n", millis (), apGateway.c_str ());      
-
-    } else { // save default configuration
-      
-      Serial.printf ("[%10lu] [network] /etc/dhcpcd.conf does not exist or it is empty, creating a new one ... ", millis ());
-      
-      fileContent =  "# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
-                     "iface AP\r\n"
-                     "   static ip_address "
-                     #ifdef DEFAULT_AP_IP
-                       + (apIP = DEFAULT_AP_IP) +
-                     #endif
-                     "\r\n"
-                     "   netmask "
-                     #ifdef DEFAULT_AP_SUBNET_MASK
-                       + (apSubnetMask = DEFAULT_AP_SUBNET_MASK) +
-                     #endif
-                     "\r\n"
-                     "   gateway "
-                     #ifdef DEFAULT_AP_IP
-                       + (apGateway = DEFAULT_AP_IP) +
-                     #endif
-                     "\r\n";
-      
-      if (writeFile (fileContent, "/etc/dhcpcd.conf")) Serial.printf ("created.\n");
-      else                                             Serial.printf ("error.\n");  
-      
-    }
-
-    // /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
-    readFile (fileContent, "/etc/hostapd/hostapd.conf");
-    if (fileContent != "") {
-
-      fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
-      int i = fileContent.indexOf ("iface AP");
-      if (i >= 0) {
-        fileContent = fileContent.substring (i);
-        apSSID        = __insideBrackets__ (fileContent, "ssid ", "\n");
-        apPassword    = __insideBrackets__ (fileContent, "wpa_passphrase ", "\n");
-      }
-      // Serial.printf ("[%10lu] [network] apSSID       = %s\n", millis (), apSSID.c_str ());      
-      // Serial.printf ("[%10lu] [network] apPassword   = %s\n", millis (), apPassword.c_str ());      
-  
-    } else { // save default configuration
-
-      Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist or it is empty, creating a new one ... ", millis ());
-      // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-        FFat.mkdir ("/etc/hostapd"); // location of this file
-      // xSemaphoreGive (fileSystemSemaphore);      
-      
-      fileContent =  "# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
-                     "iface AP\r\n"
-                     "   ssid "                      
-                     #ifdef DEFAULT_AP_SSID
-                       + (apSSID = DEFAULT_AP_SSID) +
-                     #endif
-                     "\r\n"
-                     "   # use at least 8 characters for wpa_passphrase\r\n"
-                     "   wpa_passphrase "
-                     #ifdef DEFAULT_AP_PASSWORD
-                       + (apPassword = DEFAULT_AP_PASSWORD) +
-                     #endif                
-                     "\r\n";    
-
-      if (writeFile (fileContent, "/etc/hostapd/hostapd.conf")) Serial.printf ("created.\n");
-      else                                                      Serial.printf ("error.\n");  
-      
-    }
+            #ifdef DEFAULT_STA_SSID
+              staSSID = DEFAULT_STA_SSID;
+            #endif
+            #ifdef DEFAULT_STA_PASSWORD
+              staPassword = DEFAULT_STA_PASSWORD;
+            #endif
+            #ifdef DEFAULT_STA_IP
+              staIP = DEFAULT_STA_IP;
+            #endif
+            #ifdef DEFAULT_STA_SUBNET_MASK
+              staSubnetMask = DEFAULT_STA_SUBNET_MASK;
+            #endif
+            #ifdef DEFAULT_STA_GATEWAY
+              staGateway = DEFAULT_STA_GATEWAY;
+            #endif
+            #ifdef DEFAULT_AP_SSID
+              apSSID = DEFAULT_AP_SSID;
+            #endif
+            #ifdef DEFAULT_AP_PASSWORD
+              apPassword = DEFAULT_AP_PASSWORD;
+            #endif
+            #ifdef DEFAULT_AP_IP
+              apIP = apGateway = DEFAULT_AP_IP;
+            #endif
+            #ifdef DEFAULT_AP_SUBNET_MASK
+              apSubnetMask = DEFAULT_AP_SUBNET_MASK;
+            #endif
+          }
 
     // network event logging - see: https://github.com/espressif/arduino-esp32/blob/master/libraries/WiFi/examples/WiFiClientEvents/WiFiClientEvents.ino
     WiFi.onEvent ([] (WiFiEvent_t event, WiFiEventInfo_t info) {

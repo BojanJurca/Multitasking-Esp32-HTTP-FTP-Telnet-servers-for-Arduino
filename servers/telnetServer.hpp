@@ -106,7 +106,43 @@
   int __MHz__ = __getMHz__ ();
   #define UNAME String (MACHINETYPE) + " (" + String (__MHz__) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
 
+  // find and report reset reason (this may help with debugging)
+  #include <rom/rtc.h>
+  String resetReasonAsString (RESET_REASON reason) {
+    switch (reason) {
+      case 1:  return "POWERON_RESET - 1, Vbat power on reset";
+      case 3:  return "SW_RESET - 3, Software reset digital core";
+      case 4:  return "OWDT_RESET - 4, Legacy watch dog reset digital core";
+      case 5:  return "DEEPSLEEP_RESET - 5, Deep Sleep reset digital core";
+      case 6:  return "SDIO_RESET - 6, Reset by SLC module, reset digital core";
+      case 7:  return "TG0WDT_SYS_RESET - 7, Timer Group0 Watch dog reset digital core";
+      case 8:  return "TG1WDT_SYS_RESET - 8, Timer Group1 Watch dog reset digital core";
+      case 9:  return "RTCWDT_SYS_RESET - 9, RTC Watch dog Reset digital core";
+      case 10: return "INTRUSION_RESET - 10, Instrusion tested to reset CPU";
+      case 11: return "TGWDT_CPU_RESET - 11, Time Group reset CPU";
+      case 12: return "SW_CPU_RESET - 12, Software reset CPU";
+      case 13: return "RTCWDT_CPU_RESET - 13, RTC Watch dog Reset CPU";
+      case 14: return "EXT_CPU_RESET - 14, for APP CPU, reseted by PRO CPU";
+      case 15: return "RTCWDT_BROWN_OUT_RESET - 15, Reset when the vdd voltage is not stable";
+      case 16: return "RTCWDT_RTC_RESET - 16, RTC Watch dog reset digital core and rtc module";
+      default: return "RESET REASON UNKNOWN";
+    }
+  } 
 
+  // find and report reset reason (this may help with debugging)
+  String wakeupReasonAsString () {
+    esp_sleep_wakeup_cause_t wakeup_reason;
+    wakeup_reason = esp_sleep_get_wakeup_cause ();
+    switch (wakeup_reason){
+      case ESP_SLEEP_WAKEUP_EXT0:     return "ESP_SLEEP_WAKEUP_EXT0 - wakeup caused by external signal using RTC_IO.";
+      case ESP_SLEEP_WAKEUP_EXT1:     return "ESP_SLEEP_WAKEUP_EXT1 - wakeup caused by external signal using RTC_CNTL.";
+      case ESP_SLEEP_WAKEUP_TIMER:    return "ESP_SLEEP_WAKEUP_TIMER - wakeup caused by timer.";
+      case ESP_SLEEP_WAKEUP_TOUCHPAD: return "ESP_SLEEP_WAKEUP_TOUCHPAD - wakeup caused by touchpad.";
+      case ESP_SLEEP_WAKEUP_ULP:      return "ESP_SLEEP_WAKEUP_ULP - wakeup caused by ULP program.";
+      default:                        return "WAKEUP REASON UNKNOWN - wakeup was not caused by deep sleep: " + String (wakeup_reason) + ".";
+    }   
+  }
+    
   struct __dmesgType__ {
     unsigned long milliseconds;    
     String        message;
@@ -114,9 +150,13 @@
 
   #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 256
   RTC_DATA_ATTR unsigned int bootCount = 0;
-  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{millis (), String (__timeHasBeenSet__ ? "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + " times at: " + timeToString (getLocalTime ()) + "." : "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}}; // there is always at lease 1 message in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
+  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{0, "[ESP32] CPU0 reset reason: " + resetReasonAsString (rtc_get_reset_reason (0))}, 
+                                                                            {0, "[ESP32] CPU1 reset reason: " + resetReasonAsString (rtc_get_reset_reason (1))}, 
+                                                                            {millis (), "[ESP32] wakeup reason: " + wakeupReasonAsString ()},
+                                                                            {millis (), String (__timeHasBeenSet__ ? "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + " times at: " + timeToString (getLocalTime ()) + "." : "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}
+                                                                           }; // there are always at least 4 messages in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
   byte __dmesgBeginning__ = 0; // first used location
-  byte __dmesgEnd__ = 1;       // the location next to be used
+  byte __dmesgEnd__ = 4;       // the location next to be used
   portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
 
   // adds message into dmesg circular queue
@@ -262,11 +302,11 @@
 
             // ----- parse command line into arguments (max 32) -----
             
-            int argc = 0; String argv [32] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}; 
+            int argc = 0; String argv [16] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}; 
             argv [0] = String (cmdLine); argv [0].trim ();
             if (argv [0] != "") {
               argc = 1;
-              while (argc < 32) {
+              while (argc < 16) {
                 int l;
                 
                 // try to parse against '\"' first to support long file names
