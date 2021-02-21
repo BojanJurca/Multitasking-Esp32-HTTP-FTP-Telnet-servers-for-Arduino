@@ -1,6 +1,6 @@
 You can use the following commands:
   quit
-  cleaar (or use cls instead of clear)
+  clear (or use cls instead of clear)
   help
   uname
   uptime
@@ -10,7 +10,7 @@ You can use the following commands:
   ntpdate or ntpdate -u or ntpdate -u ntpServer
   crontab or crontab -l
   free or free -s n (where 0 < n < 300)
-  dmesg or dmesg --follow
+  dmesg or dmesg --follow or dmesg -T or both option
   mkfs.fat
   fs_info
   ls or ls directoryName (or use dir instead of ls)
