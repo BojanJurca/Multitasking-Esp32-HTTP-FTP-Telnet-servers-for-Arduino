@@ -16,15 +16,12 @@
  *            April 13, 2019, Bojan Jurca
  *          - introduction of FTP_FILE_TIME definition
  *            August, 25, 2019, Bojan Jurca
- *          - minor structural changes,
- *            the use of dmesg
- *            September 14, 2019, Bojan Jurca
  *          - replaced gmtime () function that returns pointer to static structure with reentrant solution
  *            October 29, 2019, Bojan Jurca
  *          - elimination of compiler warnings and some bugs
  *            Jun 10, 2020, Bojan Jurca 
  *          - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
- *            introduction of working directory and support for Windows Explorer
+ *            added FTP commands (pwd, cd, mkdir, rmdir, ...)
  *            October 31, 2020, Bojan Jurca
  *  
  */
@@ -305,14 +302,12 @@ closeFtpConnection:
         if (fp == "")                                 return "550 invalid file name\r\n";
         if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
 
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-          unsigned long fSize = 0;
-          File f = FFat.open (fp, FILE_READ);
-          if (f) {
-            fSize = f.size ();                        
-            f.close ();
-          }
-        // xSemaphoreGive (fileSystemSemaphore);
+        unsigned long fSize = 0;
+        File f = FFat.open (fp, FILE_READ);
+        if (f) {
+          fSize = f.size ();                        
+          f.close ();
+        }
                                                       return "213 " + String (fSize) + "\r\n";
       }
 
@@ -413,11 +408,7 @@ closeFtpConnection:
         if (fp2 == "")                                return "501 invalid directory\r\n";
         if (!userMayAccess (fp2, fsp->homeDir))       return "553 access denyed\r\n";
 
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-        bool b = FFat.rename (fp1, fp2);
-        // xSemaphoreGive (fileSystemSemaphore);        
-        
-        if (b)                                        return "250 renamed to " + s + "\r\n";
+        if (FFat.rename (fp1, fp2))                   return "250 renamed to " + s + "\r\n";
                                                       return "553 unable to rename " + fileOrDirName + "\r\n";
       }
 
@@ -455,27 +446,23 @@ closeFtpConnection:
         if (fsp->activeDataClient) dataConnection = fsp->activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
 
         if (dataConnection) {
-          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-
-            File f = FFat.open (fp, FILE_READ);
-            if (f) {
-              if (!f.isDirectory ()) {
-                // read data from file and transfer it through data connection
-                byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
-                if (buff) {
-                  int i = bytesWritten = 0;
-                  while (f.available ()) {
-                    *(buff + i++) = f.read ();
-                    if (i == 2048) { bytesRead += 2048; bytesWritten += dataConnection->sendData ((char *) buff, 2048); i = 0; }
-                  }
-                  if (i) { bytesRead += i; bytesWritten += dataConnection->sendData ((char *) buff, i); }
-                  free (buff);
+          File f = FFat.open (fp, FILE_READ);
+          if (f) {
+            if (!f.isDirectory ()) {
+              // read data from file and transfer it through data connection
+              byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
+              if (buff) {
+                int i = bytesWritten = 0;
+                while (f.available ()) {
+                  *(buff + i++) = f.read ();
+                  if (i == 2048) { bytesRead += 2048; bytesWritten += dataConnection->sendData ((char *) buff, 2048); i = 0; }
                 }
+                if (i) { bytesRead += i; bytesWritten += dataConnection->sendData ((char *) buff, i); }
+                free (buff);
               }
-              f.close ();
             }
-            
-          // xSemaphoreGive (fileSystemSemaphore);
+            f.close ();
+          }
         }
 
         if (fsp->activeDataClient) { delete (fsp->activeDataClient); fsp->activeDataClient = NULL; }
@@ -500,28 +487,22 @@ closeFtpConnection:
         if (fsp->activeDataClient) dataConnection = fsp->activeDataClient->connection (); // non-threaded client differs from non-threaded server - connection is established before constructor returns or not at all
 
         if (dataConnection) {
-          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-          // __makeDirectoryPathWithoutSemaphore__ (fp.c_str ());
-
-            File f = FFat.open (fp, FILE_WRITE);
-            if (f) {
-              byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
-              if (buff) {
-                int received;
-                do {
-                  bytesRead += (received = dataConnection->recvData ((char *) buff, 2048));
-                  int written = f.write (buff, received);                   
-                  if (received && (written == received)) bytesWritten += written;
-                } while (received);
-                free (buff);
-              }
-              f.close ();
-            } else {
-              // __removeDirectoryPathWithoutSemaphore__ (fp.c_str ());
-              ftpDmesg ("[ftpServer] could not open " + fp + " for writing.");
+          File f = FFat.open (fp, FILE_WRITE);
+          if (f) {
+            byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
+            if (buff) {
+              int received;
+              do {
+                bytesRead += (received = dataConnection->recvData ((char *) buff, 2048));
+                int written = f.write (buff, received);                   
+                if (received && (written == received)) bytesWritten += written;
+              } while (received);
+              free (buff);
             }
-     
-          // xSemaphoreGive (fileSystemSemaphore);
+            f.close ();
+          } else {
+            ftpDmesg ("[ftpServer] could not open " + fp + " for writing.");
+          }
         }
 
         if (fsp->activeDataClient) { delete (fsp->activeDataClient); fsp->activeDataClient = NULL; }

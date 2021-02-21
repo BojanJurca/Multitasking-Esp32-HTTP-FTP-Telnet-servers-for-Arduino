@@ -13,7 +13,7 @@
  * History:
  *          - first release, 
  *            November 29, 2018, Bojan Jurca
- *          - added ifconfig and arp (-a) commands, 
+ *          - added ifconfig and arp commands, 
  *            December 9, 2018, Bojan Jurca
  *          - added iw (dev wlan1 station dump) command, 
  *            December 11, 2018, Bojan Jurca          
@@ -22,15 +22,14 @@
  *          - telnetCommandHandler parameters are now easyer to access, 
  *            improved user management,
  *            September 4th, Bojan Jurca     
- *          - minor structural changes,
- *            added dmesg (--follow) command,
+ *          - added dmesg (--follow) command,
  *            September 14, 2019, Bojan Jurca        
- *          - added free (-s <n>) command,
+ *          - added free command,
  *            October 2, 2019, Bojan Jurca
- *          - added mkfs.spiffs command,
+ *          - added mkfs command,
  *            replaced gmtime () function that returns ponter to static structure with reentrant solution
  *            October 29, 2019, Bojan Jurca
- *          - added uname and telnet commands,
+ *          - added uname and telnet commands
  *            November 10, 2019, Bojan Jurca
  *          - added curl command
  *            December 22, 2019, Bojan Jurca
@@ -40,7 +39,7 @@
  *            Jun 11, 2020, Bojan Jurca 
  *          - port from SPIFFS to FAT file system, 
  *            adjustment for Arduino 1.8.13,
- *            added telnet commands (pwd, cd, mkdir,rmdir, clear, vi, ...)
+ *            added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
  *            October 10, 2020, Bojan Jurca
  *            
  */
@@ -50,6 +49,7 @@
   #define __TELNET_SERVER__
 
   #include <WiFi.h>
+  #include "common_functions.h"   // pad, cpuMHz
   #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp  
   #include "user_management.h"    // telnetServer.hpp needs user_management.h for login, home directory, ...
   #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
@@ -78,7 +78,6 @@
 
   // DEFINITIONS - change according to your needs
 
-  
   #ifndef HOSTNAME
     #define "MyESP32Server" // WiFi.getHostname() // use default if not defined
   #endif
@@ -90,21 +89,12 @@
 
   // FUNCTIONS OF THIS MODULE
 
-
   void dmesg (String message);  
 
 
   // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
-
   
-  int __getMHz__ () {
-    unsigned long startMicors = micros ();  
-    unsigned long counter = 0;
-    while (micros () - startMicors < 1000) counter ++;
-    return  (int) (((float) counter / (float) 463) + 0.5) * 80; // estimate CPU frequency
-  }
-  int __MHz__ = __getMHz__ ();
-  #define UNAME String (MACHINETYPE) + " (" + String (__MHz__) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
+  #define UNAME String (MACHINETYPE) + " (" + String (cpuMHz) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
 
   // find and report reset reason (this may help with debugging)
   #include <rom/rtc.h>
@@ -145,15 +135,16 @@
     
   struct __dmesgType__ {
     unsigned long milliseconds;    
+    time_t        time;
     String        message;
   };
 
   #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 256
   RTC_DATA_ATTR unsigned int bootCount = 0;
-  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{0, "[ESP32] CPU0 reset reason: " + resetReasonAsString (rtc_get_reset_reason (0))}, 
-                                                                            {0, "[ESP32] CPU1 reset reason: " + resetReasonAsString (rtc_get_reset_reason (1))}, 
-                                                                            {millis (), "[ESP32] wakeup reason: " + wakeupReasonAsString ()},
-                                                                            {millis (), String (__timeHasBeenSet__ ? "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + " times at: " + timeToString (getLocalTime ()) + "." : "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}
+  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{0, 0, "[ESP32] CPU0 reset reason: " + resetReasonAsString (rtc_get_reset_reason (0))}, 
+                                                                            {0, 0, "[ESP32] CPU1 reset reason: " + resetReasonAsString (rtc_get_reset_reason (1))}, 
+                                                                            {millis (), 0, "[ESP32] wakeup reason: " + wakeupReasonAsString ()},
+                                                                            {millis (), 0, String (__timeHasBeenSet__ ? "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + " times at: " + timeToString (getLocalTime ()) + "." : "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}
                                                                            }; // there are always at least 4 messages in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
   byte __dmesgBeginning__ = 0; // first used location
   byte __dmesgEnd__ = 4;       // the location next to be used
@@ -163,6 +154,7 @@
   void dmesg (String message) {
     portENTER_CRITICAL (&__csDmesg__); 
     __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
+    __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = getGmt ();
     __dmesgCircularQueue__ [__dmesgEnd__].message = message;
     if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
     portEXIT_CRITICAL (&__csDmesg__);
@@ -201,7 +193,6 @@
 
 
   // TELNET SERVER CLASS
-                
 
   class telnetServer: public TcpServer {                      
   
@@ -490,8 +481,8 @@
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
     
-          if (argc == 1)                           return this->__dmesg__ (false, tsp);
-          if (argc == 2 && argv [1] == "--follow") return this->__dmesg__ (true, tsp);
+          if (argc == 1)                           return this->__dmesg__ (false, false, tsp);
+          if (argc == 2 && argv [1] == "--follow") return this->__dmesg__ (true, false, tsp);
                                                    return "Wrong syntax. Use dmesg or dmesg --follow";
 
         } else if (argv [0] == "mkfs.fat") { //-------------------------------- MKFS.FAT
@@ -746,15 +737,20 @@
         return "";
       }
 
-      inline String __dmesg__ (bool follow, telnetSessionParameters *tsp) __attribute__((always_inline)) { // displays dmesg circular queue over telnet connection
+      inline String __dmesg__ (bool follow, bool trueTime, telnetSessionParameters *tsp) __attribute__((always_inline)) { // displays dmesg circular queue over telnet connection
         // make a copy of all messages in circular queue in critical section
         portENTER_CRITICAL (&__csDmesg__);  
         byte i = __dmesgBeginning__;
         String s = "";
         do {
           if (s != "") s+= "\r\n";
-          char c [15];
-          sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
+          char c [20];
+          if (trueTime && __dmesgCircularQueue__ [i].time) {
+            struct tm st = timeToStructTime (timeToLocalTime (__dmesgCircularQueue__ [i].time));
+            strftime (c, sizeof (c), "[y/m/d H:M:S]", &st);
+          } else {
+            sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
+          }
           s += String (c) + __dmesgCircularQueue__ [i].message;
         } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
         portEXIT_CRITICAL (&__csDmesg__);
@@ -789,17 +785,12 @@
 
       inline String __mkfs__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
         tsp->connection->sendData ((char *) "formatting file system with FAT, please wait ... "); 
-        
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-          
-          FFat.end ();
-          if (FFat.format ()) {
-                                    tsp->connection->sendData ((char *) "formatted.");
-            if (FFat.begin (false)) tsp->connection->sendData ((char *) "\r\nFile system mounted,\r\nreboot now to create default configuration files\r\nor create then yorself before rebooting.");
-            else                    tsp->connection->sendData ((char *) "\r\nFile system mounting has failed.");
-          } else                    tsp->connection->sendData ((char *) "failed.");
-          
-        // xSemaphoreGive (fileSystemSemaphore);
+        FFat.end ();
+        if (FFat.format ()) {
+                                  tsp->connection->sendData ((char *) "formatted.");
+          if (FFat.begin (false)) tsp->connection->sendData ((char *) "\r\nFile system mounted,\r\nreboot now to create default configuration files\r\nor create then yorself before rebooting.");
+          else                    tsp->connection->sendData ((char *) "\r\nFile system mounting has failed.");
+        } else                    tsp->connection->sendData ((char *) "failed.");
         return "";
       }
 
@@ -845,40 +836,36 @@
         if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
 
         File f;
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-          if ((bool) (f = FFat.open (fp, FILE_READ))) {
-            if (!f.isDirectory ()) {
-              char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
-              if (buff) {
-                *buff = 0;
-                int i = strlen (buff);
-                while (f.available ()) {
-                  switch (*(buff + i) = f.read ()) {
-                    case '\r':  // ignore
-                                break;
-                    case '\n':  // crlf conversion
-                                *(buff + i ++) = '\r'; 
-                                *(buff + i ++) = '\n';
-                                break;
-                    default:
-                                i ++;                  
-                  }
-                  if (i >= 2048 - 2) { tsp->connection->sendData ((char *) buff, i); i = 0; }
+        if ((bool) (f = FFat.open (fp, FILE_READ))) {
+          if (!f.isDirectory ()) {
+            char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+            if (buff) {
+              *buff = 0;
+              int i = strlen (buff);
+              while (f.available ()) {
+                switch (*(buff + i) = f.read ()) {
+                  case '\r':  // ignore
+                              break;
+                  case '\n':  // crlf conversion
+                              *(buff + i ++) = '\r'; 
+                              *(buff + i ++) = '\n';
+                              break;
+                  default:
+                              i ++;                  
                 }
-                if (i) { tsp->connection->sendData ((char *) buff, i); }
-                free (buff);
-              } 
-            } else {
-              f.close ();
-              // xSemaphoreGive (fileSystemSemaphore);
-              return "Can't read " + fp;
-            }
-            f.close ();
+                if (i >= 2048 - 2) { tsp->connection->sendData ((char *) buff, i); i = 0; }
+              }
+              if (i) { tsp->connection->sendData ((char *) buff, i); }
+              free (buff);
+            } 
           } else {
-            // xSemaphoreGive (fileSystemSemaphore);
+            f.close ();
             return "Can't read " + fp;
           }
-        // xSemaphoreGive (fileSystemSemaphore);
+          f.close ();
+        } else {
+          return "Can't read " + fp;
+        }
         return "";
       }
 
@@ -891,54 +878,38 @@
         File f;
         char *s;
         int l;
-        
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-        
-          if ((bool) (f = FFat.open (fp, FILE_WRITE))) {
-            // xSemaphoreGive (fileSystemSemaphore);
-            
-            String line;
-            while (char c = __readLineFromClient__ (&line, true, tsp)) {
-              switch (c) {
-                case 0:   
-                        f.close ();
-                        // xSemaphoreGive (fileSystemSemaphore);
-                        return fp + " not fully written.";
-                
-                case 4:
-                        tsp->connection->sendData ((char *) "\r\n", 2);
-                        s = (char *) line.c_str (); l = strlen (s);
-                        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-                        if (l > 0) if (f.write ((uint8_t *) s, l) != l) {
-                          f.close ();
-                          // xSemaphoreGive (fileSystemSemaphore);
-                          return "Can't write " + fp;
-                        }
-                        f.close ();
-                        // xSemaphoreGive (fileSystemSemaphore);
-                        return fp + " written.";
-                
-                case 13:
-                        tsp->connection->sendData ((char *) "\r\n", 2);
-                        line += "\r\n";
-                        s = (char *) line.c_str (); l = strlen (s);
-                        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-                        if (f.write ((uint8_t *) s, l) != l) { 
-                          f.close ();
-                          // xSemaphoreGive (fileSystemSemaphore);
-                          return "Can't write " + fp;
-                        } 
-                        // xSemaphoreGive (fileSystemSemaphore);            
-                        line = "";
-                        break;
-                        
-                default:  
-                      break;
-              }
-            }
-          } 
-        // xSemaphoreGive (fileSystemSemaphore);
 
+        if ((bool) (f = FFat.open (fp, FILE_WRITE))) {
+          String line;
+          while (char c = __readLineFromClient__ (&line, true, tsp)) {
+            switch (c) {
+              case 0:   
+                      f.close ();
+                      return fp + " not fully written.";
+              case 4:
+                      tsp->connection->sendData ((char *) "\r\n", 2);
+                      s = (char *) line.c_str (); l = strlen (s);
+                      if (l > 0) if (f.write ((uint8_t *) s, l) != l) {
+                        f.close ();
+                        return "Can't write " + fp;
+                      }
+                      f.close ();
+                      return fp + " written.";
+              case 13:
+                      tsp->connection->sendData ((char *) "\r\n", 2);
+                      line += "\r\n";
+                      s = (char *) line.c_str (); l = strlen (s);
+                      if (f.write ((uint8_t *) s, l) != l) { 
+                        f.close ();
+                        return "Can't write " + fp;
+                      } 
+                      line = "";
+                      break;
+              default:  
+                    break;
+            }
+          }
+        } 
         return "";
       }
       
@@ -1003,11 +974,7 @@
         if (fp2 == "")                                  return "Invalid file or directory name " + dstFileOrDirectory;
         if (!userMayAccess (fp2, tsp->homeDir))         return "Access to " + fp2 + " denyed.";
 
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-        bool b = FFat.rename (fp1, fp2);
-        // xSemaphoreGive (fileSystemSemaphore);        
-        
-        if (b)                                          return "Renamed to " + fp2;
+        if (FFat.rename (fp1, fp2))                     return "Renamed to " + fp2;
                                                         return "Can't rename " + fp1;
       }
 
@@ -1026,21 +993,19 @@
         File f1, f2;
         String retVal = "File copied.";
         
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-          if (!(bool) (f1 = FFat.open (fp1, FILE_READ))) { retVal = "Can't read " + fp1; goto out1; }
-          if (f1.isDirectory ()) { retVal = "Can't read " + fp1; goto out2; }
-          if (!(bool) (f2 = FFat.open (fp2, FILE_WRITE))) { retVal = "Can't write " + fp2; goto out2; }
-                    
-          while (f1.available ()) {
-            char c = f1.read ();
-            if (f2.write ((uint8_t *) &c, 1) != 1) { retVal = "Can't write " + fp2; goto out3; }
-          }
-      out3:
-          f2.close ();
-      out2:
-          f1.close ();
-      out1:          
-        // xSemaphoreGive (fileSystemSemaphore);
+        if (!(bool) (f1 = FFat.open (fp1, FILE_READ))) { retVal = "Can't read " + fp1; goto out1; }
+        if (f1.isDirectory ()) { retVal = "Can't read " + fp1; goto out2; }
+        if (!(bool) (f2 = FFat.open (fp2, FILE_WRITE))) { retVal = "Can't write " + fp2; goto out2; }
+                  
+        while (f1.available ()) {
+          char c = f1.read ();
+          if (f2.write ((uint8_t *) &c, 1) != 1) { retVal = "Can't write " + fp2; goto out3; }
+        }
+    out3:
+        f2.close ();
+    out2:
+        f1.close ();
+    out1:          
         return retVal;
       }
 
@@ -1516,7 +1481,7 @@
         if (!isFile (fp)) { if (!writeFile (emptyContent, fp)) return "Can't create " + fp; else tsp->connection->sendData (fp + " created.\r\n"); }
 
         // 2. read the file content into internal vi data structure (lines of Strings)
-        #define MAX_LINES 512 // may increase up to < 998 but this would require even more stack for telnet server and works slow
+        #define MAX_LINES 600 // may increase up to < 998 but this would require even more stack for telnet server and works slow
         String line [MAX_LINES]; for (int i = 0; i < MAX_LINES; i++) line [i] = "";
         int fileLines = 0;
         bool dirty = false;
@@ -1564,8 +1529,8 @@
           tsp->connection->recvData (&c, 1); if (c != 31 /* NAWS */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
           tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowColumns, 1)) return ""; 
           tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowRows, 1)) return "";
-          tsp->connection->recvData (&c, 1); // should be IAC - wont' check if it is OK
-          tsp->connection->recvData (&c, 1); // should be SB - wont' check if it is OK
+          tsp->connection->recvData (&c, 1); // should be IAC, won't check if it is OK
+          tsp->connection->recvData (&c, 1); // should be SB, won't check if it is OK
           tsp->clientWindowCol2 = clientWindowColumns; tsp->clientWindowRow2 = clientWindowRows; 
         } else { // just assume the defaults and hope that the result will be OK
           clientWindowColumns = 80; 
@@ -1620,9 +1585,9 @@
                                       char c [15];
                                       if (nextTextLine < fileLines) {
                                         sprintf (c, "\x1b[%i;0H%3i|", nextScreenLine, nextTextLine + 1);  // display line number - users would count lines from 1 on whereas program counts them from 0 on
-                                        s = String (c) + __appendString__ (line [nextTextLine].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                        s = String (c) + pad (line [nextTextLine].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
                                       } else {
-                                        sprintf (c, "\x1b[%i;0H   |", nextScreenLine) + __appendString__ (" ", clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                        sprintf (c, "\x1b[%i;0H   |", nextScreenLine) + pad (" ", clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
                                         s = String (c);
                                       }
                                       if (!tsp->connection->sendData (s)) return "";
@@ -1633,7 +1598,7 @@
                                 
           } else if (redrawLineAtCursor) {
                                 // calculate screen line from text cursor position
-                                s = "\x1b[" + String (textCursorY + 2 - textScrollY) + ";5H" + __appendString__ (line [textCursorY].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column (columns go from 1 to clientWindowsColumns - inclusive), it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                s = "\x1b[" + String (textCursorY + 2 - textScrollY) + ";5H" + pad (line [textCursorY].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column (columns go from 1 to clientWindowsColumns - inclusive), it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
                                 if (!tsp->connection->sendData (s)) return ""; 
                                 redrawLineAtCursor = false;
                               }
@@ -1705,9 +1670,11 @@ saveChanges:
                                     break;
                           case 'C':  // right arrow
                                     if (textCursorX < line [textCursorY].length ()) textCursorX++;
+                                    else if (textCursorY < fileLines - 1) { textCursorY++; textCursorX = 0; }
                                     break;
                           case 'D':  // left arrow
                                     if (textCursorX > 0) textCursorX--;
+                                    else if (textCursorY > 0) { textCursorY--; textCursorX = line [textCursorY].length (); }
                                     break;        
                           case '1': // home
                                     tsp->connection->recvData (&c, 1); // read final '~'

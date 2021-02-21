@@ -16,12 +16,12 @@
  * History:
  *          - first release, 
  *            November 16, 2018, Bojan Jurca
- *          - added ifconfig, arp -a, 
+ *          - added ifconfig, arp 
  *            December 9, 2018, Bojan Jurca
- *          - added iw, 
+ *          - added iw
  *            December 11, 2018, Bojan Jurca
  *          - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            simplified installation,
+ *            simplified installation
  *            April 13, 2019, Bojan Jurca
  *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
  *            April 21, 2019, Bojan Jurca
@@ -40,22 +40,20 @@
  *            
  */
 
- 
+
 #ifndef __NETWORK__
   #define __NETWORK__
-
-  #include <WiFi.h>
 
   #include <WiFi.h>
   #include <lwip/netif.h>
   #include <netif/etharp.h>
   #include <lwip/sockets.h>
+  #include "common_functions.h" // between, pad
   #include "esp_wifi.h"
   #include "file_system.h"  // network.h needs file_system.h to read configurations files from
 
 
   // DEFINITIONS - change according to your needs
-
 
   // define host name
   #ifndef HOSTNAME
@@ -94,7 +92,6 @@
 
   // FUNCTIONS OF THIS MODULE
 
-
   void startNetworkAndInitializeItAtFirstCall ();
 
   IPAddress IPAddressFromString (String ipAddress);
@@ -112,11 +109,6 @@
 
   // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
 
-  
-  String __appendString__ (String s, int toLenght);
-  
-  String __insideBrackets__ (String inp, String opening, String closing);
-  
   void __networkDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ 
       dmesg (message);                                              // use dmesg from telnet server if possible (if telnet server is in use)
@@ -155,9 +147,9 @@
           int i = fileContent.indexOf ("iface STA inet static");
           if (i >= 0) {
             fileContent = fileContent.substring (i);
-            staIP         = __insideBrackets__ (fileContent, "address ", "\n");
-            staSubnetMask = __insideBrackets__ (fileContent, "netmask ", "\n");
-            staGateway    = __insideBrackets__ (fileContent, "gateway ", "\n");
+            staIP         = between (fileContent, "address ", "\n");
+            staSubnetMask = between (fileContent, "netmask ", "\n");
+            staGateway    = between (fileContent, "gateway ", "\n");
           }
           // Serial.printf ("[%10lu] [network] staIP         = %s\n", millis (), staIP.c_str ());
           // Serial.printf ("[%10lu] [network] staSubnetMask = %s\n", millis (), staSubnetMask.c_str ());
@@ -166,9 +158,7 @@
         } else { // save default configuration
     
           Serial.printf ("[%10lu] [network] /network/interfaces does not exist or it is empty, creating a new one ... ", millis ());
-          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-            FFat.mkdir ("/network"); // location of this file
-          // xSemaphoreGive (fileSystemSemaphore);
+          FFat.mkdir ("/network"); // location of this file
         
           fileContent = "# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n";
                          #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY
@@ -199,21 +189,19 @@
         readFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
         if (fileContent != "") {
     
-          // fileContent = __insideBrackets__ (compactConfigurationFileContent (fileContent), "network\n{", "}") + '\n'; 
+          // fileContent = between (compactConfigurationFileContent (fileContent), "network\n{", "}") + '\n'; 
           fileContent = compactConfigurationFileContent (fileContent); 
-          fileContent = __insideBrackets__ (fileContent, "network", "}") + "}";
-          fileContent = __insideBrackets__ (fileContent, "{", "}") + "\n";
-          staSSID     = __insideBrackets__ (fileContent, "ssid ", "\n");
-          staPassword = __insideBrackets__ (fileContent, "psk ", "\n");
+          fileContent = between (fileContent, "network", "}") + "}";
+          fileContent = between (fileContent, "{", "}") + "\n";
+          staSSID     = between (fileContent, "ssid ", "\n");
+          staPassword = between (fileContent, "psk ", "\n");
           // Serial.printf ("[%10lu] [network] staSSID       = %s\n", millis (), staSSID.c_str ());      
           // Serial.printf ("[%10lu] [network] staPassword   = %s\n", millis (), staPassword.c_str ());      
       
         } else { // save default configuration
     
           Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist or it is empty, creating a new one ... ", millis ());
-          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-            FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); // location of this file
-          // xSemaphoreGive (fileSystemSemaphore);      
+          FFat.mkdir ("/etc"); FFat.mkdir ("/etc/wpa_supplicant"); // location of this file
     
           fileContent = "# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
                         "network = {\r\n"
@@ -242,9 +230,9 @@
           int i = fileContent.indexOf ("iface AP");
           if (i >= 0) {
             fileContent = fileContent.substring (i);
-            apIP          = __insideBrackets__ (fileContent, "static ip_address ", "\n");
-            apSubnetMask  = __insideBrackets__ (fileContent, "netmask ", "\n");
-            apGateway     = __insideBrackets__ (fileContent, "gateway ", "\n");
+            apIP          = between (fileContent, "static ip_address ", "\n");
+            apSubnetMask  = between (fileContent, "netmask ", "\n");
+            apGateway     = between (fileContent, "gateway ", "\n");
           }
           // Serial.printf ("[%10lu] [network] apIP          = %s\n", millis (), apIP.c_str ());      
           // Serial.printf ("[%10lu] [network] apSubnetMask  = %s\n", millis (), apSubnetMask.c_str ());      
@@ -285,8 +273,8 @@
           int i = fileContent.indexOf ("iface AP");
           if (i >= 0) {
             fileContent = fileContent.substring (i);
-            apSSID        = __insideBrackets__ (fileContent, "ssid ", "\n");
-            apPassword    = __insideBrackets__ (fileContent, "wpa_passphrase ", "\n");
+            apSSID        = between (fileContent, "ssid ", "\n");
+            apPassword    = between (fileContent, "wpa_passphrase ", "\n");
           }
           // Serial.printf ("[%10lu] [network] apSSID       = %s\n", millis (), apSSID.c_str ());      
           // Serial.printf ("[%10lu] [network] apPassword   = %s\n", millis (), apPassword.c_str ());      
@@ -294,9 +282,7 @@
         } else { // save default configuration
     
           Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist or it is empty, creating a new one ... ", millis ());
-          // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
-            FFat.mkdir ("/etc/hostapd"); // location of this file
-          // xSemaphoreGive (fileSystemSemaphore);      
+          FFat.mkdir ("/etc/hostapd"); // location of this file
           
           fileContent =  "# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
                          "iface AP\r\n"
@@ -523,11 +509,6 @@
     return s;
   }
 
-  String __appendString__ (String s, int toLenght) {
-    while (s.length () < toLenght) s += " ";
-    return s;
-  }
-
   // ----- arp reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c -----
 
   // first (re)make a definition of ARP table and get a pointer to it (not very elegant but I have no other idea how to get reference to arp table)
@@ -586,7 +567,7 @@
             if (p->state != ETHARP_STATE_EMPTY) {
               struct netif *arp_table_netif = p->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
               if (arp_table_netif && arp_table_netif->num == netif->num) { // if ARP entry is for the same as netif we are displaying
-                s += "\r\n  " + __appendString__ (inet_ntos (*(ip_addr_t *) &p->ipaddr), 22) +
+                s += "\r\n  " + pad (inet_ntos (*(ip_addr_t *) &p->ipaddr), 22) +
                      MacAddressAsString ((byte *) &p->ethaddr, 6) +  
                      (p->state > ETHARP_STATE_STABLE_REREQUESTING_2 ? "     static" : "     dynamic");
               } 

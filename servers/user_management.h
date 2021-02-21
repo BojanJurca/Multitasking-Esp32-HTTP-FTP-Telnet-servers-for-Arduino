@@ -48,6 +48,7 @@
   // ----- includes, definitions and supporting functions -----
 
   #include <WiFi.h>
+  #include "common_functions.h"
 
   #define USER_PASSWORD_MAX_LENGTH 64 // the number of characters of longest user name or password (not counting closing 0)
   
@@ -112,11 +113,9 @@
       // create /etc/passwd if it doesn't exist
       readFile (fileContent, "/etc/passwd");
       if (fileContent == "") {
-        // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
         FFat.mkdir ("/etc"); // location of this file
         FFat.mkdir ("/var"); FFat.mkdir ("/var/www"); FFat.mkdir ("/var/www/html"); // webserver home directory
         FFat.mkdir ("/var/telnet"); // telnetserver home directory
-        // xSemaphoreGive (fileSystemSemaphore);
         
         Serial.printf ("[%10lu] [user_management] /etc/passwd does not exist or it is empty, creating a new one ... ", millis ());
 
@@ -146,11 +145,11 @@
     
     bool checkUserNameAndPassword (String& userName, String& password) { // scan through /etc/shadow file for (user name, pasword) pair and return true if found
       // /etc/shadow file: https://www.cyberciti.biz/faq/understanding-etcshadow-file/
-      return (__insideBrackets__ (__insideBrackets__ ("\n" + readTextFile ("/etc/shadow") + "\n", "\n" + userName + ":", "\n"), "$5$", ":") == __sha256__ ((char *) password.c_str ()));
+      return (between (between ("\n" + readTextFile ("/etc/shadow") + "\n", "\n" + userName + ":", "\n"), "$5$", ":") == __sha256__ ((char *) password.c_str ()));
     } 
 
     String getUserHomeDirectory (String userName) { // always ends with /
-      String directory = __insideBrackets__ (__insideBrackets__ ("\n" + readTextFile ("/etc/passwd") + "\n", "\n" + userName + ":", "\n"), ":::", ":");  
+      String directory = between (between ("\n" + readTextFile ("/etc/passwd") + "\n", "\n" + userName + ":", "\n"), ":::", ":");  
       if (directory.substring (directory.length () - 1) != "/") directory += '/';
       return directory;
     }
@@ -204,57 +203,46 @@
       if (userHomeDirectory == "") return "Invalid home directory name.";
       if (strlen (userHomeDirectory.c_str ()) > FILE_PATH_MAX_LENGTH) return "Home directory name too long.";
 
-      // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
+      // --- add userName, userId and userHomeDirectory into /etc/passwd ---
+      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
+        return "Can't read /etc/passwd";
+      }
+      if (("\n" + fileContent).indexOf ("\n" + userName + ":") > -1) {
+        return "User " + userName + " already exists.";
+      }
+      if (fileContent.indexOf (":" + userId + ":") > -1) {
+        return "User " + userId + " already exists.";
+      }
+      fileContent.trim (); // just in case ...
+      while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
+      fileContent += "\r\n" + String (userName) + ":x:" + String (userId) + ":::" + String (userHomeDirectory) + ":\r\n";
+      if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
+        return "Can't write /etc/passwd";
+      }
 
-        // --- add userName, userId and userHomeDirectory into /etc/passwd ---
-        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "Can't read /etc/passwd";
-        }
-        if (("\n" + fileContent).indexOf ("\n" + userName + ":") > -1) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "User " + userName + " already exists.";
-        }
-        if (fileContent.indexOf (":" + userId + ":") > -1) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "User " + userId + " already exists.";
-        }
-        fileContent.trim (); // just in case ...
-        while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
-        fileContent += "\r\n" + String (userName) + ":x:" + String (userId) + ":::" + String (userHomeDirectory) + ":\r\n";
-        if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "Can't write /etc/passwd";
-        }
+      // --- add default password into /etc/shadow ---
+      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
+        return "Can't read /etc/shadow";          
+      }
+      if (("\n" + fileContent).indexOf ("\n" + userName + ":") > -1) {
+        return "User " + userName + " already has password. Delete the user and try again.";
+      }
+      fileContent.trim (); // just in case ...
+      while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
+      fileContent += "\r\n" + userName + ":$5$" + String (__sha256__ ((char *) "changeimmediatelly")) + ":::::::\r\n";
+      if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+        return "Can't write /etc/shadow";
+      }
 
-        // --- add default password into /etc/shadow ---
-        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "Can't read /etc/shadow";          
-        }
-        if (("\n" + fileContent).indexOf ("\n" + userName + ":") > -1) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "User " + userName + " already has password. Delete the user and try again.";
-        }
-        fileContent.trim (); // just in case ...
-        while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
-        fileContent += "\r\n" + userName + ":$5$" + String (__sha256__ ((char *) "changeimmediatelly")) + ":::::::\r\n";
-        if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "Can't write /etc/shadow";
-        }
-
-        // --- crate user home directory ---
-        b = false;
-        strcpy (dName, userHomeDirectory.c_str ());
-        for (int i = 0; dName [i] && dName [i]; i++) if (i && dName [i] == '/') { 
-          dName [i] = 0; 
-          b = FFat.mkdir (dName);
-          dName [i] = '/'; 
-        }
-        if (!b) retVal = "User created but couldn't create user's home directory " + userHomeDirectory;
-      
-      // xSemaphoreGive (fileSystemSemaphore);
+      // --- crate user home directory ---
+      b = false;
+      strcpy (dName, userHomeDirectory.c_str ());
+      for (int i = 0; dName [i] && dName [i]; i++) if (i && dName [i] == '/') { 
+        dName [i] = 0; 
+        b = FFat.mkdir (dName);
+        dName [i] = '/'; 
+      }
+      if (!b) retVal = "User created but couldn't create user's home directory " + userHomeDirectory;
       
       return retVal;
     }
@@ -268,58 +256,49 @@
       char dName [FILE_PATH_MAX_LENGTH + 1]; 
       bool b, first;
 
-      // xSemaphoreTake (fileSystemSemaphore, portMAX_DELAY);
+      // --- remove userName from /etc/passwd ---
+      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
+        return "Can't read /etc/passwd";          
+      }
+      i = fileContent.indexOf (userName + ":"); // find userName
+      if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
+        j = fileContent.indexOf ("\n", i); // find end of line
+        if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
+        else       fileContent = fileContent.substring (0, i); // end of line not found
+        if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
+          return "Can't write /etc/passwd";         
+        }
+      } else {
+        return "User " + userName + " does not exists.";          
+      }
 
-        // --- remove userName from /etc/passwd ---
-        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "Can't read /etc/passwd";          
+      // --- remove userName from /etc/shadow ---
+      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
+        return "Can't read /etc/shadow";          
+      }
+      i = fileContent.indexOf (userName + ":"); // find userName
+      if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
+        j = fileContent.indexOf ("\n", i); // find end of line
+        if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
+        else       fileContent = fileContent.substring (0, i); // end of line not found
+        if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+          return "Can't write /etc/shadow"; 
         }
-        i = fileContent.indexOf (userName + ":"); // find userName
-        if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
-          j = fileContent.indexOf ("\n", i); // find end of line
-          if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
-          else       fileContent = fileContent.substring (0, i); // end of line not found
-          if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
-            // xSemaphoreGive (fileSystemSemaphore);
-            return "Can't write /etc/passwd";         
-          }
-        } else {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "User " + userName + " does not exists.";          
-        }
- 
-        // --- remove userName from /etc/shadow ---
-        if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
-          // xSemaphoreGive (fileSystemSemaphore);
-          return "Can't read /etc/shadow";          
-        }
-        i = fileContent.indexOf (userName + ":"); // find userName
-        if (i == 0 || (i > 0 && fileContent.charAt (i - 1) == '\n')) { // userName found at i
-          j = fileContent.indexOf ("\n", i); // find end of line
-          if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
-          else       fileContent = fileContent.substring (0, i); // end of line not found
-          if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
-            // xSemaphoreGive (fileSystemSemaphore);
-            return "Can't write /etc/shadow"; 
-          }
-        }
+      }
 
-        // --- delete user's home directory ---
-        b = false; first = true;
-        if (strlen (userHomeDirectory.c_str ()) <= FILE_PATH_MAX_LENGTH) {
-          strcpy (dName, userHomeDirectory.c_str ());
-          for (int i = strlen (dName); i; i--) if (dName [i] == '/')  { 
-            dName [i] = 0; 
-            if (!FFat.rmdir (dName)) break;
-            if (first) b = true;
-            first = false;
-          }          
-        }
-        if (!b) retVal = "User deleted but couldn't remove user's home directory " + userHomeDirectory;
-      
-      // xSemaphoreGive (fileSystemSemaphore);
-      
+      // --- delete user's home directory ---
+      b = false; first = true;
+      if (strlen (userHomeDirectory.c_str ()) <= FILE_PATH_MAX_LENGTH) {
+        strcpy (dName, userHomeDirectory.c_str ());
+        for (int i = strlen (dName); i; i--) if (dName [i] == '/')  { 
+          dName [i] = 0; 
+          if (!FFat.rmdir (dName)) break;
+          if (first) b = true;
+          first = false;
+        }          
+      }
+      if (!b) retVal = "User deleted but couldn't remove user's home directory " + userHomeDirectory;
+          
       return retVal;
     }
     

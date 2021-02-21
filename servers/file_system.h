@@ -25,6 +25,7 @@
   // ----- includes, definitions and supporting functions -----
   
   #include <WiFi.h>
+  #include "common_functions.h"   // between
   #include "FFat.h"  
   #include "TcpServer.hpp"        // we'll need FS semaphore defined in TcpServer.hpp 
   // #include "time_functions.h"  
@@ -392,22 +393,6 @@
       }
     }
     return fileList;    
-  }
-
-  String __insideBrackets__ (String inp, String opening, String closing) { // returns content inside of opening and closing brackets -  used for parsing configuration files
-    // Serial.println ("__insideBrackets__"); Serial.println (inp);
-    int i = inp.indexOf (opening);
-    if (i >= 0) {
-      inp = inp.substring (i +  opening.length ());
-      // Serial.println ("__insideBrackets__, opening"); Serial.println (inp);
-      i = inp.indexOf (closing);
-      if (i >= 0) {
-        inp = inp.substring (0, i);
-        // Serial.println ("__insideBrackets__, closing"); Serial.println (inp);
-        return inp;
-      }
-    }
-    return "";
   }
 
   String compactConfigurationFileContent (String inp) { // skips comments, empty lines, ...

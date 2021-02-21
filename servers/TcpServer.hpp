@@ -3,7 +3,6 @@
 
 
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
-    It is also available as a stand-alone project: https://github.com/BojanJurca/Esp32_threaded_TCP_server
 
     TcpServer.hpp contains a minimalistic IPv4 threaded TCP server for ESP32 / Arduino environment with:
       - time-out functionality,
@@ -320,7 +319,6 @@ class TcpConnection {
     unsigned long getTimeOut ()               { return __timeOutMillis__; } // returns time-out milliseconds
 
   private:
-    friend class sslConnection;
 
     void (* __connectionHandlerCallback__) (TcpConnection *, void *) = NULL;  // local copy of constructor parameters
     void *__connectionHandlerCallbackParamater__ = NULL;
@@ -473,8 +471,6 @@ class TcpServer {                                                 // threaded TC
     friend class telnetServer;
     friend class ftpServer;
     friend class httpServer;
-    friend class sslServer;
-    friend class httpsServer;
 
     void (* __connectionHandlerCallback__) (TcpConnection *, void *) = NULL; // local copy of constructor parameters
     void *__connectionHandlerCallbackParameter__ = NULL;

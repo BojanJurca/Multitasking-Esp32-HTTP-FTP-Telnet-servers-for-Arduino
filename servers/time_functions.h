@@ -3,12 +3,9 @@
  * time_functions.h
  * 
  *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- *  and Esp8266_web_ftp_telnet_server_template project:   https://github.com/BojanJurca/Esp8266_web_ftp_telnet_server_template
  * 
  *  Real_time_clock synchronizes its time with NTP server accessible from internet once a day.
  *  Internet connection is necessary for real_time_clock to work.
- * 
- *  Real_time_clock preserves accurate time even when ESP32 goes into deep sleep (which is not the same with ESP8266).
  * 
  * History:
  *          - first release, 
@@ -17,20 +14,15 @@
  *            April 13, 2019, Bojan Jurca          
  *          - added support for all Europe time zones
  *            April 22, 2019, Bojan Jurca
- *          - added support for USA timezones 
+ *          - added support for USA time zones 
  *            September 30, 2019, Bojan Jurca
  *          - added support for Japan, China and Canada time zones  
  *            October 8, 2019, Bojan Jurca
  *          - added support for ESP8266 and Russia time zones
  *            October 14, 2019, Bojan Jurca
- *          - minor changes
- *            November 5, 2019, Bojan Jurca
- *          - added support for ESP REST time servers,
- *            added awareness of timing preserved during ESP32 deep sleep
- *            November 10, 2019, Bojan Jurca
  *          - elimination of compiler warnings and some bugs
  *            Jun 10, 2020, Bojan Jurca     
- *          - Arduino 1.8.13 supported some features (strftime, settimeofday) that have not been supoprted on ESP8266 earyer, 
+ *          - Arduino 1.8.13 supported some features (strftime, settimeofday) that have not been supoprted on ESP8266 earier, 
  *            (but they have been supported on ESP32). These features need no longer beeing implemented in ESP8266 part of this module any more,
  *            added cronDaemon,
  *            added support of /etc/ntp.conf and /etc/crontab configuration files,
@@ -43,11 +35,11 @@
   #define __TIME_FUNCTIONS__
 
   #include <WiFi.h>
+  #include "common_functions.h" // between
 
 
   // DEFINITIONS - change according to your needs
 
-  
   #define KAL_TIMEZONE 10                     // GMT + 2 ----- Russia time zones ----- // https://en.wikipedia.org/wiki/Time_in_Russia
   #define MSK_TIMEZONE 11                     // GMT + 3
   #define SAM_TIMEZONE 12                     // GMT + 4
@@ -103,7 +95,6 @@
 
   // FUNCTIONS OF THIS MODULE
 
-
   void synchronizeTimeAndInitializeItAtFirstCall ();
 
   time_t getGmt ();                       // returns current GMT or 0 it the time has not been set yet 
@@ -145,7 +136,6 @@
 
  
   // IMPLEMENTATION OF FUNCTIONS IN THIS MODULE
-
 
   String __ntpServer1__ = DEFAULT_NTP_SERVER_1;
   String __ntpServer2__ = DEFAULT_NTP_SERVER_2;
@@ -262,12 +252,16 @@
   int cronTabDel (String cronCommand) { // returns the number of cron commands being deleted
     int cnt = 0;
     portENTER_CRITICAL (&csCron);
-      for (int i = 0; i < __cronTabEntries__; i ++)
+      int i = 0;
+      while (i < __cronTabEntries__) {
         if (__cronEntry__ [i].cronCommand == cronCommand) {        
           for (int j = i; j < __cronTabEntries__ - 1; j ++) { __cronEntry__ [j] = __cronEntry__ [j + 1]; }
           __cronTabEntries__ --;
           cnt ++;
+        } else {
+          i ++;
         }
+      }
     portEXIT_CRITICAL (&csCron);
     if (!cnt) timeDmesg ("[cronDaemon] there are no " + cronCommand + " commands to delete from cron table.");
     return cnt;
@@ -383,9 +377,9 @@
         } else {
           // parse configuration file if it exists
           fileContent = compactConfigurationFileContent (fileContent) + "\n"; 
-          __ntpServer1__ = __insideBrackets__ (fileContent, "server1","\n"); __ntpServer1__.trim ();
-          __ntpServer2__ = __insideBrackets__ (fileContent, "server2","\n"); __ntpServer2__.trim ();
-          __ntpServer3__ = __insideBrackets__ (fileContent, "server3","\n"); __ntpServer3__.trim ();
+          __ntpServer1__ = between (fileContent, "server1","\n"); __ntpServer1__.trim ();
+          __ntpServer2__ = between (fileContent, "server2","\n"); __ntpServer2__.trim ();
+          __ntpServer3__ = between (fileContent, "server3","\n"); __ntpServer3__.trim ();
         }
         // read scheduled tasks from /etc/crontab
         fileContent = readTextFile ("/etc/crontab");
