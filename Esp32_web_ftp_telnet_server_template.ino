@@ -19,8 +19,10 @@
  *            Jun 10, 2020, Bojan Jurca
  *          - port from SPIFFS to fileSystem, adjustment for Arduino 1.8.13,
  *            improvements of web, FTP and telnet server,
- *            simplification of this templte to make it more comprehensive and easier to start working with 
+ *            simplification of this template to make it more comprehensive and easier to start working with 
  *            October 10, 2020, Bojan Jurca
+ *          - web login/logout example
+ *            February 3, 2021, Bojan Jurca
  *  
  */
 
@@ -60,7 +62,7 @@
               measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
               measurements httpRequestCount (60);         // measure how many web connections arrive each minute
               // ...
-              #include "examples.h" // example 07, example 08, example 09, example 10, example 11
+              #include "examples.h" // example 08, example 09, example 10, example 11
 
 
 // ----- HTTP request handler example - if you don't want to handle HTTP requests just delete this function and pass NULL to httpSrv instead of its address -----
@@ -69,6 +71,10 @@
 //       if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (into /var/www/html/ directory)
 String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
 
+  // debug: Serial.print (httpRequest);
+  // debug: Serial.println (wsp->getHttpRequestHeaderField ("Cookie"));
+  // debug: Serial.println (wsp->getHttpRequestCookie ("sessionToken"));
+  
 
               // ----- examples - delete this code if it is not needed -----
 
@@ -150,13 +156,47 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
                                                                                         Serial.printf ("[Got request from web browser for niceRadio5]: %s\n", niceRadio5.c_str ());
                                                                                         goto returnNiceRadio5Value; // return success (or possible failure) back to the client
                                                                                       }
-              else if (httpRequest.substring (0, 25) == "PUT /niceButton6/pressed ")  { // used by example 05.html
-                                                                                        Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
+              else if (httpRequest.substring (0, 25) == "PUT /niceButton6/pressed ")  { // used by example 05.html                                                                                        Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
                                                                                         return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                       }
+              // ----- example 07: cookies
+              else if (httpRequest.substring (0, 20) == "GET /example07.html ")       { // used by example 07
+                                                                                        String refreshCounter = wsp->getHttpRequestCookie ("refreshCounter");           // get cookie that browser sent in HTTP request
+                                                                                        if (refreshCounter == "") refreshCounter = "0";
+                                                                                        refreshCounter = String (refreshCounter.toInt () + 1);
+                                                                                        wsp->setHttpResponseCookie ("refreshCounter", refreshCounter, getGmt () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
+                                                                                        return String ("<HTML>Example 07<br><br>This page has been refreshed " + refreshCounter + " times. Click refresh to see more.</HTML>");
+                                                                                      }
+              // ----- a very basic login - logout mechanism, that could be improoved in many ways -----
+              else if (httpRequest.substring (0, 11) == "GET /login/")                { // GET /login/userName%20password - called from login.html when "Login" button is pressed 
+                                                                                        String userName = between (httpRequest, "/login/", "%20");        // get user name from URL
+                                                                                        String password = between (httpRequest, "%20", " ");              // get password from URL
+                                                                                        if (checkUserNameAndPassword (userName, password)) {              // check if they are OK
+                                                                                          wsp->setHttpResponseCookie ("sessionToken", "98376235");        // create (simple, demonstration) sessionToken cookie, path and expiration time (in GMT) can also be set
+                                                                                          wsp->setHttpResponseCookie ("userName", userName);              // save user name in a cookie for later use
+                                                                                          return "loggedIn";                                              // notify login.html about success  
+                                                                                        } else {
+                                                                                          wsp->setHttpResponseCookie ("sessionToken", "");                // delete sessionToken cookie if it exists
+                                                                                          wsp->setHttpResponseCookie ("userName", "");                    // delete userName cookie if it exists
+                                                                                          return "Wrong user name or password.";                          // notify login.html about failure
+                                                                                        }
+                                                                                      }
+              else if (httpRequest.substring (0, 12) == "PUT /logout ")               { // called from logout.html when "Logout" button is pressed 
+                                                                                          if (wsp->getHttpRequestCookie ("sessionToken") == "98376235") { // if logged in
+                                                                                            wsp->setHttpResponseCookie ("sessionToken", "");              // delete sessionToken cookie if it exists
+                                                                                            wsp->setHttpResponseCookie ("userName", "");                  // delete userName cookie if it exists
+                                                                                          }
+                                                                                          return "LoggedOut.";                                            // notify logout.html
+                                                                                      }
+              else if (httpRequest.substring (0, 17) == "GET /logout.html ")          { // logout.html may only be accessed if user is logged in
+                                                                                        if (wsp->getHttpRequestCookie ("sessionToken") == "98376235")     // check if browser has a valid sessionToken cookie
+                                                                                          return "";                                                      // if yes, return "" so web server will continue with transmission of logout.html file
+                                                                                         wsp->httpResponseStatus = "307 temporary redirect";              // if no, redirect browser to login.html
+                                                                                         wsp->setHttpResponseHeaderField ("Location", "http://" + wsp->getHttpRequestHeaderField ("Host") + "/login.html");
+                                                                                         return "Not logged in.";
+                                                                                       }
 
-
-  else return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 
 

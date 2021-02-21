@@ -9,7 +9,7 @@
  *            April 14, 2019, Bojan Jurca
  *          - added WebSocket example,
  *            May, 20, 2019, Bojan Jurca
-  *          - elimination of compiler warnings and some bugs
+ *          - elimination of compiler warnings and some bugs
  *            Jun 10, 2020, Bojan Jurca            
  *  
  */

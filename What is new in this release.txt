@@ -1,3 +1,5 @@
-New in release 1.25 
+New in release 1.26
 
+  - supports cookies built into web server
+  - improved oscilloscope
   - bug fixes

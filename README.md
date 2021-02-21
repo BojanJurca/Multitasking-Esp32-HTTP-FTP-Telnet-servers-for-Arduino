@@ -22,6 +22,7 @@ You can go directly to Setup instructions and examples now or continue reading t
 **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
+   - Cookies
    - WS protocol – only basic support for WebSockets is included so far,
    - webClient function is included for making simple HTTP requests from ESP32 to other servers,
    - threaded web server sessions,
@@ -43,7 +44,7 @@ You can use the following commands:
    - ntpdate or ntpdate -u or ntpdate -u ntpServer
    - crontab or crontab -l
    - free or free -s n (where 0 < n < 300)
-   - dmesg or dmesg --follow
+   - dmesg or dmesg --follow or dmesg -T or both
    - mkfs.fat
    - fs_info
    - ls or ls directoryName (or use dir instead of ls)
@@ -168,6 +169,8 @@ At this point, you can already test if everything is going on as planned by http
    - example03.html,
    - example04.html,
    - example05.html,
+   - login.html
+   - logout.html
    - example10.html,
    - oscilloscope.html.
 
@@ -193,6 +196,10 @@ ftp> put example04.html
 226 transfer complete
 ftp> put example05.html
 226 transfer complete
+ftp> put login.html
+226 transfer complete
+ftp> put logout.html
+226 transfer complete
 ftp> put example10.html
 226 transfer complete
 ftp> put oscilloscope.html
@@ -208,7 +215,11 @@ ftp> ls /var/www/html/
 -rw-rw-rw-   1 root     root             1905  Nov 14 21:34      example03.html
 -rw-rw-rw-   1 root     root             3521  Nov 14 21:34      example04.html
 -rw-rw-rw-   1 root     root             9355  Nov 14 21:34      example05.html
--rw-rw-rw-   1 root     root             3177  Nov 14 21:34      example10.html
+-rw-rw-rw-   1 root     root             3177  Nov 14 21:34      
+login.html
+-rw-rw-rw-   1 root     root             4847  Nov 14 21:34      logout.html
+-rw-rw-rw-   1 root     root             2633  Nov 14 21:34      
+example10.html
 226 transfer complete
 ```
 
@@ -473,6 +484,25 @@ getBuiltInLed:
 
 ## Other examples
 
+**Example 07 - cookies**
+
+Example 07 demonstrates the way web server handles cookies.
+
+```C++
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+  
+  if (httpRequest.substring (0, 20) == "GET /example07.html ") { // used by example 07
+                                                                 String refreshCounter = wsp->getHttpRequestCookie ("refreshCounter");           // get cookie that browser sent in HTTP request
+                                                                 if (refreshCounter == "") refreshCounter = "0";
+                                                                 refreshCounter = String (refreshCounter.toInt () + 1);
+                                                                 wsp->setHttpResponseCookie ("refreshCounter", refreshCounter, getGmt () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
+                                                                 return String ("<HTML>Example 07<br><br>This page has been refreshed " + refreshCounter + " times. Click refresh to see more.</HTML>");
+                                                               }
+
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
+}
+```
+
 **Example 08 - reading time**
 
 Example 08 demonstrates the use of time_functions.h.
@@ -488,7 +518,8 @@ if (!t) {
   time_t l = timeToLocalTime (t); // alternativelly you can use l = getLocalTime ();
   strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&l));
   Serial.printf ("[example 08] current local time is %s\n", str); // alternativelly you can use timeToString (l)
-} ```
+} 
+```
 
 **Example 09 - making HTTP requests (REST calls for example) directly from ESP32**
 
@@ -523,7 +554,7 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be r
 
     while (true) {
       switch (webSocket->available ()) {
-        case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
+        case WebSocket::NOT_AVAILABLE:  delay (1);
                                         break;
         case WebSocket::STRING:       { // text received
                                         String s = webSocket->readString ();
@@ -661,7 +692,7 @@ if (myServer->started ()) {
   Serial.printf ("[example 11] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
 
   // let the server run for 30 seconds - this much time you have to connect to it to test how it works
-  SPIFFSsafeDelay (30000);
+  delay (30000);
 
   // shut down the server - is any connection is still active it will continue to run anyway
   delete (myServer);
