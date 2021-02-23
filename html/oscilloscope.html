@@ -177,15 +177,8 @@
 			<div class='d2'>&nbsp;Vertical sensitivity</div>
 			<div class='d3' id='sensitivityLabel'>100 %</div>
 			<div class='d4'> 
-				<div class='slider'><input id='sensitivity' type='range' min='0' max='5' value='0' step='1' onchange="
-					switch (this.value) {
-						case '0':	document.getElementById ('sensitivityLabel').textContent = '100 %'; break;
-						case '1':	document.getElementById ('sensitivityLabel').textContent = '200 %'; break;
-						case '2':	document.getElementById ('sensitivityLabel').textContent = '400 %'; break;
-						case '3':	document.getElementById ('sensitivityLabel').textContent = '1000 %'; break;
-						case '4':	document.getElementById ('sensitivityLabel').textContent = '2000 %'; break;
-						case '5':	document.getElementById ('sensitivityLabel').textContent = '4000 %'; break;
-					}
+				<div class='slider'><input id='sensitivity' type='range' min='0' max='5' value='0' step='1' disabled onchange="
+					document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (this.value);
 					drawBackgroundAndCalculateParameters ();
 				" /></div>
 			</div>
@@ -195,7 +188,7 @@
 			<div class='d2'>&nbsp;Vertical position</div>
 			<div class='d3' id='positionLabel'>0</div>
 			<div class='d4'> 
-				<div class='slider'><input id='position' type='range' min='0' max='4000' value='0' step='100' onchange="
+				<div class='slider'><input id='position' type='range' min='0' max='4000' value='0' step='100' disabled onchange="
 					document.getElementById ('positionLabel').textContent = this.value;
 					drawBackgroundAndCalculateParameters ();
 				" /></div>
@@ -210,7 +203,7 @@
 			</div>
 			<div class='d3' id='posTriggerLabel'>on 1000</div>
 			<div class='d5'> 
-				<div class='slider'><input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' onchange="
+				<div class='slider'><input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' disabled Sonchange="
 					document.getElementById ('posTriggerLabel').textContent = 'on ' + this.value;
 					document.getElementById ('posTrigger').checked = true;
 				" /></div>
@@ -223,7 +216,7 @@
 			</div>
 			<div class='d3' id='negTriggerLabel'>on 3000</div>
 			<div class='d5'> 
-				<div class='slider'><input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' onchange="
+				<div class='slider'><input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' disabled onchange="
 					document.getElementById('negTriggerLabel').textContent = 'on ' + this.value;
 					document.getElementById('negTrigger').checked = true;
 				" /></div>
@@ -237,25 +230,7 @@
 			<div class='d3' id='frequencyLabel'>1 KHz</div>
 			<div class='d4'> 
 				<div class='slider'><input id='frequency' type='range' min='1' max='17' value='14' step='1' onchange="
-					switch (this.value) {
-						case '1':	document.getElementById ('frequencyLabel').textContent = '0,1 Hz'; break;
-						case '2':	document.getElementById ('frequencyLabel').textContent = '0,2 Hz'; break;
-						case '3':	document.getElementById ('frequencyLabel').textContent = '0,5 Hz'; break;
-						case '4':	document.getElementById ('frequencyLabel').textContent = '1 Hz'; break;
-						case '5':	document.getElementById ('frequencyLabel').textContent = '2 Hz'; break;
-						case '6':	document.getElementById ('frequencyLabel').textContent = '5 Hz'; break;
-						case '7':	document.getElementById ('frequencyLabel').textContent = '10 Hz'; break;
-						case '8':	document.getElementById ('frequencyLabel').textContent = '20 Hz'; break;
-						case '9':	document.getElementById ('frequencyLabel').textContent = '50 Hz'; break;
-						case '10':	document.getElementById ('frequencyLabel').textContent = '60 Hz'; break;
-						case '11':	document.getElementById ('frequencyLabel').textContent = '100 Hz'; break;
-						case '12':	document.getElementById ('frequencyLabel').textContent = '200 Hz'; break;
-						case '13':	document.getElementById ('frequencyLabel').textContent = '500 Hz'; break;
-						case '14':	document.getElementById ('frequencyLabel').textContent = '1 KHz'; break;
-						case '15':	document.getElementById ('frequencyLabel').textContent = '2 KHz'; break;
-						case '16':	document.getElementById ('frequencyLabel').textContent = '5 KHz'; break;
-						case '17':	document.getElementById ('frequencyLabel').textContent = '10 KHz'; break;
-					}
+					document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (this.value);
 					drawBackgroundAndCalculateParameters ();
 				" /></div>
 			</div>
@@ -308,22 +283,57 @@
 
 			// initialization
 
-			// debug: alert (document.cookie);
+			function sensitivityLabelFromSensitivitySlider (value) {
+				switch (value) {
+					case '0':	return '100 %'; 
+					case '1':	return '200 %'; 
+					case '2':	return '400 %'; 
+					case '3':	return '1000 %'; 
+					case '4':	return '2000 %'; 
+					case '5':	return '4000 %'; 
+				}
+			}
+
+			function frequencyLabelFromFrequencySlider (value) {
+				switch (value) {
+					case '1':	return '0,1 Hz'; 
+					case '2':	return '0,2 Hz'; 
+					case '3':	return '0,5 Hz'; 
+					case '4':	return '1 Hz'; 
+					case '5':	return '2 Hz'; 
+					case '6':	return '5 Hz'; 
+					case '7':	return '10 Hz'; 
+					case '8':	return '20 Hz'; 
+					case '9':	return '50 Hz'; 
+					case '10':	return '60 Hz'; 
+					case '11':	return '100 Hz'; 
+					case '12':	return '200 Hz'; 
+					case '13':	return '500 Hz'; 
+					case '14':	return '1 KHz'; 
+					case '15':	return '2 KHz'; 
+					case '16':	return '5 KHz'; 
+					case '17':	return '10 KHz';
+				}
+			}
+
+			// console.log (document.cookie);
 
 			var v;
 			v = getCookie ('gpio1'); if (v != '') document.getElementById ('gpio1').value = v;
 			v = getCookie ('gpio2'); if (v != '') document.getElementById ('gpio2').value = v;
 			v = getCookie ('analog'); if (v == 'true') document.getElementById ('analog').checked = true; else document.getElementById ('digital').checked = true;
-			v = getCookie ('sensitivity'); if (v != '') document.getElementById ('sensitivity').value = v;
-			v = getCookie ('position'); if (v != '') document.getElementById ('position').value = v;
+			v = getCookie ('sensitivity'); if (v != '') { document.getElementById ('sensitivity').value = v; document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (v); }
+			v = getCookie ('position'); if (v != '') { document.getElementById ('position').value = v; document.getElementById ('positionLabel').textContent = v;}
 			v = getCookie ('posTrigger'); if (v == 'true') document.getElementById ('posTrigger').checked = true;
-			v = getCookie ('posTreshold'); if (v != '') document.getElementById ('posTreshold').value = v;
+			v = getCookie ('posTreshold'); if (v != '') { document.getElementById ('posTreshold').value = v; document.getElementById ('posTriggerLabel').textContent = 'on ' + v; }
 			v = getCookie ('negTrigger'); if (v == 'true') document.getElementById ('negTrigger').checked = true;
-			v = getCookie ('negTreshold'); if (v != '') document.getElementById ('negTreshold').value = v;
-			v = getCookie ('frequency'); if (v != '') document.getElementById ('frequency').value = v;
+			v = getCookie ('negTreshold'); if (v != '') { document.getElementById ('negTreshold').value = v; document.getElementById ('negTriggerLabel').textContent = 'on ' + v; }
+			v = getCookie ('frequency'); if (v != '') { document.getElementById ('frequency').value = v; document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (v); }
 			v = getCookie ('lines'); if (v == 'false') document.getElementById ('lines').checked = false;
 			v = getCookie ('markers'); if (v == 'false') document.getElementById ('markers').checked = false;
 			v = getCookie ('remember'); if (v == 'true') document.getElementById ('remember').checked = true;
+
+			enableDisableControls (false);
 
 			// save settings into cookies
 			function saveSettings () {
@@ -797,6 +807,7 @@
 				if (workMode) {
 					// disable GPIO, analog/digital, trigger, frequency and start, enable stop
 					document.getElementById ('gpio1').disabled = true;
+					document.getElementById ('gpio2').disabled = true;
 					document.getElementById ('analog').disabled = true;
 					document.getElementById ('digital').disabled = true;
 					document.getElementById ('posTrigger').disabled = true;
@@ -812,6 +823,7 @@
 				} else {
 					// enable GPIO, analog/digital, trigger, frequency and start, disable stop
 					document.getElementById ('gpio1').disabled = false;
+					document.getElementById ('gpio2').disabled = false;
 					document.getElementById ('analog').disabled = false;
 					document.getElementById ('digital').disabled = false;
 					document.getElementById ('posTrigger').disabled = false;
