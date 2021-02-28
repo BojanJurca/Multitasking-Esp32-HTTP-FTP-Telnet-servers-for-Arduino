@@ -7,6 +7,9 @@ Arduino IDE compiler setting : No OTA / 1M APP / 3M FATS, 1.5M FATS was not work
 1.5M FATS failed,
 ![1.5M_FAT_NTP_NG.JPG](1.5M_FAT_NTP_NG.JPG)  
 
+this is log when NTP failed.  
+![ntp_error.JPG](ntp_error.JPG)  
+  
 3M FATS working great,
 ![3M_FAT_NTP_NG.JPG](3M_FATS_NTP_OK.JPG)  
 
