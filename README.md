@@ -1,12 +1,16 @@
 # ESP32 with Web Server, Telnet Server, file system and FTP Server
 
-2021-FEB-28, xiaolaba testing done, 
+### 2021-FEB-28, xiaolaba testing done   
 Hardware : NodeMCU EPS-32S, no PSRAM, 4MB FLASH, 80MHZ CPU
-IDE setting : No OTA / 1M APP / 3M FATS, 1.5M FATS was not working as NTP failed
+Arduino IDE compiler setting : No OTA / 1M APP / 3M FATS, 1.5M FATS was not working as NTP failed  
 
+1.5M FATS failed,
+[1.5M_FAT_NTP_NG.JPG](1.5M_FAT_NTP_NG.JPG)  
 
+3M FATS working great,
+[3M_FAT_NTP_NG.JPG](3M_FATS_NTP_OK.JPG)  
 
-
+---------------------------
 
 
 It is more or less about user interface:
