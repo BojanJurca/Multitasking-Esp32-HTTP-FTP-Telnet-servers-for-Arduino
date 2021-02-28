@@ -1,157 +1,166 @@
-ï»¿# ESP32 with Web Server, Telnet Server, file system, FTP Server and Real-time Clock, ...
+# ESP32 with Web Server, Telnet Server, file system and FTP Server
 
-Very briefly why would you use Esp32_web_ftp_telnet_server_template:
+It is more or less about user interface:
 
-- **extremely fast and easy development of Telnet command-line user interface for your project** 
-- **easy development of nice looking Web user interface for your project**
-- **working with files (uploading and downloading .html and other files) instead of hard-coding HTTP responses**
+- **very fast and easy development of Telnet command-line user interface for your project** 
+- **easy development of nice-looking Web user interface for your project**
+- **working with files (uploading and downloading .html and other files)**
 - **run-time monitoring of ESP32 behaviour with built-in dmesg Telnet command**
 - **run-time monitoring of ESP32 signals with built-in Web-based oscilloscope**
 
-![Screenshot](presentation.png)
+![Screenshot](presentation.gif)
 
-In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, â€¦) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
-In case of Telnet all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
+In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
+
+In case of Telnet user interface all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
 
 You can go directly to Setup instructions and examples now or continue reading the rest of this text.
 
-While I was working on my ESP32 / Arduino home automation project I often missed functionalities that were available on real computers. This template is an attempt of providing some of this functionalities such as file system (SPIFFS is used), threaded Web, FTP and Telnet servers (all three are built upon threaded TCP server which is also included) to an ESP32 programmer. Rather than making a complete and finished software I decided to go with a working template that could easily be modified to each individual needs. The template demonstrates the use of Web interface through which users can turn LED built into ESP32 on and off using REST calls and basically the same through the use of Telnet interface. 
-
 ## Features
 
-Here is a list of features of objects included in Esp32_web_ftp_telnet_server_template with their functionalities:
-
-- **webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies â€“ see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
+**webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
-   - WS protocol â€“ only basic support for WebSockets is included so far,
-   - webClient function is included for making simple HTTP requests,
+   - Cookies
+   - WS protocol – only basic support for WebSockets is included so far,
+   - webClient function is included for making simple HTTP requests from ESP32 to other servers,
    - threaded web server sessions,
-   - time-out set to 1,5 seconds for HTTP protocol and 5 minutes for WS protocol to free up limited ESP32 resources used by inactive sessions,  
+   - time-out set to 1,5 seconds for HTTP protocol and 5 minutes for WS protocol to free up limited ESP32 resources used by inactive sessions,
+   - support for HTTP 1.1 keep-alive directive,
    - optional firewall for incoming requests.
 
-- **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. A few built-in commands are implemented so far:
+**telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Built-in commands implemented so far:
 
-   - start web server         /* added just as an example here */
-   - stop web server          /* added just as an example here */
-   - start ftp server         /* added just as an example here */
-   - stop ftp server          /* added just as an example here */
-   - start telnet server      /* added just as an example here */
-   - stop telnet server       /* added just as an example here */
-   - digitalRead [pinNumber]  /* added just as an example here */
-   - analogRead [pinNumber]   /* added just as an example here */
-   - date (-s <YYYY/MM/DD hh:mm:ss>)
-   - uname /* synonym for "uname -a" as implemented here */
-   - date (-s [YYYY/MM/DD hh:mm:ss])
-   - mkfs.spiffs /* warning, formatting will delete all existing files on ESP flash disk */
-   - ls ([directoryName]) or dir ([directoryName])
-   - cat [fileName] or type [fileName]
-   - rm [fileName] or del [fileName]
-   - ping [target]
-   - ifconfig or ipconfig
-   - telnet [otherServerIP] ([otherServerPort])
-   - arp /* synonym for "arp -a" as implemented here */
-   - iw
-   - curl (GET|PUT|POST|DELETE) http://[IP]/([page])
-   - useradd -u [userId] -d [userHomeDirectory] [userName]
-   - userdel [userName]
-   - passwd ([userName])
-   - free (-s [n])
-   - dmesg (--follow)
+You can use the following commands:
+   - quit
+   - clear (or use cls instead of clear)
+   - help
+   - uname
    - uptime
    - reboot
-   - help
-   - quit
+   - reset
+   - date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
+   - ntpdate or ntpdate -u or ntpdate -u ntpServer
+   - crontab or crontab -l
+   - free or free -s n (where 0 < n < 300)
+   - dmesg or dmesg --follow or dmesg -T or both
+   - mkfs.fat
+   - fs_info
+   - ls or ls directoryName (or use dir instead of ls)
+   - tree or tree directoryName
+   - mkdir directoryName
+   - rmdir directoryName
+   - cd directoryName or cd ..
+   - pwd
+   - cat fileName or cat > fileName (or use type instead of ls)
+   - vi fileName
+   - cp existingFileName newFileName (or use copy instead of cp)
+   - mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
+   - rm fileName
+   - passwd or passwd userName
+  useradd -u userId -d userHomeDirectory userName (where userId > 1000)
+   - userdel userName
+   - ifconfig (or use ipconfig instead of ifconfig)
+   - iw
+   - arp
+   - ping targetIP
+   - telnet tergetIP
+   - curl http://url or curl method http://url (where method is GET, PUT, ...)
 
-Like webServer it also offers:
+Other features:
 
    - threaded Telnet sessions,
    - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
-- **ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
+**ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
 
-   - ls,
-   - rm [esp32FileName],
-   - put ([osFileName]) [esp32FileName],
-   - get [esp32FileName] ([osFileName]).
+   - pwd
+   - cd
+   - ls
+   - rmdir
+   - mkdir
+   - rm
+   - put osFileName esp32FileName
+   - get esp32FileName osFileName
 
-Like webServer and telentServer it also offers:
+Other features:
+
+   - active and passive data connections (you can use command line FTP client or Windows Explorer for example) 
    - threaded FTP sessions,
    - time-out set to 5 minutes to free up limited ESP32 the resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
-- **TcpServer** is the base for all three servers mentioned above but it can also be used as stand-alone (see example). Features:
+**TcpServer** is the heart of all three servers mentioned above but it can also be used as stand-alone (see example). 
+
+Features:
+
    - threaded TCP server,
    - non-threaded TCP server,
    - non-threaded TCP client,
    - optional time-out to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
-- **File system** is needed for storing configuration files, .html files used by web server, etc. A SPIFFS flash file system is used in Esp32_web_ftp_telnet_server_template. Documentation on SPIFFS can be found at http://esp8266.github.io/Arduino/versions/2.0.0/doc/filesystem.html.
+**File system** is needed for storing configuration files, .html files used by web server, etc. FAT flash file system is used. Make sure you compile your sketch for one of FAT partition schemas (Tool | Partition Scheme).
 
-- **Network** configuration files. Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files (although it is a little awkward how network configuration is implemented in these operating systems). The following files are used to store STAtion and AccessPoint configuration parameters:
+**Configuration files** Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files:
 
-   - /network/interfaces
-   - /etc/wpa_supplicant.conf
-   - /etc/dhcpcd.conf
-   - /etc/hostapd/hostapd.conf  
+   - /etc/passwd contains users' accounts information
+   - /etc/shadow contains users' passwords
+   - /network/interfaces contains STA(tion) configuration
+   - /etc/wpa_supplicant/wpa_supplicant.conf contains STA(tion) credentials
+   - /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
+   - /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
+   - /etc/ntp.conf contains NTP time servers' names
+   - /etc/crontab contains cheduled tasks  
 
-Modify (the part of code in network.h that create) these files according to your needs or upload your own files onto ESP32 by using FTP. 
+These files are created at first run of your sketch with default settings (you can modify default settings in source code before you run the sketch for the first time). 
 
-- **User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
+**User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
 
-   - UNIX, LINUX, Raspbian like (using user management files - default setting - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT),
-   - hardcoded (username and password are hardcoded in to Arduino sketch constants - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT),
-   - no user management at all (everyone can Telnet or FTP to ESP32 servers - use #define USER_MANAGEMENT   NO_USER_MANAGEMENT).
+   - UNIX, LINUX, Raspbian like (using user management files - this is the default setting) - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT,
+   - hardcoded (username is root, password is hardcoded in to Arduino sketch constants) - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT,
+   - no user management at all (everyone can Telnet or FTP to ESP32 servers without password) - use #define USER_MANAGEMENT   NO_USER_MANAGEMENT.
 
-By default Esp32_web_ftp_telnet_server_template uses UNIX, LINUX, Raspbian like user management files. Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" and "telnetserver" users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code in user_management.h that creates user management files) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
+Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" (with no password, this is system account intended only to hold webserver home directory) and "telnetserver" (with no password, this is system account intended only to hold telnetserver home directory) users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code in user_management.h) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
 
-      - /etc/passwd
-      - /etc/shadow
+   - /etc/passwd contains users' accounts information
+   - /etc/shadow contains users' passwords
 
-- **Real time clock**. If you want to do something like turning the light on at certain time for example, ESP32 should be aware of current time. In Esp32_web_ftp_telnet_server_template real time clock reads current GMT time from NTP servers and synchronize internal clock once a day with them. You can define three NTP servers ESP32 will read GMT time from. Local time on the other hand is not implemented completely since different countries have different rules how to calculate it from GMT. 35 time zones thar are supported so far: 
+**Time functions**. Time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the following (or add your own and modify timeToLocalTime function appropriately): 
 
-   - Russia time zones (KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE)
-   - Japan time zone (JAPAN_TIMEZONE)
-   - China time zone (CHINA_TIMEZONE)
-   - Europe time zones (WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE)
-   - Canada time zones (NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE)
-   - USA time zones (ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE)
+KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
-By default TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE
+By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functions.h also takes care of synchronizing ESP32 clock with NTP servers once a day.
 
-Please do additional testing yourself. I cannot be 100 % sure that local time works as it should for every time zone. If you need support for another time zone, please let me know. You can also modify getLocalTime () function yourself to match your country and location.
+**cronDaemon** scans crontab table and executes tasks at specified time. You can schedule tasks from code or write them in to /etc/crontab file (see examples). 
+
 
 ## Setup instructions
 
 1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
 2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
-3. Go to network.h and do the following changes:
-
-   - find and change YOUR-STA-SSID to your WiFi SSID,
-   - find and change YOUR-STA-PASSWORD to your WiFi password,
-   - find and change YOUR-AP-PASSWORD to the password your access point will be using.
-
-4. Compile sketch and run it on your ESP32 for the first time.
+3. modify the default #definitions that will be written into configuration files when sketch runs for the first time.
+4. Select one of FAT partition schemas (Tool | Partition Scheme).
+5. Compile sketch and run it on your ESP32.
 
 Doing this the following will happen:
 
-   - ESP32 flash memory will be formatted with SPIFFS file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
-   - network configuration files will be created with the following settings:
-      - your ESP32 will be configured to use DHCP in STAtion mode,
-      - your ESP32 AccessPoint name will be ESP32_SRV,
-      - your ESP32 AccessPoint IP will be 10.0.1.3,
+  - ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
+  - network configuration files will be created with the following settings:
+  - your ESP32 will be configured to use DHCP in STAtion mode (with DEFAULT_STA_SSID / DEFAULT_STA_PASSWORD #definitions),
+  - your ESP32 AccessPoint SSID will be MyESP32Server (with DEFAULT_AP_PASSWORD #definition),
+  - your ESP32 AccessPoint IP will be 10.0.1.3,
    - user management files will be created with the following user accounts:
       - root / rootpassword,
       - webadmin / webadminpassword,
       - webserver with no password since this is a system account used only to define webserver home directory,
       - telnetserver with no password since this is also a system account used only to define telnetserver home directory.
 
-At this point, you can already test if everything goes on as planned by Www, FTP or Telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to do.
+At this point, you can already test if everything is going on as planned by http, FTP or telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to be done.
 
-5. FTP to your ESP32 as webadmin / webadminpassword and upload the following files:
+6. FTP to your ESP32 as webadmin / webadminpassword and upload the following files into /var/www/html/ directory:
 
    - index.html,
    - android-192.png,
@@ -160,70 +169,77 @@ At this point, you can already test if everything goes on as planned by Www, FTP
    - example03.html,
    - example04.html,
    - example05.html,
-   - example09.html,
+   - login.html
+   - logout.html
+   - example10.html,
    - oscilloscope.html.
 
 ```
-C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
-Connected to 10.0.0.3.
-220-ESP32 FTP server - please login
-User (10.0.0.3:(none)): webadmin
-331 enter password
-Password: webadminpassword
-230 logged on, use "/" to refer to your home directory "/var/www/html/"
+C:\esp32_web_ftp_telnet_server_template>ftp yourEsp32IP
+Connected to 10.0.0.22.
+220-MyESP32Server FTP server - please login
+200 UTF8 enabled
+User (10.0.0.22:(none)): webadmin
+331 enter password: webadminpassword
+230 logged on, your home directory is "/var/www/html/"
 ftp> put index.html
-226 /var/www/html/index.html transfer complete
+226 transfer complete
 ftp> put android-192.png
-226 /var/www/html/android-192.png transfer complete
+226 transfer complete
 ftp> put apple-180.png
-226 /var/www/html/apple-180.png transfer complete
+226 transfer complete
 ftp> put example02.html
-226 /var/www/html/example02.html transfer complete
+226 transfer complete
 ftp> put example03.html
-226 /var/www/html/example03.html transfer complete
+226 transfer complete
 ftp> put example04.html
-226 /var/www/html/example04.html transfer complete
+226 transfer complete
 ftp> put example05.html
-226 /var/www/html/example05.html transfer complete
-ftp> put example09.html
-226 /var/www/html/example09.html transfer complete
-ftp> put oscilloscope.html oscilloscope.html
-226 /var/www/html/oscilloscope.html transfer complete
-ftp> ls
+226 transfer complete
+ftp> put login.html
+226 transfer complete
+ftp> put logout.html
+226 transfer complete
+ftp> put example10.html
+226 transfer complete
+ftp> put oscilloscope.html
+226 transfer complete
+ftp> ls /var/www/html/
 200 port ok
 150 starting transfer
--r-xr-xrwx   1 owner    group             119 Mar 03 18:22      /etc/passwd
--r-xr-xrwx   1 owner    group             254 Mar 03 18:22      /network/interfaces
--r-xr-xrwx   1 owner    group             211 Mar 03 18:22      /etc/dhcpcd.conf
--r-xr-xrwx   1 owner    group             174 Mar 03 18:22      /etc/hostapd/hostapd.conf
--r-xr-xrwx   1 owner    group             166 Mar 03 18:22      /etc/shadow
--r-xr-xrwx   1 owner    group              61 Mar 03 18:22      /etc/wpa_supplicant.conf
--r-xr-xrwx   1 owner    group            1596 Mar 03 18:22      /var/www/html/apple-180.png
--r-xr-xrwx   1 owner    group            1818 Mar 03 18:22      /var/www/html/android-192.png
--r-xr-xrwx   1 owner    group            6807 Mar 03 18:22      /var/www/html/index.html
+-rw-rw-rw-   1 root     root             1818  Nov 14 21:33      android-192.png
+-rw-rw-rw-   1 root     root             1596  Nov 14 21:33      apple-180.png
+-rw-rw-rw-   1 root     root             6807  Nov 14 21:33      index.html
+-rw-rw-rw-   1 root     root            39561  Nov 14 21:35      oscilloscope.html
+-rw-rw-rw-   1 root     root             1147  Nov 14 21:33      example02.html
+-rw-rw-rw-   1 root     root             1905  Nov 14 21:34      example03.html
+-rw-rw-rw-   1 root     root             3521  Nov 14 21:34      example04.html
+-rw-rw-rw-   1 root     root             9355  Nov 14 21:34      example05.html
+-rw-rw-rw-   1 root     root             3177  Nov 14 21:34      
+login.html
+-rw-rw-rw-   1 root     root             4847  Nov 14 21:34      logout.html
+-rw-rw-rw-   1 root     root             2633  Nov 14 21:34      
+example10.html
 226 transfer complete
-ftp: 975 bytes received in 0.66Seconds 1.47Kbytes/sec.
-ftp>
 ```
 
-Files will be placed into webadmin home directory, which is configured to be /var/www/html/.
+Files will be placed into webadmin home directory, which is /var/www/html/.
 
-6. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory of telnetserver system account.
+7. FTP to your ESP32 as root / rootpassword and upload help.txt into /var/telnet/ directory, which is a home directory of telnetserver system account.
 
 ```
-C:\esp32_web_ftp_telnet_server_template>ftp <your ESP32 IP here>
-Connected to 10.0.0.3.
-220-ESP32 FTP server - please login
-User (10.0.0.3:(none)): root
-331 enter password
-Password: rootpassword
-230 logged on, use "/" to refer to your home directory "/"
+C:\esp32_web_ftp_telnet_server_template>ftp yourEsp32IP
+Connected to 10.0.0.22.
+220-MyESP32Server FTP server - please login
+200 UTF8 enabled
+User (10.0.0.22:(none)): root
+331 enter password: rootpassword
+230 logged on, your home directory is "/"
 ftp> put help.txt /var/telnet/help.txt
-226 /var/telnet/help.txt transfer complete
-ftp>
+226 transfer complete
 ```
 
-7. Delete all the examples and functionalities that are not needed and all the references to them in the code. They are included just to make the development easier for you.
+8. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
 
 ## How to continue from here?
 
@@ -231,37 +247,39 @@ Esp32_web_ftp_telnet_server_template is what its name says, just a working templ
 
 ## Building HTML user interface for your ESP32 project
 
-A series of examples will demonstrate how to create a neat HTML user interface for your ESP32 project. This subject is covered at more detail level in  https://github.com/BojanJurca/Nice_web_GUI_controls_for_ESP_projects
+A series of examples will demonstrate how to create a neat HTML user interface for your ESP32 project.
 
 **Example 01 - dynamic HTML page**
 
 You can always use static HTML that can be uploaded (with FTP) as .html files into /var/www/html directory but they would always display the same content. If you want to show what is going on in your ESP32 you can generate a dynamic HTML page for each HTTP request. The easiest way is modifying httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
-String httpRequestHandler (String& httpRequest) {
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+
   if (httpRequest.substring (0, 20) == "GET /example01.html ") 
     return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
                                                                    
-  return ""; // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 ```
 
 **Example 02 - static HTML page calling REST functions**
 
-Once HTML pages get large enough dynamic generation becomes impractical. The preferred way is building a large static HTML page that will be accessed by web browser and would call smaller server side functions. In this case, we have two sides where programming code is located at run time. The server side code is still in ESP32 whereas client side code is in your web browser. They communicate with each other in standardised way - through REST functions. Although REST functions could respond in HTML manner they usually use JSON format.
+Once HTML pages get large enough dynamic generation becomes impractical. The preferred way is building a large static HTML page that will be accessed by web browser and would call smaller server-side functions. In this case, we have two sides where programming code is located at run time. The server-side code is still in ESP32 whereas client-side code is in your web browser. They communicate with each other in standardised way - through REST functions. Although REST functions could respond in HTML manner they usually use JSON format.
 
-Let's take a look at server side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino:
+Let's take a look at server-side first. Change code in httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino:
 
 ```C++
-String httpRequestHandler (String& httpRequest) {  
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+  
   if (httpRequest.substring (0, 16) == "GET /builtInLed ") {
       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
 
-  return "";  // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 ```
 
-We do not have C++ compiler available in a browser, but Javascript will do the job as well. See example02.html:
+We do not have C++ compiler available in browser, but Javascript will do the job as well. See example02.html:
 
 ```HTML
 <html>
@@ -296,12 +314,13 @@ We do not have C++ compiler available in a browser, but Javascript will do the j
 
 **Example 03 - HTML page interacting with ESP32**
 
-We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional â€“ client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism with the exception of the use of PUT method instead of GET in REST calls. The latter is only the matter of understanding; GET method would do the job just as well.
+We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism except for the use of PUT method instead of GET in REST calls (the latter is only the matter of understanding; GET method would do the job just as well).
 
 Server will have to handle two additional cases:
 
 ```C++
-String httpRequestHandler (String& httpRequest) {  
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+
   if (httpRequest.substring (0, 16) == "GET /builtInLed ") {
 getBuiltInLed:
       return "{\"id\":\"esp32\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
@@ -313,7 +332,7 @@ getBuiltInLed:
       goto getBuiltInLed;
   } 
 
-  return "";  // httpRequestHandler did not handle httpRequest, let the web server try to process it otherway
+  return  // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 ```
 
@@ -446,7 +465,8 @@ More controls with style can be found in **example05.html**.
 Compared to HTML user interface Telnet user interface is a piece of cake. Modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs. For example:
 
 ```C++
-String telnetCommandHandler (int argc, String argv [], String homeDirectory) { // Example 05
+String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { // - must be reentrant!
+
   if (argc == 2 && argv [0] == "led" && argv [1] == "state") {
 getBuiltInLed:
     return "Led is " + (digitalRead (2) ? String ("on.\n") : String ("off.\n"));
@@ -457,56 +477,48 @@ getBuiltInLed:
     digitalWrite (2, LOW);
     goto getBuiltInLed;
   }
-  return ""; // telnetCommand has not been handled by telnetCommandHandler - let the telnetServer handle it itself
+
+  return; // telnetCommand has not been handled by telnetCommandHandler - tell telnetServer to handle it internally by returning "" reply
 }
 ```
 
-## Examples
+## Other examples
 
-**Example 07 - SPIFFS file system and delays**
+**Example 07 - cookies**
 
-Example shows how to access files on SPIFFS and/or perform delays properly in a multi-threaded environment. Why are those two connected? The issue is well described in https://www.esp32.com/viewtopic.php?t=7876: "vTaskDelay() cannot be called whilst the scheduler is disabled (i.e. in between calls of vTaskSuspendAll() and vTaskResumeAll()). The assertion failure is caused by vTaskDelay() checking if it was called whilst the scheduler is disabled." Some SPIFFS functions internally call vTaskSuspendAll() hence no other thread should call delay()  (which internally calls vTaskDelay()) since we cannot predict if this would happen while the scheduler is disabled.
-
-Esp32_web_ftp_telnet_server_template introduces a SPIFFSsemaphore mutex that prevents going into delay() and SPIFSS functions simultaneously from different threads. Calling a delay() function is not thread safe (when used together with SPIFFS) and would crash ESP32 occasionally. Use SPIFFSsafeDelay() instead.
+Example 07 demonstrates the way web server handles cookies.
 
 ```C++
-for (int i = 0; i < 3; i++) {
-  String s = "";
-  File file;
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+  
+  if (httpRequest.substring (0, 20) == "GET /example07.html ") { // used by example 07
+                                                                 String refreshCounter = wsp->getHttpRequestCookie ("refreshCounter");           // get cookie that browser sent in HTTP request
+                                                                 if (refreshCounter == "") refreshCounter = "0";
+                                                                 refreshCounter = String (refreshCounter.toInt () + 1);
+                                                                 wsp->setHttpResponseCookie ("refreshCounter", refreshCounter, getGmt () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
+                                                                 return String ("<HTML>Example 07<br><br>This page has been refreshed " + refreshCounter + " times. Click refresh to see more.</HTML>");
+                                                               }
 
-  xSemaphoreTake (SPIFFSsemaphore, portMAX_DELAY); // always take SPIFFSsemaphore before any SPIFSS operations
-  
-  if ((bool) (file = SPIFFS.open ("/ID", FILE_READ)) && !file.isDirectory ()) {
-    while (file.available ()) s += String ((char) file.read ());
-    file.close (); 
-    Serial.printf ("[example 06] %s\n", s.c_str ());
-  } else {
-    Serial.printf ("[example 06] can't read file /ID\n");
-  }
-  
-  xSemaphoreGive (SPIFFSsemaphore); // always give SPIFFSsemaphore when SPIFSS operation completes
-  
-  SPIFFSsafeDelay (1000); // always use SPIFFSsafeDelay() instead of delay()
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 ```
 
 **Example 08 - reading time**
 
-Example 08 demonstrates the use of rtc (real time clock) instance built into Esp32_web_ftp_telnet_server_template.
+Example 08 demonstrates the use of time_functions.h.
 
 ```C++
-if (rtc.isGmtTimeSet ()) {
-  time_t now;
-  now = rtc.getGmtTime ();
-  Serial.printf ("[example 08] current UNIX time is %lu\n", (unsigned long) now);
+time_t t = getGmt ();
+if (!t) {
+  Serial.printf ("[example 08] current time has not been obtained from NTP server(s) yet\n");
+} else {
+  Serial.printf ("[example 08] current UNIX time is %li\n", t);
 
   char str [30];
-  now = rtc.getLocalTime ();
-  strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&now));
-  Serial.printf ("[example 08] current local time is %s\n", str);
-} else {
-  Serial.printf ("[example 08] rtc has not obtained time from NTP server yet\n");
-}
+  time_t l = timeToLocalTime (t); // alternativelly you can use l = getLocalTime ();
+  strftime (str, 30, "%d.%m.%y %H:%M:%S", gmtime (&l));
+  Serial.printf ("[example 08] current local time is %s\n", str); // alternativelly you can use timeToString (l)
+} 
 ```
 
 **Example 09 - making HTTP requests (REST calls for example) directly from ESP32**
@@ -517,9 +529,7 @@ Example 09 shows how we can use TcpServer objects to make HTTP requests.
 
 ```C++
 void example09_makeRestCall () {
-  String s = webClient ("127.0.0.1", 80, 5000, "GET /upTime"); // send request to local loopback port 80, wait max 5 s (time-out)
-  // alternatively, you can use webClientCallMAC if you prefer to address stations connected to the AP network interface
-  // by MAC rather then IP addresses - for example webClientCallMAC ("a0:20:a6:0c:ea:a9", 80, 5000, "GET /upTime"); 
+  String s = webClient ((char *) "127.0.0.1", 80, 5000, "GET /builtInLed"); // send request to local loopback port 80, wait max 5 s (time-out)
   if (s > "")
     Serial.print ("[example 09] " + s);
   else
@@ -533,18 +543,18 @@ void example09_makeRestCall () {
 
 **Example 10 - WebSockets**
 
-A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. Although I have tested the example below on different platforms such as Windows / Intel, iPhone, Android / Samsung they all use the same byte ordering as ESP32 â€“ little endian so they understand each other without doing byte reordering. TCP suggests using network byte order, for sending binary data over network, which is big endian. Since Javascript does not follow this rule neither can ESP32. To be able to communicate with big endian machines there are two possibilities. The first one is to stay with data exchange in text format, the second is to do byte reordering for both, incoming and outgoing packets of binary data (using hton, ntoh C functions) on ESP32 server side.
+A basic WebSocket support is built-in into webServer. Text and binary data can be exchanged between browser and ESP32 server in both ways. I only tested the example below on little endian machines. The code is supposed to work on big endian machines as well (I was not able to test it though).
 
 Example 10 demonstrates how ESP32 server could handle WebSockets:
 
 ```C++
-void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be entrant!
+void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be reentrant!
 
   if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") { // Example 10
 
     while (true) {
       switch (webSocket->available ()) {
-        case WebSocket::NOT_AVAILABLE:  SPIFFSsafeDelay (1);
+        case WebSocket::NOT_AVAILABLE:  delay (1);
                                         break;
         case WebSocket::STRING:       { // text received
                                         String s = webSocket->readString ();
@@ -664,9 +674,9 @@ On the browser side Javascript program could look something like example10.html:
 
 **Example 11 - Morse server**
 
-In example 11 weâ€™ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
+In example 11 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
 Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
-While starting and stopping the server is quite straightforward, more attention must be put to routine that handles the connection. Make sure it is re-entrant for it can run in many threads simultaneously.
+While starting and stopping the server is quite straightforward, more attention must be put to routine that handles the connection. Make sure it is reentrant for it can run in many threads simultaneously.
 
 ```C++
 // start new TCP server
@@ -682,7 +692,7 @@ if (myServer->started ()) {
   Serial.printf ("[example 11] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
 
   // let the server run for 30 seconds - this much time you have to connect to it to test how it works
-  SPIFFSsafeDelay (30000);
+  delay (30000);
 
   // shut down the server - is any connection is still active it will continue to run anyway
   delete (myServer);
@@ -692,36 +702,32 @@ if (myServer->started ()) {
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[example 11] new connection arrived from %s\n", connection->getOtherSideIP ());
+  Serial.printf ("[%10lu] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
   int bytesToSend;
   // construct Morse table. Make it static so it won't use the stack
-  static char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
-                             "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
-                             "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
-                             ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
-                             "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
-                             "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
-                             ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
-                             "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
-                             "--.. "};                                         // Z
-  char finiteState = ' '; // finite state machine to detect quit, valid states are ' ', 'q', 'u', 'i', 't'
+  static const char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
+                                   "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
+                                   "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
+                                   ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
+                                   "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
+                                   "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
+                                   ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
+                                   "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
+                                   "--.. "};                                         // Z
   unsigned char c;
   int index;  
   
   // send welcome reply first as soon as new connection arrives - in a readable form
-  #define IAC 255
-  #define DONT 254
-  #define ECHO 1
-  sprintf (outputBuffer, "Type anything except quit. Quit will end the connection.%c%c%c\r\n", IAC, DONT, ECHO); 
+  sprintf (outputBuffer, "Type anything except Ctrl-C - this would end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
   // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
   // to test this example it is a good idea to communicate with it in the way it understands
   bytesToSend = strlen (outputBuffer);
   if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
     *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[example 11] error while sending response\n");
+    Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
     goto endThisConnection;
   }
   *outputBuffer = 0; // mark outputBuffer as empty
@@ -733,7 +739,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
     for (int i = 0; i < received; i ++) {
       // calculate index of morse table entry
       c = inputBuffer [i];
-
+      if (c == 3) goto endThisConnection; // Ctrl-C
       index = 11;                                     // no character in morse table
       if (c == ' ') index = 10;                       // space in morse table
       else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
@@ -744,7 +750,7 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         bytesToSend = strlen (outputBuffer);
         if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
           *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[example 11] error while sending response\n");
+          Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
           goto endThisConnection;
         }
         strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
@@ -752,29 +758,11 @@ void morseEchoServerConnectionHandler (TcpConnection *connection, void *paramete
         strcat (outputBuffer, morse [index]); // append morse letter to outputBuffer
       }
 
-      // calculat finite machine state to detect if "quit" has been entered
-      switch (c /* inputBuffer [i] */) {
-        case 'Q':
-        case 'q': finiteState = 'q';
-                  break;
-        case 'U':
-        case 'u': if (finiteState == 'q') finiteState = 'u'; else finiteState = ' ';
-                  break;
-        case 'I':
-        case 'i': if (finiteState == 'u') finiteState = 'i'; else finiteState = ' ';
-                  break;
-        case 'T':
-        case 't': if (finiteState == 'i') goto endThisConnection; // quit has been entered
-                  else finiteState = ' ';
-                  break; 
-        default:  finiteState = ' ';
-                  break;
-      }
     } // for loop
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
       *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[example 11] error while sending response\n");
+      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
       goto endThisConnection;
     }    
     *outputBuffer = 0; // mark outputBuffer as empty
@@ -784,9 +772,9 @@ endThisConnection: // first check if there is still some data in outputBuffer an
   if (*outputBuffer) {
     bytesToSend = strlen (outputBuffer);
     if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[example 11] error while sending response\n");
+      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
   }
-  Serial.printf ("[example 11] connection has just ended\n");
+  Serial.printf ("[%10lu] [example 11] connection has just ended\n", millis ());
 }
 ```
 
@@ -794,7 +782,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
 
 **Example 12 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
 
-Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it connect to your ESP32 with telnet and type dmesg command.
+Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it, connect to your ESP32 with telnet client and type dmesg command.
 
 ![Screenshot](dmesg.png)
 
@@ -802,7 +790,7 @@ Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue
 
 **Oscilloscope - see the signals the way ESP32 sees them through Web interface**
 
-ESP32 oscilloscope is web based application included in Esp32_web_ftp_telnet_server_template. It is accessible through web browser once oscilloscope.html is uploaded to ESP32 (with FTP). ESP32 Oscilloscope is using WebSockets to exchange measured signal values between ESP32 and web browser.
+ESP32 oscilloscope is web-based application included in Esp32_web_ftp_telnet_server_template. It is accessible through web browser once oscilloscope.html is uploaded to ESP32 (with FTP). ESP32 Oscilloscope is using WebSockets to exchange measured signal values between ESP32 and web browser.
 
 The first picture below was generated by bouncing of an end switch. ESP32 Oscilloscope performed digitalRead-s after pin has been initialised in INPUT_PULLUP mode. The second picture shows noise coming from poorly regulated power supply. ESP32 Oscilloscope used analogRead-s on an unconnected pin.
 
