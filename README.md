@@ -5,10 +5,10 @@ Hardware : NodeMCU EPS-32S, no PSRAM, 4MB FLASH, 80MHZ CPU
 Arduino IDE compiler setting : No OTA / 1M APP / 3M FATS, 1.5M FATS was not working as NTP failed  
 
 1.5M FATS failed,
-[1.5M_FAT_NTP_NG.JPG](1.5M_FAT_NTP_NG.JPG)  
+![1.5M_FAT_NTP_NG.JPG](1.5M_FAT_NTP_NG.JPG)  
 
 3M FATS working great,
-[3M_FAT_NTP_NG.JPG](3M_FATS_NTP_OK.JPG)  
+![3M_FAT_NTP_NG.JPG](3M_FATS_NTP_OK.JPG)  
 
 ---------------------------
 
