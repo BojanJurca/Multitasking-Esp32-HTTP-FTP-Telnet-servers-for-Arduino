@@ -45,6 +45,10 @@ here is the batch file used for investigation and workaround,
 ![telnet_fixed.JPG](telnet_fixed.JPG)
 
 
+Index.html is revised, easy for cell phone & browser testing,  
+![revised_index.JPG](revised_index.JPG)  
+
+
 
 ---------------------------
 
