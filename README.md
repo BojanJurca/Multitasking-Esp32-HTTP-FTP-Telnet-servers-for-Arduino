@@ -51,7 +51,7 @@ Index.html is revised, easy for cell phone & browser testing,
 
 ESP32 stream function is working conditionally with different browser  
 Firefox NG, Win10 Edge ok, Android chrome ok.  
-![firefox_NG_Edge_OK.JPG}(firefox_NG_Edge_OK.JPG)  
+![firefox_NG_Edge_OK.JPG](firefox_NG_Edge_OK.JPG)  
 
 ---------------------------
 
