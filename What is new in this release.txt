@@ -1,5 +1,5 @@
-New in release 1.26
+New in release 1.27 (development)
 
-  - supports cookies built into web server
-  - improved oscilloscope
+  - support for putty telnet client
+  - web server MIME types
   - bug fixes
