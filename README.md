@@ -22,18 +22,18 @@ To uses a new chip and/or erase the chip on the own, it is able to uses 1.5MB FA
 
 here is the batch file used for investigation and workaround,
 
-`
-:: To erase esp32 completely, do not rely on Arduino IDE and code upload, it has cluster and odd thing when uses FATFS.
-:: xiaolaba, 2020-MAR-02
 
-:: Arduino 1.8.13, esptool and path,
-set esptool=C:\Users\user0\AppData\Local\Arduino15\packages\esp32\tools\esptool_py\3.0.0/esptool.exe
+	:: To erase esp32 completely, do not rely on Arduino IDE and code upload, it has cluster and odd thing when uses FATFS.
+	:: xiaolaba, 2020-MAR-02
 
-:: erase whole flash of esp32
-%esptool% --chip esp32 --port com5 --baud 921600 erase_flash
+	:: Arduino 1.8.13, esptool and path,
+	set esptool=C:\Users\user0\AppData\Local\Arduino15\packages\esp32\tools\esptool_py\3.0.0/esptool.exe
 
-pause
-`
+	:: erase whole flash of esp32
+	%esptool% --chip esp32 --port com5 --baud 921600 erase_flash
+
+	pause
+
 
 Authour fix the bug if telnet uses with putty, telnet and dmesg is showing this workaround and result,
 
