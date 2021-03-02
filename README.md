@@ -2,7 +2,7 @@
 
 ### 2021-FEB-28, xiaolaba testing done   
 Hardware : NodeMCU EPS-32S, no PSRAM, 4MB FLASH, 80MHZ CPU  
-Arduino IDE compiler setting : No OTA / 1M APP / 3M FATS, 1.5M FATS was not working as NTP failed   
+~~Arduino IDE compiler setting : No OTA / 1M APP / 3M FATS, 1.5M FATS was not working as NTP failed  ~~ 
 
 1.5M FATS failed,
 ![1.5M_FAT_NTP_NG.JPG](1.5M_FAT_NTP_NG.JPG)  
@@ -12,6 +12,30 @@ this is log when NTP failed.
   
 3M FATS working great,
 ![3M_FAT_NTP_NG.JPG](3M_FATS_NTP_OK.JPG)  
+
+
+
+### 2021-MAR-02, xiaolaba testing done
+And we are able to manage this issue finally, perhaps Arduino IDE did not erase the chip completely before burn code and rendered something odd.
+
+To uses a new chip and/or erase the chip on the own, it is able to uses 1.5MB FATFS finally, NTP is working too.
+
+here is the batch file used for investigation and workaround,
+
+`
+:: To erase esp32 completely, do not rely on Arduino IDE and code upload, it has cluster and odd thing when uses FATFS.
+:: xiaolaba, 2020-MAR-02
+
+:: Arduino 1.8.13, esptool and path,
+set esptool=C:\Users\user0\AppData\Local\Arduino15\packages\esp32\tools\esptool_py\3.0.0/esptool.exe
+
+:: erase whole flash of esp32
+%esptool% --chip esp32 --port com5 --baud 921600 erase_flash
+
+pause
+`
+
+Authour fix the bug if telnet uses with putty, telnet and dmesg is showing this workaround and result,
 
 ---------------------------
 
