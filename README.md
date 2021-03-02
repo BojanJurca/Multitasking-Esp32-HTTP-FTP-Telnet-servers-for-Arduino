@@ -51,7 +51,7 @@ Index.html is revised, easy for cell phone & browser testing,
 
 ESP32 stream function is working conditionally with different browser  
 Firefox is not working, Win10 Edge ok, Android chrome ok, any idea whether server side issue or the browser variance ?  
-here is screen shot with win10 machine, firefox used was ver 86. 32 bit.  
+here is screen shot with win10 machine, on the left EDGE is ok, on the right firefox used was ver 86. 32 bit, error? 
 ![firefox_NG_Edge_OK.JPG](firefox_NG_Edge_OK.JPG)  
 
 ---------------------------
