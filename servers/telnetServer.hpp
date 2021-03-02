@@ -1,4 +1,4 @@
- /*
+/*
  * 
  * telnetServer.hpp
  * 
@@ -41,6 +41,9 @@
  *            adjustment for Arduino 1.8.13,
  *            added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
  *            October 10, 2020, Bojan Jurca
+ *          - putty support,
+ *            bug fixes
+ *            March 1, 2021, Bojan Jurca
  *            
  */
 
@@ -154,7 +157,7 @@
   void dmesg (String message) {
     portENTER_CRITICAL (&__csDmesg__); 
     __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
-    __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = getGmt ();
+    __dmesgCircularQueue__ [__dmesgEnd__].time = getGmt ();
     __dmesgCircularQueue__ [__dmesgEnd__].message = message;
     if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
     portEXIT_CRITICAL (&__csDmesg__);
@@ -199,15 +202,17 @@
     public:
 
       // define some IAC telnet commands
-      #define IAC  "\xff" // 255
-      #define DONT "\xfe" // 254
-      #define DO   "\xfd" // 253
-      #define WONT "\xfc" // 252
-      #define WILL "\xfb" // 251
-      #define SB   "\xfa" // 250
-      #define SE   "\xf0" // 240
-      #define NAWS "\x1f" //  31
-      #define ECHO "\x01" //   1      
+      #define IAC               "\xff" // 255
+      #define DONT              "\xfe" // 254
+      #define DO                "\xfd" // 253
+      #define WONT              "\xfc" // 252
+      #define WILL              "\xfb" // 251
+      #define SB                "\xfa" // 250
+      #define SE                "\xf0" // 240
+      #define LINEMODE          "\x22" //  34
+      #define NAWS              "\x1f" //  31
+      #define SUPPRESS_GO_AHEAD "\x03"
+      #define ECHO              "\x01" //   1 
       
       // keep telnet session parameters in a structure
       typedef struct {
@@ -255,15 +260,17 @@
         #if USER_MANAGEMENT == NO_USER_MANAGEMENT
 
           tsp = {"root", "", "", (char *) "\r\n# ", connection, 0, 0, 0, 0};
-          tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);          
-          connection->sendData ("Hello " + String (connection->getOtherSideIP ()) + IAC DONT ECHO IAC DO NAWS "!"); // say hello and tell telnet client not to echo, telnet server will do the echoing
+          tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);     
+          // tell the client to go into character mode, not to echo an send its window size, then say hello 
+          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + String (connection->getOtherSideIP ()) + "!\r\nuser: "); 
           dmesg ("[telnetServer] " + tsp.userName + " logged in.");
           connection->sendData ("\r\n\nWelcome " + tsp.userName + ",\r\nyour home directory is " + tsp.homeDir + ",\r\nuse \"help\" to display available commands.\r\n" + tsp.prompt);
         
         #else
 
           tsp = {"", "", "", (char *) "", connection, 0, 0, 0, 0};
-          connection->sendData ("Hello " + String (connection->getOtherSideIP ()) + IAC DONT ECHO IAC DO NAWS "!\r\nuser: "); // say hello and tell telnet client not to echo, telnet server will do the echoing
+          // tell the client to go into character mode, not to echo an send its window size, then say hello 
+          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + String (connection->getOtherSideIP ()) + "!\r\nuser: "); 
           // read user name
           if (13 != __readLineFromClient__ (&tsp.userName, true, &tsp)) goto closeTelnetConnection;
           tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);
@@ -378,20 +385,34 @@
                           *line += c;
                           if (echo) if (!tsp->connection->sendData (&c, 1)) return 0;
                         } else {
-                          // Serial.printf ("%c %i\n", c, c);
-
                           // the only reply we are interested in so far is IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240)
+
+                          // There is a difference between telnet clients. Windows telent.exe for example will only report client window size as a result of
+                          // IAC DO NAWS command from telnet server. Putty on the other hand will report client window size as a reply and will
+                          // continue sending its window size each time client windows is resized. But won't respond to IAC DO NAWS if client
+                          // window size remains the same.
+                          
                           if (c == 255) { // IAC
                             if (!tsp->connection->recvData (&c, 1)) return 0;
-                            if (c == 250) { // SB
-                              if (!tsp->connection->recvData (&c, 1)) return 0;
-                              if (c == 31) { // NAWS
-                                if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol1, 1)) return 0;
-                                if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol2, 1)) return 0;
-                                if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow1, 1)) return 0;
-                                if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow2, 1)) return 0;
-                                // debug: Serial.printf ("[%10lu] [telnet] client window size %i %i   %i %i\n", millis (), tsp->clientWindowCol1, tsp->clientWindowCol2, tsp->clientWindowRow1, tsp->clientWindowRow2);
-                              }
+                            switch (c) {
+                              case 250: // SB
+                                        if (!tsp->connection->recvData (&c, 1)) return 0;
+                                        if (c == 31) { // NAWS
+                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol1, 1)) return 0;
+                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol2, 1)) return 0;
+                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow1, 1)) return 0;
+                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow2, 1)) return 0;
+                                          // debug: Serial.printf ("[%10lu] [telnet] client reported its window size %i %i   %i %i\n", millis (), tsp->clientWindowCol1, tsp->clientWindowCol2, tsp->clientWindowRow1, tsp->clientWindowRow2);
+                                        }
+                                        break;
+                              // in the following cases the 3rd character is following, ignore this one too
+                              case 251:
+                              case 252:
+                              case 253:
+                              case 254:                        
+                                        if (!tsp->connection->recvData (&c, 1)) return 0;
+                              default: // ignore
+                                        break;
                             }
                           }
 
@@ -414,7 +435,7 @@
                         break;              
           } // switch
         } // while
-        return false;
+        return 0;
       }
 
       // ----- built-in commands -----
@@ -480,10 +501,15 @@
                                                                                        return "Wrong syntax. Use free or free -s n (where 0 < n < 300).";
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
-    
-          if (argc == 1)                           return this->__dmesg__ (false, false, tsp);
-          if (argc == 2 && argv [1] == "--follow") return this->__dmesg__ (true, false, tsp);
-                                                   return "Wrong syntax. Use dmesg or dmesg --follow";
+
+          bool f = false;
+          bool t = false;
+          for (int i = 1; i < argc; i++) {
+            if (argv [i] == "--follow") f = true;
+            else if (argv [i] == "-T") t = true;
+            else return "Wrong syntax. Use dmesg or dmesg --follow or dmesg -T or both";
+          }
+          return this->__dmesg__ (f, t, tsp);
 
         } else if (argv [0] == "mkfs.fat") { //-------------------------------- MKFS.FAT
           
@@ -744,10 +770,10 @@
         String s = "";
         do {
           if (s != "") s+= "\r\n";
-          char c [20];
+          char c [25];
           if (trueTime && __dmesgCircularQueue__ [i].time) {
             struct tm st = timeToStructTime (timeToLocalTime (__dmesgCircularQueue__ [i].time));
-            strftime (c, sizeof (c), "[y/m/d H:M:S]", &st);
+            strftime (c, sizeof (c), "[%y/%m/%d %H:%M:%S] ", &st);
           } else {
             sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
           }
@@ -772,8 +798,13 @@
           s = "";
           do {
             s += "\r\n";
-            char c [15];
-            sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
+            char c [25];
+            if (trueTime && __dmesgCircularQueue__ [i].time) {
+              struct tm st = timeToStructTime (timeToLocalTime (__dmesgCircularQueue__ [i].time));
+              strftime (c, sizeof (c), "[%y/%m/%d %H:%M:%S] ", &st);
+            } else {
+              sprintf (c, "[%10lu] ", __dmesgCircularQueue__ [i].milliseconds);
+            }
             s += String (c) + __dmesgCircularQueue__ [i].message;
           } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
           portEXIT_CRITICAL (&__csDmesg__);
@@ -1517,29 +1548,46 @@
           fileLines++;
         }    
 
-        // 3. get information about client window size
-        byte clientWindowColumns; 
-        byte clientWindowRows; 
-        if (tsp->clientWindowCol2) { // we know that client reports window size, ask for latest information (the user might have resized the window since beginning of telnet session)
+        // 3. discard any already pending characters from client
+        char c;
+        while (tsp->connection->available () == TcpConnection::AVAILABLE) tsp->connection->recvData (&c, 1);
+
+        // 4. get information about client window size
+        byte clientWindowColumns = tsp->clientWindowCol2; 
+        byte clientWindowRows = tsp->clientWindowRow2; 
+        if (tsp->clientWindowCol2) { // we know that client reports its window size, ask for latest information (the user might have resized the window since beginning of telnet session)
           tsp->connection->sendData (String (IAC DO NAWS));
-          // client reply that we are expecting ot IAC DO NAWS will be in the form of: IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240)
-          char c = 0;
-          while (c != 255 /* IAC */) if (!tsp->connection->recvData (&c, 1)) return ""; // ignore everything before IAC
-          tsp->connection->recvData (&c, 1); if (c != 250 /* SB */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
-          tsp->connection->recvData (&c, 1); if (c != 31 /* NAWS */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
-          tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowColumns, 1)) return ""; 
-          tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowRows, 1)) return "";
-          tsp->connection->recvData (&c, 1); // should be IAC, won't check if it is OK
-          tsp->connection->recvData (&c, 1); // should be SB, won't check if it is OK
-          tsp->clientWindowCol2 = clientWindowColumns; tsp->clientWindowRow2 = clientWindowRows; 
+          // client reply that we are expecting from IAC DO NAWS will be in the form of: IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240)
+
+          // There is a difference between telnet clients. Windows telent.exe for example will only report client window size as a result of
+          // IAC DO NAWS command from telnet server. Putty on the other hand will report client windows size as a reply and will
+          // continue sending its window size each time client window is resized. But won't respond to IAC DO NAWS if client
+          // window size remains the same. Let's wait 0.5 second, it the reply doesn't arrive it porbably never will.
+
+          unsigned long m = millis (); while (tsp->connection->available () != TcpConnection::AVAILABLE && millis () - m < 500) delay (1);
+          if (tsp->connection->available () == TcpConnection::AVAILABLE) {
+            do {
+              if (!tsp->connection->recvData (&c, 1)) return "";
+            } while (c != 255 /* IAC */); // ignore everything before IAC
+            tsp->connection->recvData (&c, 1); if (c != 250 /* SB */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
+            tsp->connection->recvData (&c, 1); if (c != 31 /* NAWS */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
+            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowColumns, 1)) return ""; 
+            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowRows, 1)) return "";
+            tsp->connection->recvData (&c, 1); // should be IAC, won't check if it is OK
+            tsp->connection->recvData (&c, 1); // should be SB, won't check if it is OK
+            tsp->clientWindowCol2 = clientWindowColumns; tsp->clientWindowRow2 = clientWindowRows; 
+            // debug: Serial.println ("Clinet reported its window size: " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";
+          } else {
+            // debug: Serial.println ("Clinet reported its window size earlier: " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";            
+          }
         } else { // just assume the defaults and hope that the result will be OK
           clientWindowColumns = 80; 
-          clientWindowRows = 25;   
+          clientWindowRows = 24;   
+          // debug: Serial.println ("Goinf with default client window size: " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";                      
         }
-        // debug: Serial.println ("Clinet window size is " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";
         if (clientWindowColumns < 30 || clientWindowRows < 5) return "Clinent telnet windows is too small for vi.";
 
-        // 4. edit 
+        // 5. edit 
         int textCursorX = 0;  // vertical position of cursor in text
         int textCursorY = 0;  // horizontal position of cursor in text
         int textScrollX = 0;  // vertical text scroll offset
@@ -1620,7 +1668,7 @@
           char c = 0;
           delay (1);
           if (!tsp->connection->recvData (&c, 1)) return "";
-          // debug: Serial.printf ("%c = %i\n", c, c);
+          // debug: Serial.printf ("[telnet vi debug] %c = %i\n", c, c);
           switch (c) {
             case 24:  // Ctrl-X
                       if (dirty) {
