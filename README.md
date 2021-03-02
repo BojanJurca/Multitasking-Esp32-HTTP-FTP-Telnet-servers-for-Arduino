@@ -19,6 +19,12 @@ this is log when NTP failed.
 And we are able to manage this issue finally, perhaps Arduino IDE did not erase the chip completely before burn code and rendered something odd.
 
 To uses a new chip and/or erase the chip on the own, it is able to uses 1.5MB FATFS finally, NTP is working too.
+Arduino IDE setting,
+Hardware : NodeMCU EPS-32S, no PSRAM, 4MB FLASH, 80MHZ CPU  
+Arduino IDE compiler setting : 1.5M FATS, 240MHZ CPU, do not follow 40MHZ XTAL of NodeMCU ESP-32S, it will be WDT triggered and constandly resetting.
+![esp32_setting.JPG](esp32_setting.JPG)
+
+
 
 here is the batch file used for investigation and workaround,
 
