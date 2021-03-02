@@ -35,7 +35,10 @@ here is the batch file used for investigation and workaround,
 	pause
 
 
-Authour fix the bug if telnet uses with putty, telnet and dmesg is showing this workaround and result,
+[Authour is very nice and helpful to fix the bug if telnet uses with putty](https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/pull/8#issuecomment-788389107), telnet and dmesg is showing this workaround and result fro me,  
+![telnet_fixed.JPG](telnet_fixed.JPG)
+
+
 
 ---------------------------
 
