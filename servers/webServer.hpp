@@ -94,6 +94,8 @@
                                                   __connection__ = connection;
                                                   __wsRequest__ = wsRequest;
 
+                                                  // debug: Serial.printf ("[websocket debug] %s\n", wsRequest.c_str ());
+
                                                   // do the handshake with the browser so it would consider webSocket connection established
                                                   int i = wsRequest.indexOf ("Sec-WebSocket-Key: ");
                                                   if (i > -1) {
@@ -512,8 +514,9 @@ readingPayload:
             // 3rd handle HTTP request internaly:
             //    - if it is a HTML file name then reply with file content
             //    - reply with error 404 if it is not
-            
-            if (stristr (buffer, (char *) "CONNECTION: UPGRADE")) {
+
+            // debug: Serial.printf ("[httpServer debug] %s\n", buffer);
+            if (stristr (buffer, (char *) "UPGRADE: WEBSOCKET")) {
               connection->setTimeOut (300000); // set time-out to 5 minutes for WebSockets (by default if is 1.5 s for HTTP requests)
               WebSocket *webSocket = new WebSocket (connection, httpRequest); 
               if (webSocket && webSocket->isOpened ()) { // check success
