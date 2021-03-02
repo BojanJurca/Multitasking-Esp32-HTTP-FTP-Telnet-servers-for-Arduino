@@ -1,5 +1,6 @@
 New in release 1.27 (development)
 
   - support for putty telnet client
+  - support for Firefox web browser
   - web server MIME types
   - bug fixes
