@@ -53,6 +53,8 @@ Firefox is not working, Win10 Edge ok, Android chrome ok, any idea whether serve
 here is screen shot with win10 machine, on the left EDGE is ok, on the right firefox used was ver 86. 32 bit, error? 
 ![firefox_NG_Edge_OK.JPG](firefox_NG_Edge_OK.JPG)  
 
+[Authour has patched and working with firefox, clone the project will do](https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/issues/9#issuecomment-789250322)
+
 ---------------------------
 
 
