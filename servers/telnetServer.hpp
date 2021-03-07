@@ -366,10 +366,10 @@
               case 3:   // Ctrl-C
                         *line = "";
                         return 0;
-              case 127: // ignore
               case 10:  // ignore
                         break;
               case 8:   // backspace - delete last character from the buffer and from the screen
+              case 127: // in Windows telent.exe this is del key but putty this backspace with this code so let's treat it the same way as backspace
                         if (line->length () > 0) {
                           *line = line->substring (0, line->length () - 1);
                           if (echo) if (!tsp->connection->sendData ((char *) "\x08 \x08")) return 0; // delete the last character from the screen
@@ -1553,8 +1553,6 @@
         while (tsp->connection->available () == TcpConnection::AVAILABLE) tsp->connection->recvData (&c, 1);
 
         // 4. get information about client window size
-        byte clientWindowColumns = tsp->clientWindowCol2; 
-        byte clientWindowRows = tsp->clientWindowRow2; 
         if (tsp->clientWindowCol2) { // we know that client reports its window size, ask for latest information (the user might have resized the window since beginning of telnet session)
           tsp->connection->sendData (String (IAC DO NAWS));
           // client reply that we are expecting from IAC DO NAWS will be in the form of: IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240)
@@ -1562,30 +1560,30 @@
           // There is a difference between telnet clients. Windows telent.exe for example will only report client window size as a result of
           // IAC DO NAWS command from telnet server. Putty on the other hand will report client windows size as a reply and will
           // continue sending its window size each time client window is resized. But won't respond to IAC DO NAWS if client
-          // window size remains the same. Let's wait 0.5 second, it the reply doesn't arrive it porbably never will.
+          // window size remains the same. Let's wait 0.25 second, it the reply doesn't arrive it porbably never will.
 
-          unsigned long m = millis (); while (tsp->connection->available () != TcpConnection::AVAILABLE && millis () - m < 500) delay (1);
+          unsigned long m = millis (); while (tsp->connection->available () != TcpConnection::AVAILABLE && millis () - m < 250) delay (1);
           if (tsp->connection->available () == TcpConnection::AVAILABLE) {
+            // debug: Serial.printf ("[telnet vi debug] IAC DO NAWS response available in %lu ms\n", (unsigned long) (millis () - m));
             do {
               if (!tsp->connection->recvData (&c, 1)) return "";
             } while (c != 255 /* IAC */); // ignore everything before IAC
             tsp->connection->recvData (&c, 1); if (c != 250 /* SB */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
             tsp->connection->recvData (&c, 1); if (c != 31 /* NAWS */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
-            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowColumns, 1)) return ""; 
-            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &clientWindowRows, 1)) return "";
+            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol2, 1)) return ""; 
+            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow2, 1)) return "";
             tsp->connection->recvData (&c, 1); // should be IAC, won't check if it is OK
             tsp->connection->recvData (&c, 1); // should be SB, won't check if it is OK
-            tsp->clientWindowCol2 = clientWindowColumns; tsp->clientWindowRow2 = clientWindowRows; 
-            // debug: Serial.println ("Clinet reported its window size: " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";
+            // debug: Serial.println ("[telnet vi debug]  clinet reported its window size: " + String (tsp->clientWindowCol2) + " x " + String (tsp->clientWindowRow2)); // return "";
           } else {
-            // debug: Serial.println ("Clinet reported its window size earlier: " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";            
+            // debug: Serial.printf ("[telnet vi debug] IAC DO NAWS response not available in %lu ms, taking previous information\n", (unsigned long) (millis () - m));
           }
         } else { // just assume the defaults and hope that the result will be OK
-          clientWindowColumns = 80; 
-          clientWindowRows = 24;   
-          // debug: Serial.println ("Goinf with default client window size: " + String (clientWindowColumns) + " x " + String (clientWindowRows)); // return "";                      
+          tsp->clientWindowCol2 = 80; 
+          tsp->clientWindowRow2 = 24;   
+          // debug: Serial.println ("[telnet vi debug] Going with default client window size: " + String (tsp->clientWindowCol2) + " x " + String (tsp->clientWindowRow2)); // return "";                      
         }
-        if (clientWindowColumns < 30 || clientWindowRows < 5) return "Clinent telnet windows is too small for vi.";
+        if (tsp->clientWindowCol2 < 30 || tsp->clientWindowRow2 < 5) return "Clinent telnet windows is too small for vi.";
 
         // 5. edit 
         int textCursorX = 0;  // vertical position of cursor in text
@@ -1607,14 +1605,14 @@
           String s = ""; 
        
           if (redrawHeader)   { 
-                                s = "---+"; for (int i = 4; i < clientWindowColumns; i++) s += '-'; 
-                                if (!tsp->connection->sendData ("\x1b[H" + s.substring (0, clientWindowColumns - 28) + " Save: Ctrl-S, Exit: Ctrl-X")) return "";  // ESC[H = move cursor home
+                                s = "---+"; for (int i = 4; i < tsp->clientWindowCol2; i++) s += '-'; 
+                                if (!tsp->connection->sendData ("\x1b[H" + s.substring (0, tsp->clientWindowCol2 - 28) + " Save: Ctrl-S, Exit: Ctrl-X")) return "";  // ESC[H = move cursor home
                                 redrawHeader = false;
                               }
           if (redrawAllLines) {
 
-                                // Redrawing algorithm: straight forward idea is to scan screen lines with text i ∈ [2 .. clientWindowRows - 1], calculate text line on
-                                // this possition: i - 2 + textScrollY and draw visible part of it: line [...].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4).
+                                // Redrawing algorithm: straight forward idea is to scan screen lines with text i ∈ [2 .. tsp->clientWindowRow2 - 1], calculate text line on
+                                // this possition: i - 2 + textScrollY and draw visible part of it: line [...].substring (textScrollX, tsp->clientWindowCol2 - 4 + textScrollX), tsp->clientWindowCol2 - 4).
                                 // When there are frequent redraws the user experience is not so good since we often do not have enough time to redraw the whole screen
                                 // between two key strokes. Therefore we'll always redraw just the line at cursor position: textCursorY + 2 - textScrollY and then
                                 // alternate around this line until we finish or there is another key waiting to be read - this would interrupt the algorithm and
@@ -1627,37 +1625,38 @@
                                   for (int i = 0; (!topReached || !bottomReached) && !(tsp->connection->available () == TcpConnection::AVAILABLE); i++) { 
                                     if (i % 2 == 0) { nextScreenLine -= i; nextTextLine -= i; } else { nextScreenLine += i; nextTextLine += i; }
                                     if (nextScreenLine == 2) topReached = true;
-                                    if (nextScreenLine == clientWindowRows - 1) bottomReached = true;
-                                    if (nextScreenLine > 1 && nextScreenLine < clientWindowRows) {
+                                    if (nextScreenLine == tsp->clientWindowRow2 - 1) bottomReached = true;
+                                    if (nextScreenLine > 1 && nextScreenLine < tsp->clientWindowRow2) {
                                       // draw nextTextLine at nextScreenLine 
+                                      // debug: Serial.printf ("[telnet vi debug] display text line %i at screen position %i\n", nextTextLine + 1, nextScreenLine);
                                       char c [15];
                                       if (nextTextLine < fileLines) {
-                                        sprintf (c, "\x1b[%i;0H%3i|", nextScreenLine, nextTextLine + 1);  // display line number - users would count lines from 1 on whereas program counts them from 0 on
-                                        s = String (c) + pad (line [nextTextLine].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                        sprintf (c, "\x1b[%i;0H%3i|", nextScreenLine, nextTextLine + 1);  // display line number - users would count lines from 1 on, whereas program counts them from 0 on
+                                        s = String (c) + pad (line [nextTextLine].substring (textScrollX, tsp->clientWindowCol2 - 4 + textScrollX), tsp->clientWindowCol2 - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
                                       } else {
-                                        sprintf (c, "\x1b[%i;0H   |", nextScreenLine) + pad (" ", clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
-                                        s = String (c);
+                                        sprintf (c, "\x1b[%i;0H   |", nextScreenLine);
+                                        s = String (c)  + pad (" ", tsp->clientWindowCol2 - 4); // ESC[line;columnH = move cursor to line;column, it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen);
                                       }
                                       if (!tsp->connection->sendData (s)) return "";
-                                    }
+                                    } 
                                   }
                                   if (topReached && bottomReached) redrawAllLines = false; // if we have drown all the lines we don't have to run this code again 
                                 }
                                 
           } else if (redrawLineAtCursor) {
                                 // calculate screen line from text cursor position
-                                s = "\x1b[" + String (textCursorY + 2 - textScrollY) + ";5H" + pad (line [textCursorY].substring (textScrollX, clientWindowColumns - 4 + textScrollX), clientWindowColumns - 4); // ESC[line;columnH = move cursor to line;column (columns go from 1 to clientWindowsColumns - inclusive), it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
+                                s = "\x1b[" + String (textCursorY + 2 - textScrollY) + ";5H" + pad (line [textCursorY].substring (textScrollX, tsp->clientWindowCol2 - 4 + textScrollX), tsp->clientWindowCol2 - 4); // ESC[line;columnH = move cursor to line;column (columns go from 1 to clientWindowsColumns - inclusive), it is much faster to append line with spaces then sending \x1b[0J (delte from cursor to the end of screen)
                                 if (!tsp->connection->sendData (s)) return ""; 
                                 redrawLineAtCursor = false;
                               }
          
           if (redrawFooter)   {                                  
-                                s = "\x1b[" + String (clientWindowRows) + ";0H---+"; for (int i = 4; i < clientWindowColumns; i++) s += '-'; // ESC[line;columnH = move cursor to line;column
+                                s = "\x1b[" + String (tsp->clientWindowRow2) + ";0H---+"; for (int i = 4; i < tsp->clientWindowCol2; i++) s += '-'; // ESC[line;columnH = move cursor to line;column
                                 if (!tsp->connection->sendData (s)) return ""; 
                                 redrawFooter = false;
                               }
           if (message != "")  {
-                                tsp->connection->sendData ("\x1b[" + String (clientWindowRows) + ";2H" + message);         
+                                tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + ";2H" + message);         
                                 message = ""; redrawFooter = true; // we'll clear the message the next time screen redraws
                               }
           
@@ -1668,11 +1667,11 @@
           char c = 0;
           delay (1);
           if (!tsp->connection->recvData (&c, 1)) return "";
-          // debug: Serial.printf ("[telnet vi debug] %c = %i\n", c, c);
+          // debug: Serial.printf ("[telnet vi debug] %c (%i)\n", c, c);
           switch (c) {
             case 24:  // Ctrl-X
                       if (dirty) {
-                        tsp->connection->sendData ("\x1b[" + String (clientWindowRows) + ";2H Save changes (y/n)? ");
+                        tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + ";2H Save changes (y/n)? ");
                         redrawFooter = true; // overwrite this question at next redraw
                         while (true) {                                                     
                           if (!tsp->connection->recvData (&c, 1)) return "";
@@ -1680,9 +1679,8 @@
                           if (c == 'n') break;
                         }
                       } 
-                      tsp->connection->sendData ("\x1b[" + String (clientWindowRows) + ";2H Share and Enjoy ----\r\n");
+                      tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + ";2H Share and Enjoy ----\r\n");
                       return "";
-
             case 19:  // Ctrl-S
 saveChanges:
                       // save changes into fp
@@ -1701,55 +1699,70 @@ saveChanges:
                         if (e) { message = " Could't save changes "; } else { message = " Changes saved "; dirty = 0; }
                       }
                       break;
-
             case 27:  // ESC [ 65 = up arrow, ESC [ 66 = down arrow, ESC[C = right arrow, ESC[D = left arrow, 
                       if (!tsp->connection->recvData (&c, 1)) return "";
-                      if (c == '[') {
-                        if (!tsp->connection->recvData (&c, 1)) return "";
-                        // debug: Serial.printf ("%c = %i\n", c, c);
-                        switch (c) {
-                          case 'A':  // up arrow
-                                    if (textCursorY > 0) textCursorY--; 
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
-                                    break;                          
-                          case 'B':  // down arrow
-                                    if (textCursorY < fileLines - 1) textCursorY++;
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
-                                    break;
-                          case 'C':  // right arrow
-                                    if (textCursorX < line [textCursorY].length ()) textCursorX++;
-                                    else if (textCursorY < fileLines - 1) { textCursorY++; textCursorX = 0; }
-                                    break;
-                          case 'D':  // left arrow
-                                    if (textCursorX > 0) textCursorX--;
-                                    else if (textCursorY > 0) { textCursorY--; textCursorX = line [textCursorY].length (); }
-                                    break;        
-                          case '1': // home
-                                    tsp->connection->recvData (&c, 1); // read final '~'
-                                    textCursorX = 0;
-                                    break;
-                          case '4': // end
-                                    tsp->connection->recvData (&c, 1); // read final '~'
-                                    textCursorX = line [textCursorY].length ();
-                                    break;
-                          case '5': // pgup
-                                    tsp->connection->recvData (&c, 1); // read final '~'
-                                    textCursorY -= (clientWindowRows - 2); if (textCursorY < 0) textCursorY = 0;
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
-                                    break;
-                          case '6': // pgdn
-                                    tsp->connection->recvData (&c, 1); // read final '~'
-                                    textCursorY += (clientWindowRows - 2); if (textCursorY >= fileLines) textCursorY = fileLines - 1;
-                                    if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
-                                    break;                                                                        
-                          default:  // ignore
-                                    // debug: Serial.printf ("ESC[%c (%i)\n", c, c);
-                                    break;
-                        }
+                      switch (c) {
+                        case '[': // ESC [
+                                  if (!tsp->connection->recvData (&c, 1)) return "";
+                                  // debug: Serial.printf ("[telnet vi debug] ESC [ %c (%i)\n", c, c);
+                                  switch (c) {
+                                    case 'A':  // ESC [ A = up arrow
+                                              if (textCursorY > 0) textCursorY--; 
+                                              if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
+                                              break;                          
+                                    case 'B':  // ESC [ B = down arrow
+                                              if (textCursorY < fileLines - 1) textCursorY++;
+                                              if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
+                                              break;
+                                    case 'C':  // ESC [ C = right arrow
+                                              if (textCursorX < line [textCursorY].length ()) textCursorX++;
+                                              else if (textCursorY < fileLines - 1) { textCursorY++; textCursorX = 0; }
+                                              break;
+                                    case 'D':  // ESC [ D = left arrow
+                                              if (textCursorX > 0) textCursorX--;
+                                              else if (textCursorY > 0) { textCursorY--; textCursorX = line [textCursorY].length (); }
+                                              break;        
+                                    case '1': // ESC [ 1 = home
+                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              textCursorX = 0;
+                                              break;
+                                    case '4': // ESC [ 4 = end
+                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              textCursorX = line [textCursorY].length ();
+                                              break;
+                                    case '5': // ESC [ 5 = pgup
+                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              textCursorY -= (tsp->clientWindowRow2 - 2); if (textCursorY < 0) textCursorY = 0;
+                                              if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
+                                              break;
+                                    case '6': // ESC [ 6 = pgdn
+                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              textCursorY += (tsp->clientWindowRow2 - 2); if (textCursorY >= fileLines) textCursorY = fileLines - 1;
+                                              if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
+                                              break;  
+                                    case '3': // ESC [ 3 
+                                              if (!tsp->connection->recvData (&c, 1)) return "";
+                                              // debug: Serial.printf ("[telnet vi debug] ESC [ 3 %c (%i)\n", c, c);
+                                              switch (c) {
+                                                case '~': // ESC [ 3 ~ (126) - putty reports del key as ESC [ 3 ~ (126), since it also report backspace key as del key let' treat del key as backspace                                                                 
+                                                          goto backspace;
+                                                default:  // ignore
+                                                          // debug: Serial.printf ("ESC [ 3 %c (%i)\n", c, c);
+                                                          break;
+                                              }
+                                              break;
+                                    default:  // ignore
+                                              // debug: Serial.printf ("ESC [ %c (%i)\n", c, c);
+                                              break;
+                                  }
+                                  break;
+                         default: // ignore
+                                  // debug: Serial.printf ("ESC %c (%i)\n", c, c);
+                                  break;
                       }
                       break;
-
-            case 8:   // back-space
+            case 8:   // Windows telnet.exe: back-space, putty does not report this code
+backspace:
                       if (textCursorX > 0) { // delete one character left of cursor position
                         line [textCursorY] = line [textCursorY].substring (0, textCursorX - 1) + line [textCursorY].substring (textCursorX);
                         dirty = redrawLineAtCursor = true; // we only have to redraw this line
@@ -1762,8 +1775,7 @@ saveChanges:
                         dirty = redrawAllLines = true; // we need to redraw all visible lines (at least lines from testCursorY down but we wont write special cede for this case)
                       }
                       break; 
-
-            case 127: // delete
+            case 127: // Windows telnet.exe: delete, putty: backspace
                       if (textCursorX < line [textCursorY].length ()) { // delete one character at cursor position
                         line [textCursorY] = line [textCursorY].substring (0, textCursorX) + line [textCursorY].substring (textCursorX + 1);
                         dirty = redrawLineAtCursor = true; // we only need to redraw this line
@@ -1775,7 +1787,6 @@ saveChanges:
                         }
                       }
                       break;
-
             case '\n': // enter
                       if (fileLines >= MAX_LINES) {
                         message = " Too many lines ";
@@ -1789,31 +1800,28 @@ saveChanges:
                         textCursorY++;
                       }
                       break;
-                      
             case '\r':  // ignore
                       break;
-                      
             default:  // normal character
-                      if (c == '\t') s = "  "; else s = String (c); // treat tab sa 2 spaces
+                      if (c == '\t') s = "    "; else s = String (c); // treat tab as 4 spaces
                       line [textCursorY] = line [textCursorY].substring (0, textCursorX) + s + line [textCursorY].substring (textCursorX); // inser character into line textCurrorY at textCursorX position
                       dirty = redrawLineAtCursor = true; // we only have to redraw this line
                       textCursorX += s.length ();
                       break;
-                      
           }         
           // if cursor has moved - should we scroll?
           {
-            if (textCursorX - textScrollX >= clientWindowColumns - 4) {
-              textScrollX = textCursorX - (clientWindowColumns - 4) + 1; // scroll left if the cursor fell out of right client window border
+            if (textCursorX - textScrollX >= tsp->clientWindowCol2 - 4) {
+              textScrollX = textCursorX - (tsp->clientWindowCol2 - 4) + 1; // scroll left if the cursor fell out of right client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
             if (textCursorX - textScrollX < 0) {
               textScrollX = textCursorX; // scroll right if the cursor fell out of left client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
-            if (textCursorY - textScrollY >= clientWindowRows - 2) {
+            if (textCursorY - textScrollY >= tsp->clientWindowRow2 - 2) {
               // Serial.println ("scroll up");
-              textScrollY = textCursorY - (clientWindowRows - 2) + 1; // scroll up if the cursor fell out of bottom client window border
+              textScrollY = textCursorY - (tsp->clientWindowRow2 - 2) + 1; // scroll up if the cursor fell out of bottom client window border
               redrawAllLines = true; // we need to redraw all visible lines
             }
             if (textCursorY - textScrollY < 0) {
