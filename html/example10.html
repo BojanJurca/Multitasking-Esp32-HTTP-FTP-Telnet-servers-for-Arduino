@@ -9,12 +9,10 @@
         var ws = new WebSocket ("ws://" + self.location.host + "/example10_WebSockets"); // open webSocket connection
 				
         ws.onopen = function () {
-          alert ("WebSocket connection established.");
 
           // ----- send text data -----
 
           ws.send ("Hello webSocket server, after this text I'm sending 32 16 bit binary integers."); 
-          // alert ("Text sent over WebSocket.");
 
           // ----- send binary data -----
 
@@ -23,7 +21,6 @@
           fibonacciSequence [1] = 13;
           for (var i = 2; i < 32; i ++) fibonacciSequence [i] = fibonacciSequence [i - 1] + fibonacciSequence [i - 2]; 
           ws.send (fibonacciSequence);
-          // alert ("Binary data sent over WebSocket.");
         };
 
         ws.onmessage = function (evt) { 
@@ -62,7 +59,7 @@
         };
 				
         ws.onclose = function () { 
-          alert ("WebSocket connection is closed."); 
+           alert ("WebSocket connection is closed."); 
         };
 
       } else {
