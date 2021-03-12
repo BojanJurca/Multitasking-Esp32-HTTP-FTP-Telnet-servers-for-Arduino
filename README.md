@@ -60,7 +60,7 @@ You can use the following commands:
    - mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
    - rm fileName
    - passwd or passwd userName
-  useradd -u userId -d userHomeDirectory userName (where userId > 1000)
+   - useradd -u userId -d userHomeDirectory userName (where userId > 1000)
    - userdel userName
    - ifconfig (or use ipconfig instead of ifconfig)
    - iw
