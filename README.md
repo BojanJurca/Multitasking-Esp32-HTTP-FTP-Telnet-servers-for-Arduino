@@ -44,6 +44,7 @@ You can use the following commands:
    - ntpdate or ntpdate -u or ntpdate -u ntpServer
    - crontab or crontab -l
    - free or free -s n (where 0 < n < 300)
+   - mpstat
    - dmesg or dmesg --follow or dmesg -T or both
    - mkfs.fat
    - fs_info

@@ -1,4 +1,4 @@
-New in release 1.27 (development)
+New in release 1.27
 
   - support for putty telnet client
   - support for Firefox web browser
