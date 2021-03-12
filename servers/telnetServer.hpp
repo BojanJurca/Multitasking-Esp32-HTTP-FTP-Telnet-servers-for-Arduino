@@ -42,6 +42,7 @@
  *            added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
  *            October 10, 2020, Bojan Jurca
  *          - putty support,
+ *            mpstat command
  *            bug fixes
  *            March 1, 2021, Bojan Jurca
  *            
@@ -52,7 +53,7 @@
   #define __TELNET_SERVER__
 
   #include <WiFi.h>
-  #include "common_functions.h"   // pad, cpuMHz
+  #include "common_functions.h"   // pad
   #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp  
   #include "user_management.h"    // telnetServer.hpp needs user_management.h for login, home directory, ...
   #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
@@ -97,7 +98,7 @@
 
   // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
   
-  #define UNAME String (MACHINETYPE) + " (" + String (cpuMHz) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
+  #define UNAME String (MACHINETYPE) + " (" + String (ESP.getCpuFreqMHz ()) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
 
   // find and report reset reason (this may help with debugging)
   #include <rom/rtc.h>
@@ -499,6 +500,12 @@
           if (argc == 1)                                                               return this->__free__ (0, tsp);
           if (argc == 3 && argv [1] == "-s" && (n = argv [2].toInt ()) > 0 && n < 300) return this->__free__ (n, tsp);
                                                                                        return "Wrong syntax. Use free or free -s n (where 0 < n < 300).";
+
+        } else if (argv [0] == "mpstat") { //---------------------------------- MPSTAT
+    
+          long n;
+          if (argc == 1) return this->__mpstat__ (tsp);
+                         return "Wrong syntax. Use mpstat.";
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
 
@@ -761,6 +768,90 @@
           }
         } while (delaySeconds);
         return "";
+      }
+
+      String __mpstat__ (telnetSessionParameters *tsp) {
+        static TaskHandle_t core0IdleCounter = NULL;
+        static TaskHandle_t core1IdleCounter = NULL;
+        static unsigned long core0Count = 0;
+        static unsigned long core1Count = 0;
+        static unsigned long maxCount = ESP.getCpuFreqMHz () < 240 ? ( ESP.getCpuFreqMHz () < 160 ? 100000 : 220000 ) : 330000; // initial guess
+        // we have to make sure that ony one counter for each core runs even if there are more mpstat commands running at the same time
+        static SemaphoreHandle_t mpstatSemaphore = xSemaphoreCreateMutex ();
+        static int mpstatCounter = 0;
+        String retVal = "";
+
+        // start idle counters
+        xSemaphoreTake (mpstatSemaphore, portMAX_DELAY);
+        if (++mpstatCounter == 1) {
+          // start both idle counters
+          #define tskIDLE_PRIORITY 0
+          if (pdPASS != xTaskCreatePinnedToCore ([] (void *core0Count) { 
+                                                                          esp_task_wdt_delete (NULL);
+                                                                          unsigned long previousMillis = millis (); 
+                                                                          unsigned long cnt = 0;
+                                                                          while (true) { 
+                                                                            cnt ++;
+                                                                            if (millis () - previousMillis >= 1000) {
+                                                                              previousMillis = millis (); 
+                                                                              *(unsigned long *) core0Count = cnt;
+                                                                              cnt = 0;
+                                                                            } 
+                                                                          }  
+                                                                        }, "core0IdleCounter", 1024, (void *) &core0Count, tskIDLE_PRIORITY, &core0IdleCounter, 0)) { core0IdleCounter = NULL; retVal = "Can't start counters."; }
+          if (pdPASS != xTaskCreatePinnedToCore ([] (void *core1Count) { 
+                                                                          esp_task_wdt_delete (NULL);
+                                                                          unsigned long previousMillis = millis (); 
+                                                                          unsigned long cnt = 0;
+                                                                          while (true) { 
+                                                                            cnt ++;
+                                                                            if (millis () - previousMillis >= 1000) {
+                                                                              previousMillis = millis (); 
+                                                                              *(unsigned long *) core1Count = cnt;
+                                                                              cnt = 0;
+                                                                            } 
+                                                                          }  
+                                                                        }, "core1IdleCounter", 1024, (void *) &core1Count, tskIDLE_PRIORITY, &core1IdleCounter, 1)) { core1IdleCounter = NULL; retVal = "Can't start counters."; }
+        }
+        xSemaphoreGive (mpstatSemaphore);
+
+        // read and display idle counts
+        delay (100);
+        if (!tsp->connection->sendData ("            CPU 0 idle   CPU 1 idle\r\n")) retVal = "Client disconnected.";
+        while (retVal == "") {
+          delay (1000);
+          if (core0Count > maxCount) maxCount = core0Count;
+          if (core1Count > maxCount) maxCount = core1Count;
+          // debug:
+          Serial.printf ("[telnetServer mpstat debug] maxCount = %lu\n", maxCount);
+          char c [15];
+          time_t l = getLocalTime ();
+          if (l) {
+            struct tm st = timeToStructTime (getLocalTime ());
+            strftime (c, sizeof (c), "%H:%M:%S", &st);
+          } else {
+            sprintf (c, "%8lu", (unsigned long) millis ());
+          }
+          char output [100];
+          sprintf (output, "%s  %8lu %%   %8lu %%\r\n", c, 100 * core0Count / maxCount, 100 * core1Count / maxCount);
+          if (!tsp->connection->sendData (output, strlen (output))) retVal = "Client disconnected.";
+          while (tsp->connection->available () == TcpConnection::AVAILABLE) {
+            char c = 0;
+            if (!tsp->connection->recvData (&c, sizeof (c))) retVal = "Client disconnected.";
+            if (c == 3 || c >= ' ') retVal = " "; // break if user pressed Ctrl-C or any key
+          }
+        }
+        
+        // stop idle counters
+        xSemaphoreTake (mpstatSemaphore, portMAX_DELAY);
+        if (--mpstatCounter == 0) {
+          // stop both idle counters
+          if (core0IdleCounter) { vTaskDelete (core0IdleCounter); core0IdleCounter = NULL; }
+          if (core1IdleCounter) { vTaskDelete (core1IdleCounter); core1IdleCounter = NULL; }
+        }
+        xSemaphoreGive (mpstatSemaphore);
+
+        return retVal;
       }
 
       inline String __dmesg__ (bool follow, bool trueTime, telnetSessionParameters *tsp) __attribute__((always_inline)) { // displays dmesg circular queue over telnet connection

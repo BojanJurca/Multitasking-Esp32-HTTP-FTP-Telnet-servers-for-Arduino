@@ -8,7 +8,7 @@
 
 // #define USER_MANAGEMENT NO_USER_MANAGEMENT          
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT 
-//   #define ROOT_PASSWORD "password" 
+//   #define ROOT_PASSWORD "rootpassword" 
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT   
 #include "user_management.h"
 #include "ftpServer.hpp"
