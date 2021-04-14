@@ -20,7 +20,13 @@ And we are able to manage this issue finally, perhaps Arduino IDE did not erase 
 
 To uses a new chip and/or erase the chip on the own, it is able to uses 1.5MB FATFS finally, NTP is working too.  
 Hardware : NodeMCU EPS-32S, 40MHZ XTAL, no PSRAM, 4MB FLASH  
-Arduino IDE compiler setting : 1.5M FATS, 240MHZ CPU, do not follow 40MHZ XTAL of NodeMCU ESP-32S, it will be WDT triggered and constandly resetting.
+Arduino IDE compiler setting :   
+```
+1.5M FATS, 
+240MHZ CPU, 
+do not follow 40MHZ XTAL of NodeMCU ESP-32S, it will be WDT triggered and constandly resetting.
+```
+
 ![esp32_setting.JPG](esp32_setting.JPG)
 
 
