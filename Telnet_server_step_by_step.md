@@ -294,8 +294,8 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
       if (!tsp->connection->sendData (s)) return "Connection is closed.";
       delay (1000);
     }
-                                  // tell telnetServer that the command has already been handeled by returning something else than "" 
-    return "Sampling finished.";  // this text will be returned to telnet client as a response to "show samples" command 
+                                     // tell telnetServer that the command has already been handeled by returning something else than "" 
+    return "Sampling has finished."; // this text will be returned to telnet client as a response to "show samples" command 
     
   } 
 
@@ -357,7 +357,7 @@ analog value on pin 36 is 0
 analog value on pin 36 is 0
 analog value on pin 36 is 0
 analog value on pin 36 is 0
-Sampling finished.
+Sampling has finished.
 #
 ```
 
@@ -366,7 +366,107 @@ Sampling finished.
 Check if user is typing something while the command is running inside telnetCommandHandler.
 
 ```C++
-#
+#include <WiFi.h>
+
+// configure your ESP32 server
+
+#define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here - this is how your ESP32 server will present itself to network, this text is also used by uname telnet command
+#define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here - this text is only used by uname telnet command
+
+// file system holds all configuration files and also some telnet commands (cp, rm ...) deal with files so this is necessary (don't forget to change partition scheme to one that uses FAT (Tools | Partition scheme |  ... first)
+
+#include "./servers/file_system.h"
+
+// configure your network connection - we are only going to connect to WiFi router in STAtion mode and not going to set up an AP mode in this example
+
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           "" // HOSTNAME 
+#define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"      // must have at least 8 characters 
+#include "./servers/network.h"
+
+// configure the way ESP32 server is going to deal with users - telnet sever may require loging in first, this module also defines the location of telnet help.txt file
+
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
+// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
+#include "./servers/user_management.h"
+
+// configure the way ESP32 server is going to handle time
+
+  // configure local time zone - this affects the way telnet commands display your local time
+  
+  // define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
+  // ... or some time zone in between - see time_functions.h ...
+  // #define TIMEZONE  EASTERN_TIMEZONE
+  // (default) #define TIMEZONE  CET_TIMEZONE               
+  
+  // define NTP servers ESP32 server is going to use for time sinchronization
+  
+  #define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
+  #define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
+  #define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
+  #include "./servers/time_functions.h"     
+
+// include telnetServer.hpp
+
+#include "./servers/telnetServer.hpp"                           // include Telnet server
+
+
+String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { // - must be reentrant!
+
+  // handle "show samples" command:
+  
+  if (argc == 2 && argv [0] == "show" && argv [1] == "samples") {
+    while (true) {
+
+      while (tsp->connection->available () == TcpConnection::AVAILABLE) {
+        char c;
+        if (!tsp->connection->recvData (&c, sizeof (c))) return "Connection is closed.";
+        if (c == 3) return "User pressed Ctrl-C\r\n"; // return if user presses Ctrl-C
+      }
+      
+      String s = "analog value on pin 36 is " + String (analogRead (36)) + "\r\n";
+      if (!tsp->connection->sendData (s)) return "Connection is closed.";
+      delay (1000);
+    }
+    
+  } 
+
+  return ""; // telnetCommand has not been handled by telnetCommandHandler - tell telnetServer to handle it internally by returning "" reply
+}
+
+
+void setup () {
+  Serial.begin (115200);
+ 
+  // FFat.format ();
+  mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
+
+  // uncomment the following line if you want your ESP32 server to synchronize its time with NTP server authomatically
+  // startCronDaemonAndInitializeItAtFirstCall (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
+                                                                      // creates empty /etc/crontab, reads it at start up and executes cronHandler when the time is right
+                                                                      // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
+
+  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+  
+  // start telnet server
+  telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, // <- pass address of your telnet command handler function to telnet server 
+                                              16 * 1024,              // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
+                                              "0.0.0.0",              // start telnet server on all available ip addresses
+                                              23,                     // telnet port
+                                              NULL);                  // use firewall callback function for telnet server (replace with NULL if not needed)
+  if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) dmesg ("[telnetServer] did not start.");
+
+  // add your own code as needed ...
+  
+}
+
+void loop () {
+                
+}
 ```
 
 Output examlpe:
@@ -376,10 +476,15 @@ Hello 10.18.1.88!
 user: root
 password: rootpassword
 
+Welcome root,
+your home directory is /,
+use "help" to display available commands.
 
+# show samples
+analog value on pin 36 is 0
+analog value on pin 36 is 0
+analog value on pin 36 is 0
+User pressed Ctrl-C
 
+#
 ```
-
-# ... to be continued …
-
-
