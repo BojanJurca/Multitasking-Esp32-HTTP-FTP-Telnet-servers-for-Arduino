@@ -1,6 +1,6 @@
 # Step-by-step guide to do something at specific time in ESP32_web_ftp_telnet_server_template
 
-ESP32_web_ftp_telnet_server_template uses two things that enables you run specific routines at specific time. The first is cronDaemon and the second is cron table.
+ESP32_web_ftp_telnet_server_template uses two things that enables you to run specific routines at specific time. The first is cronDaemon and the second is cron table.
 CronDaemon is a special task or process that runs inside ESP32 server and is responsible for two things:
 -	The first is to update internal ESP32 clock with NTP server(s) once a day. ESP32 server must be aware of current time first if it wants to execute something at specific time.
 -	The second is to constantly check the content of cron table inside ESP32 server memory and calls cornHandler function provided by your program when the time is right. 
@@ -147,7 +147,6 @@ CronDaemon doesn’t handle cron table commands by itself. We’ll have to provi
 
 
 // cronHandller function
-
 
 void cronHandler (String& cronCommand) {
 
