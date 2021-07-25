@@ -30,7 +30,11 @@ You can go directly to Setup instructions and examples now or continue reading t
    - support for HTTP 1.1 keep-alive directive,
    - optional firewall for incoming requests.
 
-**telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Built-in commands implemented so far:
+**telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. 
+
+-----> Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
+
+Built-in commands implemented so far:
 
 You can use the following commands:
    - quit                                            - Stops telnet session. You can also use Ctrl-C instead.
@@ -76,10 +80,6 @@ Other features:
    - threaded Telnet sessions,
    - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
-
-
-**-----> Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
-
 
 
 **ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
