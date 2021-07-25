@@ -88,4 +88,11 @@ void loop () {
 
 A stack of 16 KB seems a lot at first glance but there are only two telnet commands that require this amount of stack: tree and vi. If you decide not to use these commands in your project stack may be much smaller.
 
-... to be continued …
+# ... to be continued …
+
+## 2. Handle (some of the) telnet commands inside your project (a working example)
+This example shows how you can handle some telnet commands from your code by adding telnetCommandHandler function. This method is suitable for commands that return quickly.
+
+## 3. Handle long running telnet commands inside your project (a working example)
+If you intend to run telnet commands that run longer but want to display intermediate results before they end, you will have to use telnetSessionParameters.
+
