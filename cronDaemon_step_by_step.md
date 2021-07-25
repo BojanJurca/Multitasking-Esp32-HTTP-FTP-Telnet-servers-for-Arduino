@@ -99,12 +99,136 @@ Current local time is 2021/07/25 20:52:31
 CronDaemon doesn’t handle cron table commands by itself. We’ll have to provide cronHandler function that would do this task. This example will only handle cron commands in /etc/crontab file so we will also start telnet server that will enable us to edit /etc/crontab file. 
 
 ```C++
+#include <WiFi.h>
+
+// configure your ESP32 server
+
+#define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here - this is how your ESP32 server will present itself to network, this text is also used by uname telnet command
+#define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here - this text is only used by uname telnet command
+
+// file system holds all configuration files like /etc/ntp.conf or /etc/crontab
+
+#include "./servers/file_system.h"
+
+// configure your network connection - we are only going to connect to WiFi router in STAtion mode and not going to set up an AP mode in this example
+
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           "" // HOSTNAME 
+#define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"      // must have at least 8 characters 
+#include "./servers/network.h"
+
+// provide user management for telnet server
+
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
+// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
+#include "./servers/user_management.h"
+
+// configure the way ESP32 server is going to handle time
+
+  // configure local time zone - this affects the way telnet commands display your local time
+  
+  // define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
+  // ... or some time zone in between - see time_functions.h ...
+  // #define TIMEZONE  EASTERN_TIMEZONE
+  // (default) #define TIMEZONE  CET_TIMEZONE               
+  
+  // define NTP servers ESP32 server is going to use for time sinchronization
+  
+  #define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
+  #define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
+  #define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
+  #include "./servers/time_functions.h"     
+
+// include telnetServer.hpp
+
+#include "./servers/telnetServer.hpp"                           // include Telnet server
 
 
+// cronHandller function
+
+
+void cronHandler (String& cronCommand) {
+
+  // handle cron command
+  if (cronCommand == "execute15secondsPastEachMinute")
+    Serial.println (cronCommand + " executed at " + timeToString (getLocalTime ()));
+
+}
+
+
+void setup () {
+  Serial.begin (115200);
+ 
+  // FFat.format ();
+  mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
+
+  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
+                                                                      // creates empty /etc/crontab, reads it at start up and executes cronHandler when the time is right
+                                                                      // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
+
+  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+
+
+  // start telnet server
+  telnetServer *telnetSrv = new telnetServer (NULL, // no telnetCommandHandler 
+                                              16 * 1024,              // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
+                                              "0.0.0.0",              // start telnet server on all available ip addresses
+                                              23,                     // telnet port
+                                              NULL);                  // use firewall callback function for telnet server (replace with NULL if not needed)
+  if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) dmesg ("[telnetServer] did not start.");
+
+  // add your own code as needed ...
+  
+}
+
+void loop () {
+
+}
+```
+
+First we have to edit /etc/crontab file. Its structure is pretty much like any Unix/Linux crontab file (with minor exception that also a field for seconds is added):
+
+```
+C:\>telnet 10.18.1.114
+Hello 10.18.1.88!
+user: root
+password: rootpassword
+
+Welcome root,
+your home directory is /,
+use "help" to display available commands.
+
+# vi /etc/crontab
+
+---+---------------------------------------------------------------------------------------- Save: Ctrl-S, Exit: Ctrl-X
+  1|# scheduled tasks (in local time) - reboot for changes to take effect
+  2|#
+  3|# .------------------- second (0 - 59 or *)
+  4|# |  .---------------- minute (0 - 59 or *)
+  5|# |  |  .------------- hour (0 - 23 or *)
+  6|# |  |  |  .---------- day of month (1 - 31 or *)
+  7|# |  |  |  |  .------- month (1 - 12 or *)
+  8|# |  |  |  |  |  .---- day of week (0 - 7 or *; Sunday=0 and also 7)
+  9|# |  |  |  |  |  |
+ 10|# *  *  *  *  *  * cronCommand to be executed
+ 11|# * 15  *  *  *  * exampleThatRunsQuaterPastEachHour
+ 12| 15  *  *  *  *  * execute15secondsPastEachMinute
+   |
+   |
+---+--------------------------------------------------------------------------------------------------------------------
+
+# reboot
 ```
 
 Output examlpe:
 ```
-Current local time is 2021/07/25 20:52:31
+[     15083] [time] time set to 2021/07/25 21:26:24.
+execute15secondsPastEachMinute executed at 2021/07/25 21:27:15
+execute15secondsPastEachMinute executed at 2021/07/25 21:28:15
+execute15secondsPastEachMinute executed at 2021/07/25 21:29:15
 ```
 
