@@ -88,7 +88,35 @@ void loop () {
 
 A stack of 16 KB seems a lot at first glance but there are only two telnet commands that require this amount of stack: tree and vi. If you decide not to use these commands in your project stack may be much smaller.
 
-# ... to be continued …
+Output examlpe:
+```
+c:\>telnet <YOUR ESP32 IP>
+Hello 10.18.1.88!
+user: root
+password: rootpassword
+
+Welcome root,
+your home directory is /,
+use "help" to display available commands.
+
+# tree
+drw-rw-rw-   1 root     root                0  Jan 01 00:00      /
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /etc
+-rw-rw-rw-   1 root     root              119  Jan 01 01:00      /etc/passwd
+-rw-rw-rw-   1 root     root              166  Jan 01 01:00      /etc/shadow
+-rw-rw-rw-   1 root     root              151  Jan 01 01:00      /etc/dhcpcd.conf
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /etc/wpa_supplicant
+-rw-rw-rw-   1 root     root              126  Jan 01 01:00      /etc/wpa_supplicant/wpa_supplicant.conf
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /etc/hostapd
+-rw-rw-rw-   1 root     root              152  Jan 01 01:00      /etc/hostapd/hostapd.conf
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /var
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /var/www
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /var/www/html
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /var/telnet
+drw-rw-rw-   1 root     root                0  Jan 01 01:00      /network
+-rw-rw-rw-   1 root     root              294  Jan 01 01:00      /network/interfaces
+#
+```
 
 ## 2. Handle (some of the) telnet commands inside your project (a working example)
 This example shows how you can handle some telnet commands from your code by adding telnetCommandHandler function. This method is suitable for commands that return quickly.
@@ -187,6 +215,26 @@ void loop () {
                 
 }
 ```
+
+Output examlpe:
+```
+c:\>telnet <YOUR ESP32 IP>
+user: root
+password: rootpassword
+
+Welcome root,
+your home directory is /,
+use "help" to display available commands.
+
+# turn led on
+LED is on.
+#
+```
+
+
+# ... to be continued …
+
+
 
 ## 3. Handle long running telnet commands inside your project (a working example)
 If you intend to run telnet commands that run longer but want to display intermediate results before they end, you will have to use telnetSessionParameters.
