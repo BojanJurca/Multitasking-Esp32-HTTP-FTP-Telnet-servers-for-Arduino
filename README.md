@@ -144,6 +144,8 @@ By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functi
 
 **cronDaemon** scans crontab table and executes tasks at specified time. You can schedule tasks from code or write them in to /etc/crontab file (see examples). 
 
+-----> Please see [Step-by-step guide to do something at specific time](cronDaemon_step_by_step.md) for more information.
+
 
 ## Setup instructions
 
