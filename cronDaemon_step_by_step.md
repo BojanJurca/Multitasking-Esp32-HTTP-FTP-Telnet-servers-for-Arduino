@@ -192,7 +192,7 @@ void loop () {
 First we have to edit /etc/crontab file. Its structure is pretty much like any Unix/Linux crontab file (with minor exception that also a field for seconds is added):
 
 ```
-C:\>telnet 10.18.1.114
+C:\>telnet <your ESP32  IP>
 Hello 10.18.1.88!
 user: root
 password: rootpassword
