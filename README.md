@@ -33,41 +33,43 @@ You can go directly to Setup instructions and examples now or continue reading t
 **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. Built-in commands implemented so far:
 
 You can use the following commands:
-   - quit
-   - clear (or use cls instead of clear)
-   - help
-   - uname
-   - uptime
-   - reboot
-   - reset
-   - date or date -s YYYY/MM/DD hh:mm:ss (in 24-hour format)
-   - ntpdate or ntpdate -u or ntpdate -u ntpServer
-   - crontab or crontab -l
-   - free or free -s n (where 0 < n < 300)
-   - mpstat
-   - dmesg or dmesg --follow or dmesg -T or both
-   - mkfs.fat
-   - fs_info
-   - ls or ls directoryName (or use dir instead of ls)
-   - tree or tree directoryName
-   - mkdir directoryName
-   - rmdir directoryName
-   - cd directoryName or cd ..
-   - pwd
-   - cat fileName or cat > fileName (or use type instead of ls)
-   - vi fileName
-   - cp existingFileName newFileName (or use copy instead of cp)
-   - mv existingFileName newFileName or mv existingDirectoryName newDirectoryName
-   - rm fileName
-   - passwd or passwd userName
-   - useradd -u userId -d userHomeDirectory userName (where userId > 1000)
-   - userdel userName
-   - ifconfig (or use ipconfig instead of ifconfig)
-   - iw
-   - arp
-   - ping targetIP
-   - telnet tergetIP
-   - curl http://url or curl method http://url (where method is GET, PUT, ...)
+   - quit                                            - Stops telnet session. You can also use Ctrl-C instead.
+   - clear                                           - Clears screen. You can also use cls instead.
+   - help                                            - Displays this file.
+   - uname                                           - Displays basic ESP32 server information.
+   - uptime                                          - Displays the time ESP32 server has been running.
+   - reboot                                          - Causes soft reboot of ESP32.
+   - reset                                           - Causes hard reboot of ESP32.
+   - date or date -s YYYY/MM/DD hh:mm:ss             - Displays and sets date/time (in 24-hour format).
+   - ntpdate or ntpdate -u or ntpdate -u ntpServer   - Makes ESP32 to synchronize time with NTP server.
+   - crontab or crontab -l                           - Displays current content of cron table in ESP32 server memory.
+   - free or free -s n (where 0 < n < 300)           - Displays free ESP32 memory.
+   - dmesg or dmesg --follow or dmesg -T or both     - Displays ESP32 server messages.
+   - mkfs.fat                                        - Formats (also erases) ESP32 flash disk with FAT file system.
+   - fs_info                                         - Displays basic information about flash disk FAT file system.
+   - ls or ls directoryName                          - Lists directory content. You can also use dir instead.
+   - tree or tree directoryName                      - Lists directory subtree content.
+   - mkdir directoryName                             - Makes a new directory.
+   - rmdir directoryName                             - Removes existing directory.
+   - cd directoryName or cd ..                       - Changes current working directory.
+   - pwd                                             - Displays current working directory name.
+   - cat fileName                                    - Displays content of text file. You can also use type instead.
+   - cat > fileName                                  - Creates a new file from what you type on console. End it with Ctrl-Z.
+   - vi fileName                                     - A basic text editor for small files.
+   - cp existingFileName newFileName                 - Copies content of one file to another. You can also use copy instead.
+   - mv existingFileName newFileName                 - Renames the file.
+   - mv existingDirectoryName newDirectoryName       - Renames the directory
+   - rm fileName                                     - Removes (deletes) the file.
+   - passwd or passwd userName                       - Changes password of current user or another user (only root).
+   - useradd -u userId -d userHomeDirectory userName - Creates a new user. Unique userId should be > 1000 (only root).
+   - userdel userName                                - Deletes the user (only root).
+   - ifconfig (or use ipconfig instead of ifconfig)  - Displays basic network configuration.
+   - iw                                              - Displays basic WiFi information.
+   - arp                                             - Displays current content of ARP table.
+   - ping targetIP                                   - Tests if another network device is reachable form ESP32 server.
+   - telnet targetIP                                 - Establishes telnet session from ESP32 server to another device.
+   - curl http://url or curl method http://url       - Tests sending HTTP request from ESP32 server to another device.
+                                                    (method = GET, PUT, ...)
 
 Other features:
 
@@ -105,22 +107,22 @@ Features:
 
 **File system** is needed for storing configuration files, .html files used by web server, etc. FAT flash file system is used. Make sure you compile your sketch for one of FAT partition schemas (Tool | Partition Scheme).
 
-**Configuration files** Esp32_web_ftp_telnet_server_template uses Unix / Linux / Raspbian like network configuration files:
+**Configuration files** Esp32_web_ftp_telnet_server_template uses Unix/Linux like network configuration files (you can edit these files yourself with vi telnet editor):
 
-   - /etc/passwd contains users' accounts information
-   - /etc/shadow contains users' passwords
-   - /network/interfaces contains STA(tion) configuration
-   - /etc/wpa_supplicant/wpa_supplicant.conf contains STA(tion) credentials
-   - /etc/dhcpcd.conf contains A(ccess) P(oint) configuration
-   - /etc/hostapd/hostapd.conf contains A(ccess) P(oint) credentials
-   - /etc/ntp.conf contains NTP time servers' names
-   - /etc/crontab contains cheduled tasks  
+   - /etc/passwd                                     - Contains users' accounts information.
+   - /etc/shadow                                     - Contains hashed users' passwords.
+   - /network/interfaces                             - Contains WiFi STA(tion) configuration.
+   - /etc/wpa_supplicant/wpa_supplicant.conf         - Contains WiFi STA(tion) credentials.
+   - /etc/dhcpcd.conf                                - Contains WiFi A(ccess) P(oint) configuration.
+   - /etc/hostapd/hostapd.conf                       - Contains WiFi A(ccess) P(oint) credentials.
+   - /etc/ntp.conf                                   - Contains NTP time servers names.
+   - /etc/crontab                                    - Contains scheduled tasks.
 
 These files are created at first run of your sketch with default settings (you can modify default settings in source code before you run the sketch for the first time). 
 
 **User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
 
-   - UNIX, LINUX, Raspbian like (using user management files - this is the default setting) - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT,
+   - Unix/Linux like (using user management files - this is the default setting) - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT,
    - hardcoded (username is root, password is hardcoded in to Arduino sketch constants) - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT,
    - no user management at all (everyone can Telnet or FTP to ESP32 servers without password) - use #define USER_MANAGEMENT   NO_USER_MANAGEMENT.
 
@@ -513,7 +515,7 @@ time_t t = getGmt ();
 if (!t) {
   Serial.printf ("[example 08] current time has not been obtained from NTP server(s) yet\n");
 } else {
-  Serial.printf ("[example 08] current UNIX time is %li\n", t);
+  Serial.printf ("[example 08] current Unix time is %li\n", t);
 
   char str [30];
   time_t l = timeToLocalTime (t); // alternativelly you can use l = getLocalTime ();
@@ -783,7 +785,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
 
 **Example 12 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
 
-Telnet server provides Unix / Linux / Raspbian like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it, connect to your ESP32 with telnet client and type dmesg command.
+Telnet server provides Unix/Linux like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it, connect to your ESP32 with telnet client and type dmesg command.
 
 ![Screenshot](dmesg.png)
 
