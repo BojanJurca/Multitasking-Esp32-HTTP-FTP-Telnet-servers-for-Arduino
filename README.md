@@ -78,7 +78,8 @@ Other features:
    - optional firewall for incoming connections.
 
 
-Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
+**-----> Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
+
 
 
 **ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
