@@ -96,7 +96,8 @@ Current local time is 2021/07/25 20:52:31
 
 
 ## 2. Handling /etc/crontab (a working example)
-CronDaemon doesn’t handle cron table commands by itself. We’ll have to provide cronHandler function that would do this task. This example will only handle cron commands in /etc/crontab file so we will also start telnet server that will enable us to edit /etc/crontab file with the help of vi command. 
+CronDaemon doesn’t handle cron table commands by itself. We’ll have to provide cronHandler function that would do this task. This example will only handle cron commands in /etc/crontab file so we will also start telnet server that will enable us to edit /etc/crontab file with the help of vi command.
+Don't forget to change partition scheme to one that uses FAT (Tools | Partition scheme |  ...).
 
 ```C++
 #include <WiFi.h>
