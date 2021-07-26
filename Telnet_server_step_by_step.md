@@ -373,7 +373,7 @@ Check if user is typing something while the command is running inside telnetComm
 #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here - this is how your ESP32 server will present itself to network, this text is also used by uname telnet command
 #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here - this text is only used by uname telnet command
 
-// file system holds all configuration files and also some telnet commands (cp, rm ...) deal with files so this is necessary (don't forget to change partition scheme to one that uses FAT (Tools | Partition scheme |  ... first)
+// file system holds all configuration files and also some telnet commands (cp, rm ...) deal with files so this is necessary (don't forget to change partition scheme to one that uses FAT (Tools | Partition scheme |  ... first)
 
 #include "./servers/file_system.h"
 
@@ -420,15 +420,18 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
   if (argc == 2 && argv [0] == "show" && argv [1] == "samples") {
     while (true) {
 
-      while (tsp->connection->available () == TcpConnection::AVAILABLE) {
-        char c;
-        if (!tsp->connection->recvData (&c, sizeof (c))) return "Connection is closed.";
-        if (c == 3) return "User pressed Ctrl-C\r\n"; // return if user presses Ctrl-C
-      }
-      
-      String s = "analog value on pin 36 is " + String (analogRead (36)) + "\r\n";
+      String s = "Analog value on pin 36 is " + String (analogRead (36)) + "\r\n";
       if (!tsp->connection->sendData (s)) return "Connection is closed.";
-      delay (1000);
+
+      unsigned long startDelay = millis ();
+      while (millis () - startDelay <= 1000) {
+        delay (1);
+        while (tsp->connection->available () == TcpConnection::AVAILABLE) {
+          char c;
+          if (!tsp->connection->recvData (&c, sizeof (c))) return "Connection is closed.";
+          if (c == 3) return "User pressed Ctrl-C."; // return if user presses Ctrl-C
+        }
+      }    
     }
     
   } 
@@ -484,7 +487,6 @@ use "help" to display available commands.
 analog value on pin 36 is 0
 analog value on pin 36 is 0
 analog value on pin 36 is 0
-User pressed Ctrl-C
-
+User pressed Ctrl-C.
 #
 ```
