@@ -30,6 +30,7 @@ You can go directly to Setup instructions and examples now or continue reading t
    - support for HTTP 1.1 keep-alive directive,
    - optional firewall for incoming requests.
 
+
 **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. 
 
 -----> Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
@@ -73,7 +74,7 @@ You can use the following commands:
    - ping targetIP                                   - Tests if another network device is reachable form ESP32 server.
    - telnet targetIP                                 - Establishes telnet session from ESP32 server to another device.
    - curl http://url or curl method http://url       - Tests sending HTTP request from ESP32 server to another device.
-                                                    (method = GET, PUT, ...)
+                                                       (method = GET, PUT, ...)
 
 Other features:
 
@@ -82,7 +83,11 @@ Other features:
    - optional firewall for incoming connections.
 
 
-**ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. Built-in commands that are implemented so far:
+**ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. 
+
+-----> Please see [Step by step guide to FTP server](FTP_server_step_by_step.md) for more information.
+
+Built-in commands that are implemented so far:
 
    - pwd
    - cd
@@ -100,6 +105,7 @@ Other features:
    - time-out set to 5 minutes to free up limited ESP32 the resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
+
 **TcpServer** is the heart of all three servers mentioned above but it can also be used as stand-alone (see example). 
 
 Features:
@@ -110,7 +116,9 @@ Features:
    - optional time-out to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
-**File system** is needed for storing configuration files, .html files used by web server, etc. FAT flash file system is used. Make sure you compile your sketch for one of FAT partition schemas (Tool | Partition Scheme).
+
+**File system** is needed for storing configuration files, .html files used by web server, etc. FAT flash file system is used. Make sure you compile your sketch for one of FAT partition schemas (Tool | Partition Scheme | ...).
+
 
 **Configuration files** Esp32_web_ftp_telnet_server_template uses Unix/Linux like network configuration files (you can edit these files yourself with vi telnet editor):
 
@@ -125,6 +133,7 @@ Features:
 
 These files are created at first run of your sketch with default settings (you can modify default settings in source code before you run the sketch for the first time). 
 
+
 **User accounts**. Three types of managing user login are supported (depending on how USER_MANAGEMENT is #define-d):
 
    - Unix/Linux like (using user management files - this is the default setting) - use #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT,
@@ -136,11 +145,13 @@ Only "root" user with "rootpassword" password, "webadmin" user with "webadminpas
    - /etc/passwd contains users' accounts information
    - /etc/shadow contains users' passwords
 
+
 **Time functions**. Time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the following (or add your own and modify timeToLocalTime function appropriately): 
 
 KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
 By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functions.h also takes care of synchronizing ESP32 clock with NTP servers once a day.
+
 
 **cronDaemon** scans crontab table and executes tasks at specified time. You can schedule tasks from code or write them in to /etc/crontab file (see examples). 
 
@@ -251,13 +262,16 @@ ftp> put help.txt /var/telnet/help.txt
 
 8. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
 
+
 ## How to continue from here?
 
 Esp32_web_ftp_telnet_server_template is what its name says, just a working template. A programmer is highly encouraged to add or change each piece of code as he or she sees appropriate for his or her projects. Esp32_web_ftp_telnet_server_template.ino is pretty comprehensive, small and easy to modify so it may be a good starting point.
 
+
 ## Building HTML user interface for your ESP32 project
 
 A series of examples will demonstrate how to create a neat HTML user interface for your ESP32 project.
+
 
 **Example 01 - dynamic HTML page**
 
@@ -272,6 +286,7 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
   return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 ```
+
 
 **Example 02 - static HTML page calling REST functions**
 
@@ -321,6 +336,7 @@ We do not have C++ compiler available in browser, but Javascript will do the job
   </script>
 </html>
 ```
+
 
 **Example 03 - HTML page interacting with ESP32**
 
@@ -389,6 +405,7 @@ In HTML we use input tag of checkbox type. See example03.html:
 ```
 
 Everything works fine now but it looks awful.
+
 
 **Example 04 - user interface with style**
    
@@ -468,6 +485,7 @@ Style user interface with CSS like in example04.html:
 
 More controls with style can be found in **example05.html**.
 
+
 ## Building Telnet user interface for your ESP32 project
 
 **Example 06 - processing Telnet command line**
@@ -492,6 +510,7 @@ getBuiltInLed:
 }
 ```
 
+
 ## Other examples
 
 **Example 07 - cookies**
@@ -513,6 +532,7 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
 }
 ```
 
+
 **Example 08 - reading time**
 
 Example 08 demonstrates the use of time_functions.h.
@@ -531,6 +551,7 @@ if (!t) {
 } 
 ```
 
+
 **Example 09 - making HTTP requests (REST calls for example) directly from ESP32**
 
 Up to now, we have only made REST calls from within Javascript (from browser). However, for establishing machine-to-machine communication REST calls should be made directly from C++ code residing in ESP32. The only drawback is that C++ does not support parsing JSON answers natively. You have to program the parsing yourself (not included in this example).
@@ -548,6 +569,7 @@ void example09_makeRestCall () {
   return;
 }
 ```
+
 
 ## WebSockets
 
@@ -680,6 +702,7 @@ On the browser side Javascript program could look something like example10.html:
 </html>
 ```
 
+
 ## Writing your own server using TCP protocol
 
 **Example 11 - Morse server**
@@ -788,6 +811,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
 }
 ```
 
+
 ## Run-time monitoring ESP32 behaviour
 
 **Example 12 - monitor your ESP32 behaviour with dmesg C++ function and dmesg Telnet command**
@@ -795,6 +819,7 @@ endThisConnection: // first check if there is still some data in outputBuffer an
 Telnet server provides Unix/Linux like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with USB cable. How does it work? In your C++ code use dmesg (String); function to insert important message about the state of your code into dmesg circular queue. When you want to view it, connect to your ESP32 with telnet client and type dmesg command.
 
 ![Screenshot](dmesg.png)
+
 
 ## Run-time monitoring ESP32 signals
 
