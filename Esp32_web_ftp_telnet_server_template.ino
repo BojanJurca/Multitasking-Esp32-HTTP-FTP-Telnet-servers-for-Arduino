@@ -1,59 +1,86 @@
 /*
- *
- * Esp32_web_ftp_telnet_server_template.ino
- *
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- *
- *  File contains a working template for some operating system functionalities that can support your projects.
- *
- *  Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
- *   
- * History:
- *          - first release, 
- *            December 5, 2018, Bojan Jurca
- *          - added SPIFFSsafeDelay () to assure safe muti-threading while using fileSystem functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca
- *          - telnetCommandHandler parameters are now easier to access 
- *            September 4, Bojan Jurca   
- *          - elimination of compiler warnings and some bugst
- *            Jun 10, 2020, Bojan Jurca
- *          - port from SPIFFS to fileSystem, adjustment for Arduino 1.8.13,
- *            improvements of web, FTP and telnet server,
- *            simplification of this template to make it more comprehensive and easier to start working with 
- *            October 10, 2020, Bojan Jurca
- *          - web login/logout example
- *            February 3, 2021, Bojan Jurca
- *  
+ 
+    Esp32_web_ftp_telnet_server_template.ino
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+ 
+    File contains a working template for some operating system functionalities that can support your projects.
+ 
+   Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
+    
+   History:
+            - first release, 
+              December 5, 2018, Bojan Jurca
+            - added SPIFFSsafeDelay () to assure safe muti-threading while using fileSystem functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              April 13, 2019, Bojan Jurca
+            - telnetCommandHandler parameters are now easier to access 
+              September 4, Bojan Jurca   
+            - elimination of compiler warnings and some bugst
+              Jun 10, 2020, Bojan Jurca
+            - port from SPIFFS to fileSystem, adjustment for Arduino 1.8.13,
+              improvements of web, FTP and telnet server,
+              simplification of this template to make it more comprehensive and easier to start working with 
+              October 10, 2020, Bojan Jurca
+            - web login/logout example
+              February 3, 2021, Bojan Jurca  
+            - code review in order to make it more comprehensive
+              July 27, 2021, Bojan Jurca            
+             
  */
 
-// Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemas (Tools | Partition scheme)!
+// Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemes (Tools | Partition scheme)!
 
 #include <WiFi.h>
+
+
+// define how your ESP32 server will present itself to the network and what the output of some telnet comands (like uname) would be
 
 #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
 #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
 
+
+// FAT file system is needed for full functionality: all configuration files are stored here as well and .html and other files
+
+#include "./servers/file_system.h"
+
+
+// define how your ESP32 server is going to connect to WiFi network - these are just default settings, you can edit configuration files later
+
 #define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
-#define DEFAULT_AP_SSID           HOSTNAME 
+#define DEFAULT_AP_SSID           HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
 #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
-#include "./servers/file_system.h"
 #include "./servers/network.h"
-// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
-// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
-// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
-#include "./servers/user_management.h"
+
+
+// define how your ESP32 server is going to handle time: NTP servers where it will get GMT from and how local time will be calculated from GMT
+// if you want to learn more about timing please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/cronDaemon_step_by_step.md
+
+#define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
+#define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
+#define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
+
 // define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
 // ...
 // #define TIMEZONE  EASTERN_TIMEZONE
 // (default) #define TIMEZONE  CET_TIMEZONE               
-#define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
-#define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
-#define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
 #include "./servers/time_functions.h"     
-#include "./servers/webServer.hpp"                              // include HTTP Server
-#include "./servers/ftpServer.hpp"                              // include FTP server
-#include "./servers/telnetServer.hpp"                           // include Telnet server
+
+
+// define how your ESP32 server is going to handle users
+// if you want to learn more about user management please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/User_management_step_by_step.md
+
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
+// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
+#include "./servers/user_management.h"
+
+
+// include code for 3 servers
+
+#include "./servers/webServer.hpp"    // if you want to learn more about web server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Web_server_step_by_step.md
+#include "./servers/ftpServer.hpp"    // if you want to learn more about FTP server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/FTP_server_step_by_step.md
+#include "./servers/telnetServer.hpp" // if you want to learn more about telnet server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Telnet_server_step_by_step.md
 
 
               // ----- measurements are just for demonstration - delete this code if it is not needed -----
@@ -69,6 +96,7 @@
 //       normally httpRequest is HTTP request, function returns a reply in HTML, json, ... formats or "" if request is unhandeled by httpRequestHandler
 //       httpRequestHandler is supposed to be used with smaller replies,
 //       if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (into /var/www/html/ directory)
+
 String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
 
   // debug: Serial.print (httpRequest);
@@ -76,7 +104,7 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
   // debug: Serial.println (wsp->getHttpRequestCookie ("sessionToken"));
   
 
-              // ----- examples - delete this code if it is not needed -----
+              // ----- examples - delete all or parts of this code if it is not needed -----
 
               httpRequestCount.increaseCounter ();                            // gether some statistics
 
@@ -201,7 +229,11 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
 
 
 // ----- WebSocket request handler example - if you don't want to handle WebSocket requests just delete this function and pass NULL to httpSrv instead of its address -----
-#include "./servers/oscilloscope.h"
+
+              // ----- oscilloscope - delete this code if it is not needed -----
+
+              #include "./servers/oscilloscope.h"
+
 void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be reentrant!
 
 
@@ -222,10 +254,12 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be r
 
 
 // ----- telnet command handler example - if you don't want to handle telnet commands yourself just delete this function and pass NULL to telnetSrv instead of its address -----
+
 String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { // - must be reentrant!
 
               
               // ----- example 06 - delete this code if it is not needed -----
+
               #define LED_BUILTIN 2                                 
                       if (argc == 2 && argv [0] == "led" && argv [1] == "state") {                    // led state telnet command
                         return "Led is " + (digitalRead (LED_BUILTIN) ? String ("on.") : String ("off."));
@@ -244,13 +278,14 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
 
               // ----- firewall example - if you don't need firewall just delete this function and pass NULL to the servers instead of its address -----
           
-              bool firewall (char *IP) {                            // firewall callback function, return true if IP is accepted or false if not - must be reentrant!
-                if (!strcmp (IP, "10.0.0.2")) return false;         // block 10.0.0.2 (for the purpose of this example) 
-                else                          return true;          // ... but let every other client through
+              bool firewall (String IP) {                           // firewall callback function, return true if IP is accepted or false if not - must be reentrant!
+                if (IP == "10.0.0.2") return false;                 // block 10.0.0.2 (for the purpose of this example) 
+                else                  return true;                  // ... but let every other client through
               }
 
 
 // ----- cron command handler example - if you don't want to handle cron tasks just delete this function and pass NULL to startCronDaemon... instead of its address -----
+
 void cronHandler (String& cronCommand) {
   // debug: Serial.printf ("[%10lu] [cronDaemon] %s\n", millis (), cronCommand.c_str ());    
 
@@ -292,17 +327,18 @@ void setup () {
   // deleteFile ("/etc/dhcpcd.conf");                                 // contains A(ccess) P(oint) configuration  - deleting this file would cause creating default one
   // deleteFile ("/etc/hostapd/hostapd.conf");                        // contains A(ccess) P(oint) credentials    - deleting this file would cause creating default one
   startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+
   // start web server 
   httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
                                         wsRequestHandler,             // a callback function that will handle WS requests, NULL to ignore WS requests
                                         8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
-                                        (char *) "0.0.0.0",           // start HTTP server on all available ip addresses
+                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
                                         80,                           // HTTP port
                                         NULL);                        // we won't use firewall callback function for HTTP server
   if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
 
   // start FTP server
-  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",              // start FTP server on all available ip addresses
+  ftpServer *ftpSrv = new ftpServer ("0.0.0.0",                       // start FTP server on all available ip addresses
                                      21,                              // controll connection FTP port
                                      firewall);                       // use firewall callback function for FTP server (replace with NULL if not needed)
   if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
@@ -310,7 +346,7 @@ void setup () {
   // start telnet server
   telnetServer *telnetSrv = new telnetServer (telnetCommandHandler,   // a callback function that will handle telnet commands that are not handled by telnet server itself
                                               16 * 1024,              // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
-                                              (char *) "0.0.0.0",     // start telnt server on all available ip addresses
+                                              "0.0.0.0",              // start telnt server on all available ip addresses
                                               23,                     // telnet port
                                               NULL);                  // use firewall callback function for telnet server (replace with NULL if not needed)
   if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) dmesg ("[telnetServer] did not start.");
@@ -350,7 +386,8 @@ void loop () {
 
            
               // ----- example: the use of time functions - delete this code if it is not needed -----
-              time_t l = getLocalTime ();
+              
+              time_t l = timeToLocalTime (getGmt ()); // alternatively you can use: time_t l = getLocalTime ();
               if (l) { // if the time is set                        
                 static bool messageAlreadyDispalyed = false;
                 if (timeToString (l).substring (11) >= "23:05:00" && !messageAlreadyDispalyed) {
@@ -360,6 +397,7 @@ void loop () {
               }
             
               // ----- example: do some measurements each minute - delete this code if it is not needed -----
+              
               static unsigned long lastMeasurementTime = -60000; 
               static int lastScale = -1;
               if (millis () - lastMeasurementTime > 60000) {

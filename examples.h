@@ -1,17 +1,16 @@
 /*
- * 
- * Examples.h 
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- * History:
- *          - first release, 
- *            April 14, 2019, Bojan Jurca
- *          - added WebSocket example,
- *            May, 20, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca            
- *  
+  
+    examples.h 
+  
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    History:
+            - first release, 
+              April 14, 2019, Bojan Jurca
+            - added WebSocket example,
+              May, 20, 2019, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 10, 2020, Bojan Jurca            
  */
 
 
@@ -37,7 +36,7 @@ void example08_time () {
 // Example 09 shows how we can use TcpServer objects to make HTTP requests
 
 void example09_makeRestCall () {
-  String s = webClient ((char *) "127.0.0.1", 80, 5000, "GET /builtInLed"); // send request to local loopback port 80, wait max 5 s (time-out)
+  String s = webClient ("127.0.0.1", 80, (TIME_OUT_TYPE) 5000, "GET /builtInLed"); // send request to local loopback port 80, wait max 5 s (time-out)
   if (s > "")
     Serial.printf ("[%10lu] [example 09] %s\r\n", millis (), s.c_str ());
   else
@@ -104,8 +103,8 @@ void example11_morseEchoServer () {
   TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler,  // function that is going to handle the connections
                                        NULL,                              // no additional parameter will be passed to morseEchoServerConnectionHandler function
                                        4096,                              // 4 KB stack for morseEchoServerConnectionHandler is usually enough
-                                       180000,                            // time-out - close connection if it is inactive for more than 3 minutes
-                                       (char *) "0.0.0.0",                // serverIP, 0.0.0.0 means that the server will accept connections on all available IP addresses
+                                       (TIME_OUT_TYPE) 180000,            // time-out - close connection if it is inactive for more than 3 minutes
+                                       "0.0.0.0",                         // serverIP, 0.0.0.0 means that the server will accept connections on all available IP addresses
                                        24,                                // server port number, 
                                        NULL);                             // don't use firewall in this example
   // check success
@@ -124,7 +123,7 @@ void example11_morseEchoServer () {
 }
 
 void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[%10lu] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ());
+  Serial.printf ("[%10lu] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ().c_str ());
   
   char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
   char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 

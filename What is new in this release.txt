@@ -1,6 +1,4 @@
-New in release 1.27
+New in release 1.28
 
-  - support for putty telnet client
-  - support for Firefox web browser
-  - web server MIME types
-  - bug fixes
+  - code review in order to make it more comprehensive
+  - different step-by-sep guides 
