@@ -1,29 +1,30 @@
 /*
- * 
- * FtpServer.hpp 
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  FtpServer is built upon TcpServer with connectionHandler that handles TcpConnection according to FTP protocol.
- *  This goes for control connection at least. FTP is a little more complicated since it uses another TCP connection
- *  for data transfer. Beside that, data connection can be initialized by FTP server or FTP client and it is FTP client's
- *  responsibility to decide which way it is going to be.
- * 
- * History:
- *          - first release, 
- *            November 18, 2018, Bojan Jurca
- *          - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca
- *          - introduction of FTP_FILE_TIME definition
- *            August, 25, 2019, Bojan Jurca
- *          - replaced gmtime () function that returns pointer to static structure with reentrant solution
- *            October 29, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca 
- *          - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
- *            added FTP commands (pwd, cd, mkdir, rmdir, ...)
- *            October 31, 2020, Bojan Jurca
- *  
+
+    ftpServer.hpp 
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    FtpServer is built upon TcpServer with connectionHandler that handles TcpConnection according to FTP protocol.
+    This goes for control connection at least. FTP is a little more complicated since it uses another TCP connection
+    for data transfer. Beside that, data connection can be initialized by FTP server or FTP client and it is FTP client's
+    responsibility to decide which way it is going to be.
+   
+    History:
+            - first release, 
+              November 18, 2018, Bojan Jurca
+            - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              April 13, 2019, Bojan Jurca
+            - introduction of FTP_FILE_TIME definition
+              August, 25, 2019, Bojan Jurca
+            - replaced gmtime () function that returns pointer to static structure with reentrant solution
+              October 29, 2019, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 10, 2020, Bojan Jurca 
+            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
+              added FTP commands (pwd, cd, mkdir, rmdir, ...)
+              October 31, 2020, Bojan Jurca
+            - code review in order to make it more comprehensive
+              July, 25, 2021, Bojan Jurca                       
  */
 
 
@@ -31,10 +32,38 @@
   #define __FTP_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME "MyESP32Server" // WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "MyESP32Server" // use default if not defined
   #endif
 
   #include <WiFi.h>
+
+
+  /*
+
+     Support for telnet dmesg command. If telnetServer.hpp is included in the project __ftpDmesg__ function will be redirected
+     to message queue defined there and dmesg command will display its contetn. Otherwise it will just display message on the
+     Serial console.
+     
+  */  
+  
+  void __ftpDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
+      dmesg (message);
+    #else
+      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
+    #endif
+  }
+  void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
+
+
+  /*
+
+     When FTP server is working in passive mode it tells FTP client on which port to establish data connection. Since there may be
+     multiple FTP sessions running at the same time the server must pass a different port number for passive data connection
+     to each client.  
+     
+  */  
+
 
   int __pasiveDataPort__ () {
     static portMUX_TYPE csFtpPasiveDataPort = portMUX_INITIALIZER_UNLOCKED;
@@ -45,14 +74,6 @@
     return pasiveDataPort;
   }
 
-  void __ftpDmesg__ (String message) { 
-    #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
-      dmesg (message);
-    #else
-      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
-    #endif
-  }
-  void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
 
   #include "TcpServer.hpp"        // ftpServer.hpp is built upon TcpServer.hpp  
   #include "file_system.h"        // ftpServer.hpp needs file_system.h
@@ -76,15 +97,15 @@
   
       ftpServer (char *serverIP,                                       // FTP server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
                  int serverPort,                                       // FTP server port
-                 bool (* firewallCallback) (char *)                    // a reference to callback function that will be celled when new connection arrives 
-                ): TcpServer (__ftpConnectionHandler__, (void *) this, 8 * 1024, 300000, serverIP, serverPort, firewallCallback)
+                 bool (* firewallCallback) (String)                    // a reference to callback function that will be celled when new connection arrives 
+                ): TcpServer (__ftpConnectionHandler__, (void *) this, 8 * 1024, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                                                 {
                                                   if (started ()) ftpDmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
                                                   else            ftpDmesg ("[ftpServer] couldn't start.");
                                                 }
       
       ~ftpServer ()                             { if (started ()) ftpDmesg ("[ftpServer] stopped."); }
-                                                      
+                                     
     private:
 
       static void __ftpConnectionHandler__ (TcpConnection *connection, void *thisFtpServer) { // connectionHandler callback function
@@ -315,11 +336,11 @@ closeFtpConnection:
         if (fsp->homeDir == "")                       return "530 not logged in\r\n";
 
         int ip1, ip2, ip3, ip4, p1, p2; // get (this) server IP and next free port
-        if (4 == sscanf (fsp->controlConnection->getThisSideIP (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
+        if (4 == sscanf (fsp->controlConnection->getThisSideIP ().c_str (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
           // get next free port
           int pasiveDataPort = __pasiveDataPort__ ();
            // open a new TCP server to accept pasive data connection
-          fsp->pasiveDataServer = new TcpServer (5000, fsp->controlConnection->getThisSideIP (), pasiveDataPort, NULL);
+          fsp->pasiveDataServer = new TcpServer ((TIME_OUT_TYPE) 5000, fsp->controlConnection->getThisSideIP (), pasiveDataPort, NULL);
           // report to ftp client through control connection how to connect for data exchange
           p2 = pasiveDataPort % 256;
           p1 = pasiveDataPort / 256;
@@ -337,7 +358,7 @@ closeFtpConnection:
           int activeDataPort;
           sprintf (activeDataIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4); 
           activeDataPort = 256 * p1 + p2;
-          fsp->activeDataClient = new TcpClient (activeDataIP, activeDataPort, 5000); // open a new TCP client for active data connection
+          fsp->activeDataClient = new TcpClient (activeDataIP, activeDataPort, (TIME_OUT_TYPE) 5000); // open a new TCP client for active data connection
           if (fsp->activeDataClient) {
             if (fsp->activeDataClient->connection ()) return "200 port ok\r\n"; 
             delete (fsp->activeDataClient);

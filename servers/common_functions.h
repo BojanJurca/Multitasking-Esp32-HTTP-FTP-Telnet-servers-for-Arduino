@@ -1,23 +1,22 @@
 /*
- * 
- * common_functions.h
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- *  
- *  It contins some useful functions commonly used by other modules 
- *  
- * History:
- *          - first release, 
- *            February 3, 2021, Bojan Jurca
- *  
+
+    common_functions.h
+
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+
+    It contins some useful functions used by other modules 
+
+    History:
+            - first release, 
+              February 3, 2021, Bojan Jurca
  */
+
 
 #ifndef __COMMON_FUNCTIONS__
   #define __COMMON_FUNCTIONS__
 
 
   // missing C function in Arduino, but we are going to need it
-
   char *stristr (char *haystack, char *needle) { 
     if (!haystack || !needle) return NULL; // nonsense
     int nCheckLimit = strlen (needle);                     
@@ -37,7 +36,6 @@
 
 
   // String parsing
-
   String between (String input, String openingBracket, String closingBracket) { // returns content inside of opening and closing brackets
     int i = input.indexOf (openingBracket);
     if (i >= 0) {
@@ -51,12 +49,11 @@
     return "";
   }
 
-
   // pad string with spaces
-
   String pad (String s, int toLenght) {
     while (s.length () < toLenght) s += " ";
     return s;
   }
+
 
 #endif

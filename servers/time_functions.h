@@ -1,35 +1,32 @@
 /*
- * 
- * time_functions.h
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  Real_time_clock synchronizes its time with NTP server accessible from internet once a day.
- *  Internet connection is necessary for real_time_clock to work.
- * 
- * History:
- *          - first release, 
- *            November 14, 2018, Bojan Jurca
- *          - changed delay () to SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca          
- *          - added support for all Europe time zones
- *            April 22, 2019, Bojan Jurca
- *          - added support for USA time zones 
- *            September 30, 2019, Bojan Jurca
- *          - added support for Japan, China and Canada time zones  
- *            October 8, 2019, Bojan Jurca
- *          - added support for ESP8266 and Russia time zones
- *            October 14, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca     
- *          - Arduino 1.8.13 supported some features (strftime, settimeofday) that have not been supoprted on ESP8266 earier, 
- *            (but they have been supported on ESP32). These features need no longer beeing implemented in ESP8266 part of this module any more,
- *            added cronDaemon,
- *            added support of /etc/ntp.conf and /etc/crontab configuration files,
- *            conversion of real_time_clock class into C functions
- *            October 4, 2020, Bojan Jurca
- *  
- */
+
+    time_functions.h
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+
+    Real_time_clock synchronizes its time with NTP server accessible from internet once a day. Internet connection is 
+    necessary for real_time_clock to work.
+
+    History:
+            - first release, 
+              November 14, 2018, Bojan Jurca
+            - changed delay () to SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              April 13, 2019, Bojan Jurca          
+            - added support for all Europe time zones
+              April 22, 2019, Bojan Jurca
+            - added support for USA time zones 
+              September 30, 2019, Bojan Jurca
+            - added support for Japan, China and Canada time zones  
+              October 8, 2019, Bojan Jurca
+            - added support for ESP8266 and Russia time zones
+              October 14, 2019, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 10, 2020, Bojan Jurca     
+            - Arduino 1.8.13 supported some features (strftime, settimeofday) that have not been supoprted on ESP8266 earier, 
+             (but they have been supported on ESP32). These features need no longer beeing implemented in ESP8266 part of this module any more,
+             added cronDaemon, added support of /etc/ntp.conf and /etc/crontab configuration files, conversion of real_time_clock class into C functions
+             October 4, 2020, Bojan Jurca   
+*/
 
 #ifndef __TIME_FUNCTIONS__
   #define __TIME_FUNCTIONS__
@@ -93,35 +90,14 @@
   #endif
 
 
-  // FUNCTIONS OF THIS MODULE
+  /*
 
-  void synchronizeTimeAndInitializeItAtFirstCall ();
+     Support for telnet dmesg command. If telnetServer.hpp is included in the project __TcpDmesg__ function will be redirected
+     to message queue defined there and dmesg command will display its contetn. Otherwise it will just display message on the
+     Serial console.
+     
+  */
 
-  time_t getGmt ();                       // returns current GMT or 0 it the time has not been set yet 
-
-  void setGmt (time_t t);
-
-  time_t getLocalTime ();                 // returns current local time or 0 it the time has not been set yet 
-
-  void setLocalTime (time_t t);
-
-  time_t timeToLocalTime (time_t t);
-
-  struct tm timeToStructTime (time_t t);
-
-  String timeToString (time_t t);
-
-
-  // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
-
-  time_t __readBuiltInClock__ () {
-    struct timeval now;
-    gettimeofday (&now, NULL);
-    return now.tv_sec;    
-  }
-
-  RTC_DATA_ATTR bool __timeHasBeenSet__ = false;
-  RTC_DATA_ATTR time_t __startupTime__ = 0;
 
   void __timeDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ 
@@ -132,14 +108,30 @@
   }
   void (* timeDmesg) (String) = __timeDmesg__;                      // use this pointer to display / record system messages
 
+
+  time_t __readBuiltInClock__ () {
+    struct timeval now;
+    gettimeofday (&now, NULL);
+    return now.tv_sec;    
+  }
+
+  RTC_DATA_ATTR bool __timeHasBeenSet__ = false;
+  RTC_DATA_ATTR time_t __startupTime__ = 0;
+
+
   portMUX_TYPE __csTime__ = portMUX_INITIALIZER_UNLOCKED;           // controll real_time_clock critical sections in multi-threaded environment
 
- 
-  // IMPLEMENTATION OF FUNCTIONS IN THIS MODULE
 
   String __ntpServer1__ = DEFAULT_NTP_SERVER_1;
   String __ntpServer2__ = DEFAULT_NTP_SERVER_2;
   String __ntpServer3__ = DEFAULT_NTP_SERVER_3;  
+
+  void setGmt (time_t);
+  time_t getGmt ();
+  void setLocalTime (time_t);
+  time_t getLocalTime ();
+  time_t timeToLocalTime (time_t t);
+  String timeToString (time_t);
 
 
   String ntpDate (String ntpServer) { // synchronizes time with NTP server, returns error message
@@ -204,6 +196,8 @@
   }
   
   portMUX_TYPE csCron = portMUX_INITIALIZER_UNLOCKED;
+
+  #define ANY 255
   
   #define MAX_CRONTAB_ENTRIES 32
   int __cronTabEntries__ = 0;
@@ -211,12 +205,12 @@
   struct cronEntryType {
     bool readFromFile;        // true, if this entry is read from /etc/crontab file, false if it is inserted by program code
     bool executed;            // flag if the command is beeing executed
-    uint8_t second;           // 0-59, 255 means *
-    uint8_t minute;           // 0-59, 255 means *
-    uint8_t hour;             // 0-23, 255 means *
-    uint8_t day;              // 1-31, 255 means *
-    uint8_t month;            // 1-12, 255 means *
-    uint8_t day_of_week;      // 0-6 and 7, Sunday to Saturday, 7 is also Sunday, 255 means *
+    uint8_t second;           // 0-59, ANY (255) means *
+    uint8_t minute;           // 0-59, ANY (255) means *
+    uint8_t hour;             // 0-23, ANY (255) means *
+    uint8_t day;              // 1-31, ANY (255) means *
+    uint8_t month;            // 1-12, ANY (255) means *
+    uint8_t day_of_week;      // 0-6 and 7, Sunday to Saturday, 7 is also Sunday, ANY (255) means *
     String cronCommand;       // cronCommand to be passed to cronHandler when time condition is met - it is reponsibility of cronHandler to do with it what is needed
     time_t lastExecuted;      // the time cronCommand has been executed
   } __cronEntry__ [MAX_CRONTAB_ENTRIES];
@@ -235,12 +229,12 @@
   bool cronTabAdd (String cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
     char second [3]; char minute [3]; char hour [3]; char day [3]; char month [3]; char day_of_week [3]; char cronCommand [65];
     if (sscanf (cronTabLine.c_str (), "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
-      int8_t se = strcmp (second, "*") ? atoi (second) : 255; if ((!se && *second != '0') || se > 59) { timeDmesg ("[cronDaemon] [cronAdd] invalid second condition: " + String (second)); return false; }
-      int8_t mi = strcmp (minute, "*") ? atoi (minute) : 255; if ((!mi && *minute != '0') || mi > 59) { timeDmesg ("[cronDaemon] [cronAdd] invalid minute condition: " + String (minute)); return false; }
-      int8_t hr = strcmp (hour, "*") ? atoi (hour) : 255; if ((!hr && *hour != '0') || hr > 23) { timeDmesg ("[cronDaemon] [cronAdd] invalid hour condition: " + String (hour)); return false; }
-      int8_t dm = strcmp (day, "*") ? atoi (day) : 255; if (!dm || dm > 31) { timeDmesg ("[cronDaemon] [cronAdd] invalid day condition: " + String (day)); return false; }
-      int8_t mn = strcmp (month, "*") ? atoi (month) : 255; if (!mn || mn > 12) { timeDmesg ("[cronDaemon] [cronAdd] invalid month condition: " + String (month)); return false; }
-      int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : 255; if ((!dw && *day_of_week != '0') || dw > 7) { timeDmesg ("[cronDaemon] [cronAdd] invalid day of week condition: " + String (day_of_week)); return false; }
+      int8_t se = strcmp (second, "*") ? atoi (second) : ANY; if ((!se && *second != '0') || se > 59) { timeDmesg ("[cronDaemon] [cronAdd] invalid second condition: " + String (second)); return false; }
+      int8_t mi = strcmp (minute, "*") ? atoi (minute) : ANY; if ((!mi && *minute != '0') || mi > 59) { timeDmesg ("[cronDaemon] [cronAdd] invalid minute condition: " + String (minute)); return false; }
+      int8_t hr = strcmp (hour, "*") ? atoi (hour) : ANY; if ((!hr && *hour != '0') || hr > 23) { timeDmesg ("[cronDaemon] [cronAdd] invalid hour condition: " + String (hour)); return false; }
+      int8_t dm = strcmp (day, "*") ? atoi (day) : ANY; if (!dm || dm > 31) { timeDmesg ("[cronDaemon] [cronAdd] invalid day condition: " + String (day)); return false; }
+      int8_t mn = strcmp (month, "*") ? atoi (month) : ANY; if (!mn || mn > 12) { timeDmesg ("[cronDaemon] [cronAdd] invalid month condition: " + String (month)); return false; }
+      int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : ANY; if ((!dw && *day_of_week != '0') || dw > 7) { timeDmesg ("[cronDaemon] [cronAdd] invalid day of week condition: " + String (day_of_week)); return false; }
       if (!*cronCommand) { timeDmesg ("[cronDaemon] [cronAdd] missing cron command"); return false; }
       return cronTabAdd (se, mi, hr, dm, mn, dw, String (cronCommand), readFromFile);
     } else {
@@ -276,12 +270,12 @@
         for (int i = 0; i < __cronTabEntries__; i ++) {
           if (s != "") s += "\r\n";
           char c [4]; 
-          if (__cronEntry__ [i].second == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second); s += String (c); }
-          if (__cronEntry__ [i].minute == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute); s += String (c); }
-          if (__cronEntry__ [i].hour == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour); s += String (c); }
-          if (__cronEntry__ [i].day == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day); s += String (c); }
-          if (__cronEntry__ [i].month == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month); s += String (c); }
-          if (__cronEntry__ [i].day_of_week == 255) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += String (c); }
+          if (__cronEntry__ [i].second == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second); s += String (c); }
+          if (__cronEntry__ [i].minute == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute); s += String (c); }
+          if (__cronEntry__ [i].hour == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour); s += String (c); }
+          if (__cronEntry__ [i].day == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day); s += String (c); }
+          if (__cronEntry__ [i].month == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month); s += String (c); }
+          if (__cronEntry__ [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += String (c); }
           if (__cronEntry__ [i].lastExecuted) s += " " + timeToString (__cronEntry__ [i].lastExecuted) + " "; else s += " (not executed yet)  ";
           if (__cronEntry__ [i].readFromFile) s += " from /etc/crontab  "; else s += " entered from code  ";
           s += __cronEntry__ [i].cronCommand;
@@ -320,12 +314,12 @@
         portENTER_CRITICAL (&csCron);
           for (int i = 0; i < __cronTabEntries__; i ++) {
             // check if time condition is met for entry i and chabge state of the entry accordigly
-            if ( (__cronEntry__ [i].second == 255 || __cronEntry__ [i].second == slt.tm_sec) && 
-                 (__cronEntry__ [i].minute == 255 || __cronEntry__ [i].minute == slt.tm_min) &&
-                 (__cronEntry__ [i].hour == 255 || __cronEntry__ [i].hour == slt.tm_hour) &&
-                 (__cronEntry__ [i].day == 255 || __cronEntry__ [i].day == slt.tm_mday) &&
-                 (__cronEntry__ [i].month == 255 || __cronEntry__ [i].month == slt.tm_mon + 1) &&
-                 (__cronEntry__ [i].day_of_week == 255 || __cronEntry__ [i].day_of_week == slt.tm_wday || __cronEntry__ [i].day_of_week == slt.tm_wday + 7) ) {
+            if ( (__cronEntry__ [i].second == ANY || __cronEntry__ [i].second == slt.tm_sec) && 
+                 (__cronEntry__ [i].minute == ANY || __cronEntry__ [i].minute == slt.tm_min) &&
+                 (__cronEntry__ [i].hour == ANY || __cronEntry__ [i].hour == slt.tm_hour) &&
+                 (__cronEntry__ [i].day == ANY || __cronEntry__ [i].day == slt.tm_mday) &&
+                 (__cronEntry__ [i].month == ANY || __cronEntry__ [i].month == slt.tm_mon + 1) &&
+                 (__cronEntry__ [i].day_of_week == ANY || __cronEntry__ [i].day_of_week == slt.tm_wday || __cronEntry__ [i].day_of_week == slt.tm_wday + 7) ) {
   
                       if (!__cronEntry__ [i].executed) {
                         __cronEntry__ [i].executed = true;

@@ -2,57 +2,82 @@
 
 #include <WiFi.h>
 
-#include "TcpServer.hpp"
-#include "network.h"
-#include "file_system.h"
+#define HOSTNAME    "MyESP32Server" 
+#define MACHINETYPE "TTGO T1"
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           HOSTNAME 
+#define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"
 
-// #define USER_MANAGEMENT NO_USER_MANAGEMENT          
-// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT 
-//   #define ROOT_PASSWORD "rootpassword" 
-// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT   
+#include "file_system.h"
+#include "network.h"
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
+// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
 #include "user_management.h"
-#include "ftpServer.hpp"
-#include "webServer.hpp"
-#include "telnetServer.hpp"
-#include "time_functions.h"
+// define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
+// ...
+// #define TIMEZONE  EASTERN_TIMEZONE
+// (default) #define TIMEZONE  CET_TIMEZONE               
+#define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
+#define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
+#define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
+#include "time_functions.h"     
+#include "webServer.hpp"                              // include HTTP Server
+#include "ftpServer.hpp"                              // include FTP server
+#include "telnetServer.hpp"                           // include Telnet server
+
 #include "oscilloscope.h"
+
+
+  String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { return ""; }
+  void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { return; }
+
+  String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { return ""; }
+
+  bool firewall (String IP) { return true; }
+
 
 void setup () {  
   Serial.begin (115200);
-
+  
   // __TEST_DST_TIME_CHANGE__ ();
 
-  mountFileSystem (false);
- // startCronDaemonAndInitializeItAtFirstCall (NULL, 3 * 1024);
+  // FFat.format ();
+  mountFileSystem (true);
 
-  // "start %7s sampling on GPIO %i every %i %2s refresh screen of width %i %2s every %i %2s set %8s slope trigger to %i set %8s slope trigger to %i"
-  // char *test = "start digital sampling on GPIO 5, 6, 7 every 10 ms screen width = 400 ms set positive slope trigger to 1 set negative slope trigger to 0";
-  char test [200];
-  strcpy (test, "start digital sampling on GPIO 5, 6, 7 every 10 ms screen width = 400 ms set positive slope trigger to 1 set negative slope trigger to 0");
+  // deleteFile ("/etc/ntp.conf");
+  // deleteFile ("/etc/crontab");
+  startCronDaemonAndInitializeItAtFirstCall (NULL, 8 * 1024); 
 
+  // deleteFile ("/etc/passwd");
+  // deleteFile ("/etc/shadow");
+  initializeUsersAtFirstCall ();
 
-  char readType [10] = "";
-  int gpio1 = -1;
-  int gpio2 = -1;
-  int gpio3 = -1;
-  int gpio4 = -1;
-  int samplingTime = 0;
-  char samplingUnit [10] = "";
-  int screenWidth = 0;
-  char screenWidthUnit [10] = "";
+  // deleteFile ("/network/interfaces");
+  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");
+  // deleteFile ("/etc/dhcpcd.conf");
+  // deleteFile ("/etc/hostapd/hostapd.conf");
+  startNetworkAndInitializeItAtFirstCall ();
 
-  char *part1 = test;
-  char *part2 = strstr (part1, " every"); if (part2) { *part2 = 0; part2++; Serial.printf ("\n%s\n", part2); }
-  char *part3 = strstr (part2, " set"); if (part3) *(part3++) = 0;
+  // start telnet server
+  telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, 16 * 1024, "0.0.0.0", 23, firewall);
+  if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) Serial.println ("[telnetServer] did not start.");
   
-  // int fields = sscanf (test, "start %7s sampling on GPIO %i, %i, %i, %i every %i %2s screen width = %i %2s ", readType, &gpio1, &gpio2, &gpio3, &gpio4, &samplingTime, samplingUnit, &screenWidth, screenWidthUnit);
-  // Serial.printf ("parsed %i fields: %s  %i %i %i %i    %i %s    %i %s\n", fields, readType, gpio1, gpio2, gpio3, gpio4, samplingTime, samplingUnit, screenWidth, screenWidthUnit);
-  
-  int fields = sscanf (part1, "start %7s sampling on GPIO %i, %i, %i, %i ", readType, &gpio1, &gpio2, &gpio3, &gpio4);
-  Serial.printf ("parsed %i fields: %s  %i, %i, %i, %i\n", fields, readType, gpio1, gpio2, gpio3, gpio4);
-  if (fields && part2) fields += sscanf (part2, "every %i %2s screen width = %i %2s ", &samplingTime, samplingUnit, &screenWidth, screenWidthUnit);
+  // start web server
+  httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                        wsRequestHandler,             // a callback function that will handle WS requests, NULL to ignore WS requests
+                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        (char *) "0.0.0.0",           // start HTTP server on all available ip addresses
+                                        80,                           // HTTP port
+                                        NULL);                        // we won't use firewall callback function for HTTP server
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
 
-  Serial.printf ("parsed %i fields: %s  %i %i %i %i    %i %s    %i %s\n", fields, readType, gpio1, gpio2, gpio3, gpio4, samplingTime, samplingUnit, screenWidth, screenWidthUnit);
+  // start FTP server
+  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",              // start FTP server on all available ip addresses
+                                     21,                              // controll connection FTP port
+                                     firewall);                       // use firewall callback function for FTP server (replace with NULL if not needed)
+  if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
 
 }
 

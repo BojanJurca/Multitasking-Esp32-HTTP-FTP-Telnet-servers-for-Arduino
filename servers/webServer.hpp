@@ -1,56 +1,63 @@
 /*
- * 
- * webServer.hpp 
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  WebServer includes httpServer with connectionHandler that handles TcpConnection according to HTTP protocol.
- * 
- *  A connectionHandler handles some HTTP requests by itself but the calling program can provide its own callback
- *  function. In this case connectionHandler will first ask callback function weather is it going to handle the HTTP 
- *  request. If not the connectionHandler will try to resolve it by checking file system for a proper .html file
- *  or it will respond with reply 404 - page not found.
- * 
- * History:
- *          - first release, 
- *            November 19, 2018, Bojan Jurca
- *          - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca 
- *          - added webClient function,
- *            added basic support for web sockets
- *            May, 19, 2019, Bojan Jurca
- *          - the use of dmesg
- *            September 14, 2019, Bojan Jurca
- *          - added webClientCallMAC function
- *            September, 27, Bojan Jurca
- *          - separation of httpHandler and wsHandler
- *            October 30, 2019, Bojan Jurca
- *          - webServer is now inherited from TcpServer and renamed to httpServer
- *            February 27, 2020, Bojan Jurca 
- *          - elimination of compiler warnings and some bugs
- *            Jun 11, 2020, Bojan Jurca            
- *          - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13,
- *            support for keep-alive directive
- *            October 10, 2020, Bojan Jurca
- *          - support for HTTP request and response header fields and cookies
- *            February 3, 2021, Bojan Jurca
- *          - MIME types
- *            March 2, Bojan Jurca
- *
+
+    webServer.hpp 
+  
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    WebServer includes httpServer with connectionHandler that handles TcpConnection according to HTTP protocol.
+  
+    A connectionHandler handles some HTTP requests by itself but the calling program can provide its own callback
+    function. In this case connectionHandler will first ask callback function weather is it going to handle the HTTP 
+    request. If not the connectionHandler will try to resolve it by checking file system for a proper .html file
+    or it will respond with reply 404 - page not found.
+  
+   History:
+            - first release, 
+              November 19, 2018, Bojan Jurca
+            - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              April 13, 2019, Bojan Jurca 
+            - added webClient function,
+              added basic support for web sockets
+              May, 19, 2019, Bojan Jurca
+            - the use of dmesg
+              September 14, 2019, Bojan Jurca
+            - added webClientCallMAC function
+              September, 27, Bojan Jurca
+            - separation of httpHandler and wsHandler
+              October 30, 2019, Bojan Jurca
+            - webServer is now inherited from TcpServer and renamed to httpServer
+              February 27, 2020, Bojan Jurca 
+            - elimination of compiler warnings and some bugs
+              Jun 11, 2020, Bojan Jurca            
+            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13,
+              support for keep-alive directive
+              October 10, 2020, Bojan Jurca
+            - support for HTTP request and response header fields and cookies
+              February 3, 2021, Bojan Jurca
+            - MIME types
+              March 2, Bojan Jurca
  */
 
 #ifndef __WEB_SERVER__
   #define __WEB_SERVER__
 
   #ifndef HOSTNAME
-    #define HOSTNAME "MyESP32Server" // WiFi.getHostname() // use default if not defined
+    #define HOSTNAME "MyESP32Server" // use default if not defined
   #endif
 
   // ----- includes, definitions and supporting functions -----
 
   #include <WiFi.h>
 
-        // dmesg functionality
+
+  /*
+
+     Support for telnet dmesg command. If telnetServer.hpp is included in the project __webDmesg__ function will be redirected
+     to message queue defined there and dmesg command will display its contetn. Otherwise it will just display message on the
+     Serial console.
+     
+  */    
+
         void __webDmesg__ (String message) { 
           #ifdef __TELNET_SERVER__ // use dmesg from telnet server if possible
             dmesg (message);
@@ -60,6 +67,7 @@
         }
         void (* webDmesg) (String) = __webDmesg__; // use this pointer to display / record system messages, if Telnet server is also included it will redirect it to its dmesg command
 
+
   #include "common_functions.h"   // stristr, between
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp  
   #include "user_management.h"    // webServer.hpp needs user_management.h to get www home directory
@@ -68,16 +76,15 @@
 
 
 /*
- * Basic support for webSockets. A lot of webSocket things are missing. Out of 3 frame sizes only first 2 are 
- * supported, the third is too large for ESP32 anyway. Continuation frames are not supported hence all the exchange
- * information should fit into one frame. Beside that only non-control frames are supported. But all this is just 
- * information for programmers who want to further develop this modul. For those who are just going to use it I'll 
- * try to hide this complexity making the use of webSockets as easy and usefull as possible under given limitations. 
- * See the examples.
- * 
- * WebSocket is a TcpCOnnection with some additional reading and sending functions but we won't inherit it here from
- * TcpConnection since TcpCOnnection already exists at the time WebSocket is beeing created
- * 
+   Basic support for webSockets. A lot of webSocket things are missing. Out of 3 frame sizes only first 2 are 
+   supported, the third is too large for ESP32 anyway. Continuation frames are not supported hence all the exchange
+   information should fit into one frame. Beside that only non-control frames are supported. But all this is just 
+   information for programmers who want to further develop this modul. For those who are just going to use it I'll 
+   try to hide this complexity making the use of webSockets as easy and usefull as possible under given limitations. 
+   See the examples.
+  
+   WebSocket is a TcpCOnnection with some additional reading and sending functions but we won't inherit it here from
+   TcpConnection since TcpCOnnection already exists at the time WebSocket is beeing created
  */
 
   #include "hwcrypto/sha.h"       // needed for websockets support 
@@ -393,14 +400,14 @@ readingPayload:
 
 
 /*
- * httpServer is inherited from TcpServer with connection handler that handles connections according
- * to HTTP protocol.
- * 
- * Connection handler tries to resolve HTTP request in three ways:
- *  1. checks if the request is a WS request and starts WebSocket in this case
- *  2. asks httpRequestHandler provided by the calling program if it is going to provide the reply
- *  3. checks /var/www/html directry for .html file that suits the request
- *  4. replyes with 404 - not found 
+   httpServer is inherited from TcpServer with connection handler that handles connections according
+   to HTTP protocol.
+  
+   Connection handler tries to resolve HTTP request in three ways:
+    1. checks if the request is a WS request and starts WebSocket in this case
+    2. asks httpRequestHandler provided by the calling program if it is going to provide the reply
+    3. checks /var/www/html directry for .html file that suits the request
+    4. replyes with 404 - not found 
  */
   
   class httpServer: public TcpServer {                                             
@@ -463,8 +470,8 @@ readingPayload:
                   unsigned int stackSize,                                                                     // stack size of httpRequestHandler thread, usually 4 KB will do 
                   char *serverIP,                                                                             // web server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
                   int serverPort,                                                                             // web server port
-                  bool (*firewallCallback) (char *)                                                           // a reference to callback function that will be celled when new connection arrives 
-                 ): TcpServer (__webConnectionHandler__, this, stackSize, 1500, serverIP, serverPort, firewallCallback)
+                  bool (*firewallCallback) (String)                                                           // a reference to callback function that will be celled when new connection arrives 
+                 ): TcpServer (__webConnectionHandler__, this, stackSize, (TIME_OUT_TYPE) 1500, serverIP, serverPort, firewallCallback)
                                 {
                                   __externalHttpRequestHandler__ = httpRequestHandler;
                                   __externalWsRequestHandler__ = wsRequestHandler; 
@@ -517,7 +524,7 @@ readingPayload:
 
             // debug: Serial.printf ("[httpServer debug] %s\n", buffer);
             if (stristr (buffer, (char *) "UPGRADE: WEBSOCKET")) {
-              connection->setTimeOut (300000); // set time-out to 5 minutes for WebSockets (by default if is 1.5 s for HTTP requests)
+              connection->setTimeOut ((TIME_OUT_TYPE) 300000); // set time-out to 5 minutes for WebSockets (by default if is 1.5 s for HTTP requests)
               WebSocket *webSocket = new WebSocket (connection, httpRequest); 
               if (webSocket && webSocket->isOpened ()) { // check success
                 if (ths->__externalWsRequestHandler__) ths->__externalWsRequestHandler__ (httpRequest, webSocket);
@@ -614,10 +621,10 @@ readingPayload:
   };
 
 /*  
- * webClient function doesn't really belong to webServer, but it may came handy every now and then  
- */
+   webClient function doesn't really belong to webServer, but it may came handy every now and then  
+*/
 
-  String webClient (char *serverIP, int serverPort, unsigned int timeOutMillis, String httpRequest) {
+  String webClient (char *serverIP, int serverPort, TIME_OUT_TYPE timeOutMillis, String httpRequest) {
     if (getWiFiMode () == WIFI_OFF) {
       webDmesg ("[webClient] can't start, there is no network.");
       return "";

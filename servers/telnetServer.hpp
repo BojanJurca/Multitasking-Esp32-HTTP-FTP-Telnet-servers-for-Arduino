@@ -1,104 +1,68 @@
 /*
- * 
- * telnetServer.hpp
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  TelnetServer is built upon TcpServer with connectionHandler that handles TcpConnection according to telnet protocol.
- * 
- *  A connectionHandler handles some telnet commands by itself but the calling program can provide its own callback
- *  function. In this case connectionHandler will first ask callback function wheather is it going to handle the telnet 
- *  request. If not, the connectionHandler will try to process it.
- * 
- * History:
- *          - first release, 
- *            November 29, 2018, Bojan Jurca
- *          - added ifconfig and arp commands, 
- *            December 9, 2018, Bojan Jurca
- *          - added iw (dev wlan1 station dump) command, 
- *            December 11, 2018, Bojan Jurca          
- *          - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            April 13, 2019, Bojan Jurca
- *          - telnetCommandHandler parameters are now easyer to access, 
- *            improved user management,
- *            September 4th, Bojan Jurca     
- *          - added dmesg (--follow) command,
- *            September 14, 2019, Bojan Jurca        
- *          - added free command,
- *            October 2, 2019, Bojan Jurca
- *          - added mkfs command,
- *            replaced gmtime () function that returns ponter to static structure with reentrant solution
- *            October 29, 2019, Bojan Jurca
- *          - added uname and telnet commands
- *            November 10, 2019, Bojan Jurca
- *          - added curl command
- *            December 22, 2019, Bojan Jurca
- *          - telnetServer is now inherited from TcpServer
- *            February 27, 2020, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 11, 2020, Bojan Jurca 
- *          - port from SPIFFS to FAT file system, 
- *            adjustment for Arduino 1.8.13,
- *            added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
- *            October 10, 2020, Bojan Jurca
- *          - putty support,
- *            mpstat command
- *            bug fixes
- *            March 1, 2021, Bojan Jurca
- *            
- */
+ 
+    telnetServer.hpp
+
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+
+    TelnetServer is built upon TcpServer with connectionHandler that handles TcpConnection according to telnet protocol.
+
+    A connectionHandler handles some telnet commands by itself but the calling program can provide its own callback
+    function. In this case connectionHandler will first ask callback function wheather is it going to handle the telnet 
+    request. If not, the connectionHandler will try to process it.
+  
+    History:
+            - first release, 
+              November 29, 2018, Bojan Jurca
+            - added ifconfig and arp commands, 
+              December 9, 2018, Bojan Jurca
+            - added iw (dev wlan1 station dump) command, 
+              December 11, 2018, Bojan Jurca          
+            - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              April 13, 2019, Bojan Jurca
+            - telnetCommandHandler parameters are now easyer to access, improved user management,
+              September 4th, Bojan Jurca     
+            - added dmesg (--follow) command,
+              September 14, 2019, Bojan Jurca        
+            - added free command,
+              October 2, 2019, Bojan Jurca
+            - added mkfs command, replaced gmtime () function that returns ponter to static structure with reentrant solution
+              October 29, 2019, Bojan Jurca
+            - added uname and telnet commands
+              November 10, 2019, Bojan Jurca
+            - added curl command
+              December 22, 2019, Bojan Jurca
+            - telnetServer is now inherited from TcpServer
+              February 27, 2020, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 11, 2020, Bojan Jurca 
+            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13, added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
+              October 10, 2020, Bojan Jurca
+            - code review in order to make it more comprehensive
+              May, 11, 2021, Bojan Jurca            
+*/
 
 
 #ifndef __TELNET_SERVER__
   #define __TELNET_SERVER__
 
   #include <WiFi.h>
-  #include "common_functions.h"   // pad
-  #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp  
-  #include "user_management.h"    // telnetServer.hpp needs user_management.h for login, home directory, ...
-  #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
-  #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
-  #include "version_of_servers.h" // version of this software used in uname command
-  #include "webServer.hpp"        // webClient needed for curl command
-  // needed for ping command
-  #include "lwip/inet_chksum.h"
-  #include "lwip/ip.h"
-  #include "lwip/ip4.h"
-  #include "lwip/err.h"
-  #include "lwip/icmp.h"
-  #include "lwip/sockets.h"
-  #include "lwip/sys.h"
-  #include "lwip/netdb.h"
-  #include "lwip/dns.h"
-  // needed for (hard) reset command
-  #include "esp_int_wdt.h"
-  #include "esp_task_wdt.h"
-  // functions from real_time_clock.hpp
-  time_t getGmt ();                       
-  void setGmt (time_t t);
-  time_t getUptime ();                    
-  time_t timeToLocalTime (time_t t);
 
 
   // DEFINITIONS - change according to your needs
 
   #ifndef HOSTNAME
-    #define "MyESP32Server" // WiFi.getHostname() // use default if not defined
+    #define "MyESP32Server" // use default if not defined
   #endif
   #ifndef MACHINETYPE
     #define MACHINETYPE "ESP32"
   #endif
+
   #define ESP_SDK_VERSION ESP.getSdkVersion ()
 
-
-  // FUNCTIONS OF THIS MODULE
-
-  void dmesg (String message);  
-
-
-  // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
+  #include "version_of_servers.h" // version of this software used in uname command
   
   #define UNAME String (MACHINETYPE) + " (" + String (ESP.getCpuFreqMHz ()) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
+
 
   // find and report reset reason (this may help with debugging)
   #include <rom/rtc.h>
@@ -136,6 +100,14 @@
       default:                        return "WAKEUP REASON UNKNOWN - wakeup was not caused by deep sleep: " + String (wakeup_reason) + ".";
     }   
   }
+
+
+  /*
+
+     Support for dmesg command. Include all dmesg functions from different modules to partisipate their messages into message queue.
+     
+  */
+
     
   struct __dmesgType__ {
     unsigned long milliseconds;    
@@ -189,14 +161,46 @@
   }
   bool __redirectedDmesg__ = __redirectDmesg__ ();
 
+  
+  #include "common_functions.h"   // pad
+  #include "TcpServer.hpp"        // telnetServer.hpp is built upon TcpServer.hpp  
+  #include "user_management.h"    // telnetServer.hpp needs user_management.h for login, home directory, ...
+  #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
+  #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
+  #include "webServer.hpp"        // webClient needed for curl command
+  // needed for ping command
+  #include "lwip/inet_chksum.h"
+  #include "lwip/ip.h"
+  #include "lwip/ip4.h"
+  #include "lwip/err.h"
+  #include "lwip/icmp.h"
+  #include "lwip/sockets.h"
+  #include "lwip/sys.h"
+  #include "lwip/netdb.h"
+  #include "lwip/dns.h"
+  // needed for (hard) reset command
+  #include "esp_int_wdt.h"
+  #include "esp_task_wdt.h"
+  // functions from real_time_clock.hpp
+  time_t getGmt ();                       
+  void setGmt (time_t t);
+  time_t getUptime ();                    
+  time_t timeToLocalTime (time_t t);
 
+  
             //----- for IW: TO DO: try to put this variables and initializer inside class definition  -----
             static SemaphoreHandle_t __WiFiSnifferSemaphore__ = xSemaphoreCreateMutex (); // to prevent two threads to start sniffing simultaneously
             static String __macToSniffRssiFor__;  // input to __sniffWiFiForRssi__ function
             static int __rssiSniffedForMac__;     // output of __sniffWiFiForRssi__ function
 
 
-  // TELNET SERVER CLASS
+  /*
+      telnetServer is a TcpServer that handles TcpConnection according to Telnet protocol. telnetServer read incoming stream of
+      commands that user types into console, asks (through callback function) calling program if it is going to handle the command 
+      itself, if not then tries to handle it internally. There are quite some commands already built in telnetServer although
+      the commands themselves are not a part of Telnet protocol.
+      
+  */
 
   class telnetServer: public TcpServer {                      
   
@@ -231,10 +235,10 @@
   
       telnetServer (String (*telnetCommandHandler) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp),  // httpRequestHandler callback function provided by calling program
                     unsigned int stackSize,                                                                                 // stack size of httpRequestHandler thread, usually 4 KB will do 
-                    char *serverIP,                                                                                         // telnet server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+                    String serverIP,                                                                                        // telnet server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
                     int serverPort,                                                                                         // telnet server port
-                    bool (*firewallCallback) (char *)                                                                       // a reference to callback function that will be celled when new connection arrives 
-                   ): TcpServer (__telnetConnectionHandler__, (void *) this, stackSize, 300000, serverIP, serverPort, firewallCallback)
+                    bool (*firewallCallback) (String)                                                                       // a reference to callback function that will be celled when new connection arrives 
+                   ): TcpServer (__telnetConnectionHandler__, (void *) this, stackSize, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                         {
                           this->__externalTelnetCommandHandler__ = telnetCommandHandler;
 
@@ -263,7 +267,7 @@
           tsp = {"root", "", "", (char *) "\r\n# ", connection, 0, 0, 0, 0};
           tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);     
           // tell the client to go into character mode, not to echo an send its window size, then say hello 
-          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + String (connection->getOtherSideIP ()) + "!\r\nuser: "); 
+          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + connection->getOtherSideIP () + "!\r\nuser: "); 
           dmesg ("[telnetServer] " + tsp.userName + " logged in.");
           connection->sendData ("\r\n\nWelcome " + tsp.userName + ",\r\nyour home directory is " + tsp.homeDir + ",\r\nuse \"help\" to display available commands.\r\n" + tsp.prompt);
         
@@ -271,7 +275,7 @@
 
           tsp = {"", "", "", (char *) "", connection, 0, 0, 0, 0};
           // tell the client to go into character mode, not to echo an send its window size, then say hello 
-          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + String (connection->getOtherSideIP ()) + "!\r\nuser: "); 
+          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + connection->getOtherSideIP () + "!\r\nuser: "); 
           // read user name
           if (13 != __readLineFromClient__ (&tsp.userName, true, &tsp)) goto closeTelnetConnection;
           tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);
@@ -500,12 +504,6 @@
           if (argc == 1)                                                               return this->__free__ (0, tsp);
           if (argc == 3 && argv [1] == "-s" && (n = argv [2].toInt ()) > 0 && n < 300) return this->__free__ (n, tsp);
                                                                                        return "Wrong syntax. Use free or free -s n (where 0 < n < 300).";
-
-        } else if (argv [0] == "mpstat") { //---------------------------------- MPSTAT
-    
-          long n;
-          if (argc == 1) return this->__mpstat__ (tsp);
-                         return "Wrong syntax. Use mpstat.";
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
 
@@ -587,9 +585,9 @@
         } else if (argv [0] == "vi") { //-------------------------------------- VI
 
           if (argc == 2)  {
-                            unsigned long to = tsp->connection->getTimeOut (); tsp->connection->setTimeOut (TcpConnection::INFINITE); // we don't want TcpConnection to break during editing
+                            TIME_OUT_TYPE timeOutMillis = tsp->connection->getTimeOut (); tsp->connection->setTimeOut (INFINITE); // we don't want TcpConnection to break during editing
                             String s = this->__vi__ (argv [1], tsp);
-                            tsp->connection->setTimeOut (to); // restore time-out
+                            tsp->connection->setTimeOut (timeOutMillis); // restore original time-out
                             return s;
                           }
                           return "Wrong syntax. Use vi fileName";                         
@@ -768,90 +766,6 @@
           }
         } while (delaySeconds);
         return "";
-      }
-
-      String __mpstat__ (telnetSessionParameters *tsp) {
-        static TaskHandle_t core0IdleCounter = NULL;
-        static TaskHandle_t core1IdleCounter = NULL;
-        static unsigned long core0Count = 0;
-        static unsigned long core1Count = 0;
-        static unsigned long maxCount = ESP.getCpuFreqMHz () < 240 ? ( ESP.getCpuFreqMHz () < 160 ? 100000 : 220000 ) : 330000; // initial guess
-        // we have to make sure that ony one counter for each core runs even if there are more mpstat commands running at the same time
-        static SemaphoreHandle_t mpstatSemaphore = xSemaphoreCreateMutex ();
-        static int mpstatCounter = 0;
-        String retVal = "";
-
-        // start idle counters
-        xSemaphoreTake (mpstatSemaphore, portMAX_DELAY);
-        if (++mpstatCounter == 1) {
-          // start both idle counters
-          #define tskIDLE_PRIORITY 0
-          if (pdPASS != xTaskCreatePinnedToCore ([] (void *core0Count) { 
-                                                                          esp_task_wdt_delete (NULL);
-                                                                          unsigned long previousMillis = millis (); 
-                                                                          unsigned long cnt = 0;
-                                                                          while (true) { 
-                                                                            cnt ++;
-                                                                            if (millis () - previousMillis >= 1000) {
-                                                                              previousMillis = millis (); 
-                                                                              *(unsigned long *) core0Count = cnt;
-                                                                              cnt = 0;
-                                                                            } 
-                                                                          }  
-                                                                        }, "core0IdleCounter", 1024, (void *) &core0Count, tskIDLE_PRIORITY, &core0IdleCounter, 0)) { core0IdleCounter = NULL; retVal = "Can't start counters."; }
-          if (pdPASS != xTaskCreatePinnedToCore ([] (void *core1Count) { 
-                                                                          esp_task_wdt_delete (NULL);
-                                                                          unsigned long previousMillis = millis (); 
-                                                                          unsigned long cnt = 0;
-                                                                          while (true) { 
-                                                                            cnt ++;
-                                                                            if (millis () - previousMillis >= 1000) {
-                                                                              previousMillis = millis (); 
-                                                                              *(unsigned long *) core1Count = cnt;
-                                                                              cnt = 0;
-                                                                            } 
-                                                                          }  
-                                                                        }, "core1IdleCounter", 1024, (void *) &core1Count, tskIDLE_PRIORITY, &core1IdleCounter, 1)) { core1IdleCounter = NULL; retVal = "Can't start counters."; }
-        }
-        xSemaphoreGive (mpstatSemaphore);
-
-        // read and display idle counts
-        delay (100);
-        if (!tsp->connection->sendData ("            CPU 0 idle   CPU 1 idle\r\n")) retVal = "Client disconnected.";
-        while (retVal == "") {
-          delay (1000);
-          if (core0Count > maxCount) maxCount = core0Count;
-          if (core1Count > maxCount) maxCount = core1Count;
-          // debug:
-          Serial.printf ("[telnetServer mpstat debug] maxCount = %lu\n", maxCount);
-          char c [15];
-          time_t l = getLocalTime ();
-          if (l) {
-            struct tm st = timeToStructTime (getLocalTime ());
-            strftime (c, sizeof (c), "%H:%M:%S", &st);
-          } else {
-            sprintf (c, "%8lu", (unsigned long) millis ());
-          }
-          char output [100];
-          sprintf (output, "%s  %8lu %%   %8lu %%\r\n", c, 100 * core0Count / maxCount, 100 * core1Count / maxCount);
-          if (!tsp->connection->sendData (output, strlen (output))) retVal = "Client disconnected.";
-          while (tsp->connection->available () == TcpConnection::AVAILABLE) {
-            char c = 0;
-            if (!tsp->connection->recvData (&c, sizeof (c))) retVal = "Client disconnected.";
-            if (c == 3 || c >= ' ') retVal = " "; // break if user pressed Ctrl-C or any key
-          }
-        }
-        
-        // stop idle counters
-        xSemaphoreTake (mpstatSemaphore, portMAX_DELAY);
-        if (--mpstatCounter == 0) {
-          // stop both idle counters
-          if (core0IdleCounter) { vTaskDelete (core0IdleCounter); core0IdleCounter = NULL; }
-          if (core1IdleCounter) { vTaskDelete (core1IdleCounter); core1IdleCounter = NULL; }
-        }
-        xSemaphoreGive (mpstatSemaphore);
-
-        return retVal;
       }
 
       inline String __dmesg__ (bool follow, bool trueTime, telnetSessionParameters *tsp) __attribute__((always_inline)) { // displays dmesg circular queue over telnet connection
@@ -1049,10 +963,10 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "")                                   return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + removeExtraSlash (fp) + " denyed.";
 
-        if (makeDir (fp))                               return fp + " made.";
-                                                        return "Can't make " + fp;
+        if (makeDir (fp))                               return removeExtraSlash (fp) + " made.";
+                                                        return "Can't make " + removeExtraSlash (fp);
 
       }
 
@@ -1060,12 +974,12 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "" || !isDirectory (fp))              return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + removeExtraSlash (fp) + " denyed.";
         if (fp == tsp->homeDir)                         return "You may not remove your home directory.";
         if (fp == tsp->workingDir)                      return "You can't remove your working directory.";
 
-        if (removeDir (fp))                             return fp + " removed.";
-                                                        return "Can't remove " + fp;
+        if (removeDir (fp))                             return removeExtraSlash (fp) + " removed.";
+                                                        return "Can't remove " + removeExtraSlash (fp);
 
       }      
 
@@ -1074,16 +988,16 @@
 
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "" || !isDirectory (fp))              return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access to " + removeExtraSlash (fp) + " denyed.";
 
         tsp->workingDir = fp;                           
-                                                        return "Your working directory is " + tsp->workingDir;
+                                                        return "Your working directory is " + removeExtraSlash (tsp->workingDir);
       }
 
       inline String __pwd__ (telnetSessionParameters *tsp) { 
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         
-        return "Your working directory is " + tsp->workingDir;
+        return "Your working directory is " + removeExtraSlash (tsp->workingDir);
       }
 
       inline String __mv__ (String& srcFileOrDirectory, String& dstFileOrDirectory, telnetSessionParameters *tsp) { 
@@ -1489,7 +1403,7 @@
 
       String __telnet__ (String otherServerName, int otherServerPort, telnetSessionParameters *tsp) {
         // open TCP connection to the other server
-        TcpClient *otherServer = new TcpClient ((char *) otherServerName.c_str (), otherServerPort, 300000); // close also this connection if inactive for more than 5 minutes
+        TcpClient *otherServer = new TcpClient ((char *) otherServerName.c_str (), otherServerPort, (TIME_OUT_TYPE) 300000); // close also this connection if inactive for more than 5 minutes
         if (!otherServer || !otherServer->connection () || !otherServer->connection ()->started ()) return "Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".";
     
         struct __telnetStruct__ telnetSessionSharedMemory = {tsp->connection, true, otherServer->connection (), true, false};
@@ -1578,7 +1492,7 @@
             } 
             // call webClient
             Serial.printf ("[%10lu] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
-            String r = webClient ((char *) server.c_str (), port, 15000, method + " " + url);
+            String r = webClient ((char *) server.c_str (), port, (TIME_OUT_TYPE) 15000, method + " " + url);
             return r != "" ? r : "Error, check dmesg to get more information.";
           } else {
             return "URL must begin with http://";
@@ -1790,7 +1704,7 @@ saveChanges:
                         if (e) { message = " Could't save changes "; } else { message = " Changes saved "; dirty = 0; }
                       }
                       break;
-            case 27:  // ESC [ 65 = up arrow, ESC [ 66 = down arrow, ESC[C = right arrow, ESC[D = left arrow, 
+            case 27:  // ESC [A = up arrow, ESC [B = down arrow, ESC[C = right arrow, ESC[D = left arrow, 
                       if (!tsp->connection->recvData (&c, 1)) return "";
                       switch (c) {
                         case '[': // ESC [

@@ -1,34 +1,33 @@
 /*
- * 
- * user_management.h 
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  User_management initially creates user management files:
- * 
- *    /etc/passwd        - modify the code below with your users
- *    /etc/shadow        - modify the code below with your passwords
- * 
- * Functions needed to manage users can be found in this module.
- * 
- * History:
- *          - first release, 
- *            November 18, 2018, Bojan Jurca
- *          - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            simplified installation,
- *            April 13, 2019, Bojan Jurca
- *          - fixed bug in getUserHomeDirectory - it got additional parameter homeDir
- *            added functions userAdd and userDel
- *            September 4th, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca     
- *          - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
- *            October 10, 2020, Bojan Jurca
- *  
- *  Unix user management references:
- *          - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
- *          - https://www.cyberciti.biz/faq/understanding-etcshadow-file/
- *          
+
+    user_management.h 
+  
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    User_management initially creates user management files:
+  
+      /etc/passwd        - modify the code below with your users
+      /etc/shadow        - modify the code below with your passwords
+  
+   Functions needed to manage users can be found in this module.
+  
+   History:
+            - first release, 
+              November 18, 2018, Bojan Jurca
+            - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              simplified installation,
+              April 13, 2019, Bojan Jurca
+            - fixed bug in getUserHomeDirectory - it got additional parameter homeDir
+              added functions userAdd and userDel
+              September 4th, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 10, 2020, Bojan Jurca     
+            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
+              October 10, 2020, Bojan Jurca
+    
+    Unix user management references:
+            - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
+            - https://www.cyberciti.biz/faq/understanding-etcshadow-file/          
  */
 
 
@@ -159,7 +158,7 @@
       String fileContent;
       bool retVal = true;
       
-      if (__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
+      if (readFile (fileContent, "/etc/shadow")) {
         fileContent.trim (); // just in case ...
         char c; int l; 
         while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
@@ -173,7 +172,7 @@
           else       fileContent = fileContent.substring (0, i) + userName + ":$5$" + String (__sha256__ ((char *) newPassword.c_str ())) + ":::::::\r\n"; // end of line not found
           // Serial.println (fileContent);
   
-          if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+          if (!writeFile (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
             Serial.printf ("[%10lu] [user_management] passwd: error writing /etc/shadow\n", millis ());
             retVal = false;
           }
@@ -204,7 +203,7 @@
       if (strlen (userHomeDirectory.c_str ()) > FILE_PATH_MAX_LENGTH) return "Home directory name too long.";
 
       // --- add userName, userId and userHomeDirectory into /etc/passwd ---
-      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
+      if (!readFile (fileContent, "/etc/passwd")) {
         return "Can't read /etc/passwd";
       }
       if (("\n" + fileContent).indexOf ("\n" + userName + ":") > -1) {
@@ -216,12 +215,12 @@
       fileContent.trim (); // just in case ...
       while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
       fileContent += "\r\n" + String (userName) + ":x:" + String (userId) + ":::" + String (userHomeDirectory) + ":\r\n";
-      if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
+      if (!writeFile (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
         return "Can't write /etc/passwd";
       }
 
       // --- add default password into /etc/shadow ---
-      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
+      if (!readFile (fileContent, "/etc/shadow")) {
         return "Can't read /etc/shadow";          
       }
       if (("\n" + fileContent).indexOf ("\n" + userName + ":") > -1) {
@@ -230,7 +229,7 @@
       fileContent.trim (); // just in case ...
       while ((l = fileContent.length ()) && (c = fileContent.charAt (l - 1)) && (c == '\n' || c == '\r')) fileContent.remove (l - 1); // just in case ...
       fileContent += "\r\n" + userName + ":$5$" + String (__sha256__ ((char *) "changeimmediatelly")) + ":::::::\r\n";
-      if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+      if (!writeFile (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
         return "Can't write /etc/shadow";
       }
 
@@ -257,7 +256,7 @@
       bool b, first;
 
       // --- remove userName from /etc/passwd ---
-      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/passwd")) {
+      if (!readFile (fileContent, "/etc/passwd")) {
         return "Can't read /etc/passwd";          
       }
       i = fileContent.indexOf (userName + ":"); // find userName
@@ -265,7 +264,7 @@
         j = fileContent.indexOf ("\n", i); // find end of line
         if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
         else       fileContent = fileContent.substring (0, i); // end of line not found
-        if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
+        if (!writeFile (fileContent, "/etc/passwd")) { // writing a file wasn't successfull
           return "Can't write /etc/passwd";         
         }
       } else {
@@ -273,7 +272,7 @@
       }
 
       // --- remove userName from /etc/shadow ---
-      if (!__readFileWithoutSemaphore__ (fileContent, "/etc/shadow")) {
+      if (!readFile (fileContent, "/etc/shadow")) {
         return "Can't read /etc/shadow";          
       }
       i = fileContent.indexOf (userName + ":"); // find userName
@@ -281,7 +280,7 @@
         j = fileContent.indexOf ("\n", i); // find end of line
         if (j > 0) fileContent = fileContent.substring (0, i) + fileContent.substring (j + 1); // end of line found
         else       fileContent = fileContent.substring (0, i); // end of line not found
-        if (!__writeFileWithoutSemaphore__ (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
+        if (!writeFile (fileContent, "/etc/shadow")) { // writing a file wasn't successfull
           return "Can't write /etc/shadow"; 
         }
       }

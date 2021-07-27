@@ -1,24 +1,23 @@
 /*
- * 
- * Oscilloscope.h
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- * History:
- *          - first release,
- *            August, 14, 2019, Bojan Jurca
- *          - oscilloscope structures and functions moved into separate file, 
- *            October 2, 2019, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 11, 2020, Bojan Jurca 
- *          - ability to monitor up to 2 signals simultaneously
- *            remember settings functionality
- *            February 10, 2021, Bojan Jurca
- *            
- * Issues:
- *          - when WiFi is WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
- *            
- */
+ 
+    oscilloscope.h
+ 
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+   History:
+            - first release,
+              August, 14, 2019, Bojan Jurca
+            - oscilloscope structures and functions moved into separate file, 
+              October 2, 2019, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 11, 2020, Bojan Jurca 
+            - ability to monitor up to 2 signals simultaneously, remember settings functionality
+              February 10, 2021, Bojan Jurca
+              
+   Issues:
+            - when WiFi is in WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
+             
+*/
 
 
 // ----- includes, definitions and supporting functions -----
@@ -26,7 +25,7 @@
 #include <WiFi.h>
 #include "webServer.hpp"    // oscilloscope uses websockets defined in webServer.hpp  
 
-// #include "esp_task_wdt.h"
+#include "esp_task_wdt.h"
 
 struct oscSample {                    // one sample
    int16_t signal1;                   // signal value of 1st GPIO read by analogRead or digialRead   

@@ -1,50 +1,52 @@
 /*
- * 
- * network.h
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  Network.h reads network configuration from file system and sets both ESP32 network interfaces accordingly
- *
- *  It is a little awkward why UNIX, LINUX, Raspbian are using so many network configuration files and how they are used):
- * 
- *    /network/interfaces                       - modify the code below with your IP addresses
- *    /etc/wpa_supplicant/wpa_supplicant.conf   - modify the code below with your WiFi SSID and password
- *    /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses 
- *    /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
- * 
- * History:
- *          - first release, 
- *            November 16, 2018, Bojan Jurca
- *          - added ifconfig, arp 
- *            December 9, 2018, Bojan Jurca
- *          - added iw
- *            December 11, 2018, Bojan Jurca
- *          - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
- *            simplified installation
- *            April 13, 2019, Bojan Jurca
- *          - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
- *            April 21, 2019, Bojan Jurca
- *          - added network event logging, 
- *            the use of dmesg 
- *            September 14, 2019, Bojan Jurca
- *          - putting wlan numbers in order,  
- *            automatic reconnection to router,
- *            bug fixes
- *            October 13, Bojan Jurca
- *          - simplifyed entry of default parameters,
- *            simplifyed format of configuration files 
- *            December 1, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca
- *          - added DNS servers to static STA IP configuration
- *            March 5, 2021, Bojan Jurca
- *            
+ 
+   network.h
+  
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    network.h reads network configuration from file system and sets both ESP32 network interfaces accordingly
+ 
+    It is a little awkward why Unix, Linux are using so many network configuration files and how they are used):
+  
+      /network/interfaces                       - modify the code below with your IP addresses
+      /etc/wpa_supplicant/wpa_supplicant.conf   - modify the code below with your WiFi SSID and password
+      /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses 
+      /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
+  
+   History:
+            - first release, 
+              November 16, 2018, Bojan Jurca
+            - added ifconfig, arp 
+              December 9, 2018, Bojan Jurca
+            - added iw
+              December 11, 2018, Bojan Jurca
+            - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
+              simplified installation
+              April 13, 2019, Bojan Jurca
+            - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
+              April 21, 2019, Bojan Jurca
+            - added network event logging, 
+              the use of dmesg 
+              September 14, 2019, Bojan Jurca
+            - putting wlan numbers in order,  
+              automatic reconnection to router,
+              bug fixes
+              October 13, Bojan Jurca
+            - simplifyed entry of default parameters,
+              simplifyed format of configuration files 
+              December 1, Bojan Jurca
+            - elimination of compiler warnings and some bugs
+              Jun 10, 2020, Bojan Jurca
+            - added DNS servers to static STA IP configuration
+              March 5, 2021, Bojan Jurca
+            - code review in order to make it more comprehensive
+              July, 6, 2021, Bojan Jurca
  */
 
 
 #ifndef __NETWORK__
   #define __NETWORK__
+
 
   #include <WiFi.h>
   #include <lwip/netif.h>
@@ -98,24 +100,40 @@
   #define DEFAULT_AP_SUBNET_MASK  "255.255.255.0"
 
 
-  // FUNCTIONS OF THIS MODULE
+  // converts dotted (text) IP address into IPAddress structure
+  IPAddress IPAddressFromString (String ipAddress) { 
+    int ip1, ip2, ip3, ip4; 
+    if (4 == sscanf (ipAddress.c_str (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
+      return IPAddress (ip1, ip2, ip3, ip4);
+    } else {
+      Serial.printf ("[network] invalid IP address %s\n", ipAddress.c_str ());
+      return IPAddress (0, 42, 42, 42); // == 1073421048 - invalid address - first byte of class A can not be 0
+    }
+  }
 
-  void startNetworkAndInitializeItAtFirstCall ();
+  // converts binary MAC address into String
+  String MacAddressAsString (byte *MacAddress, byte addressLength) {
+    String s = "";
+    char c [3];
+    for (byte i = 0; i < addressLength; i++) {
+      sprintf (c, "%02x", *(MacAddress ++));
+      s += String (c);
+      if (i < 5) s += ":";
+    }
+    return s;
+  }
 
-  IPAddress IPAddressFromString (String ipAddress);
-  
-  String MacAddressAsString (byte *MacAddress, byte addressLength);
-  
-  String inet_ntos (ip_addr_t addr);
-  
-  String inet_ntos (ip4_addr_t addr); 
-  
+  // returns output of arp (telnet) command
   String arp_a ();
-  
-  wifi_mode_t getWiFiMode ();
-  
 
-  // VARIABLES AND FUNCTIONS TO BE USED INSIDE THIS MODULE
+
+  /*
+
+     Support for telnet dmesg command. If telnetServer.hpp is included in the project __networkDmesg__ function will be redirected
+     to message queue defined there and dmesg command will display its contetn. Otherwise it will just display message on the
+     Serial console.
+     
+  */ 
 
   void __networkDmesg__ (String message) { 
     #ifdef __TELNET_SERVER__ 
@@ -125,12 +143,13 @@
     #endif
   }
   void (* networkDmesg) (String) = __networkDmesg__;                // use this pointer to display / record system messages - it will be redirected to telnet dmesg function if telnet server will be included later
+
   
   void startNetworkAndInitializeItAtFirstCall () {                  // starts WiFi according to configuration files, creates configuration files if they don't exist
     // WiFi.disconnect (true);
     WiFi.mode (WIFI_OFF);
 
-    // these parameters are needed to start WiFi in different modes
+    // these parameters are needed to start ESP32 WiFi in different modes
     String staSSID = "";
     String staPassword = "";
     String staIP = "";
@@ -149,7 +168,7 @@
       
         String fileContent = "";
     
-        // /network/interfaces contation STA(tion) configuration
+        // /network/interfaces STA(tion) configuration
         readFile (fileContent, "/network/interfaces");
         if (fileContent != "") { // parse configuration
     
@@ -201,7 +220,7 @@
           
         }
     
-        // /etc/wpa_supplicant/wpa_supplicant.conf contation STA(tion) credentials
+        // /etc/wpa_supplicant/wpa_supplicant.conf STA(tion) credentials
         readFile (fileContent, "/etc/wpa_supplicant/wpa_supplicant.conf");
         if (fileContent != "") {
     
@@ -446,6 +465,7 @@
           networkDmesg ("[network] [AP] initializing access point: " + apSSID + "/" + apPassword + ", " + apIP + ", " + apGateway + ", " + apSubnetMask); 
           WiFi.softAPConfig (IPAddressFromString (apIP), IPAddressFromString (apGateway), IPAddressFromString (apSubnetMask));
           WiFi.begin ();
+          networkDmesg ("[network] [AP] access point IP: " + WiFi.softAPIP ().toString ());
         } else {
           // ESP.restart ();
           networkDmesg ("[network] [AP] failed to initialize access point mode."); 
@@ -504,27 +524,6 @@
            String (*(((byte *) &addr) + 3));
   }
   
-  IPAddress IPAddressFromString (String ipAddress) { // converts dotted IP address into IPAddress structure
-    int ip1, ip2, ip3, ip4; 
-    if (4 == sscanf (ipAddress.c_str (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
-      return IPAddress (ip1, ip2, ip3, ip4);
-    } else {
-      Serial.printf ("[network] invalid IP address %s\n", ipAddress.c_str ());
-      return IPAddress (0, 42, 42, 42); // == 1073421048 - invalid address - first byte of class A can not be 0
-    }
-  }
-
-  String MacAddressAsString (byte *MacAddress, byte addressLength) {
-    String s = "";
-    char c [3];
-    for (byte i = 0; i < addressLength; i++) {
-      sprintf (c, "%02x", *(MacAddress ++));
-      s += String (c);
-      if (i < 5) s += ":";
-    }
-    return s;
-  }
-
   // ----- arp reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c -----
 
   // first (re)make a definition of ARP table and get a pointer to it (not very elegant but I have no other idea how to get reference to arp table)
@@ -552,6 +551,7 @@
     u8_t state;
   };
 
+  // returns output of arp (telnet) command
   String arp_a () {
     // get pointer to arp table the first time function is called
     struct etharp_entry *arpTablePointer = NULL;
@@ -595,5 +595,6 @@
     }
     return s + "\r\n";
   }  
+
 
 #endif
