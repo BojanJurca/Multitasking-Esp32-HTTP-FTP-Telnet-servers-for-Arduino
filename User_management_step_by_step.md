@@ -93,7 +93,7 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
               digitalWrite (LED_BUILTIN, HIGH);
               return "Led is on.";
             } else {
-              return "I'm sorry, " + tsp->userName + " but only root can turn the LED on.";
+              return "I'm sorry " + tsp->userName + ", but only root can turn the LED on.";
             }
   }
 
@@ -156,7 +156,7 @@ use "help" to display available commands.
 $ turn led off
 This was easy, everyon could have done it.
 $ turn led on
-I'm sorry, bojan but only root can turn the LED on.
+I'm sorry bojan, but only root can turn the LED on.
 $ pwd
 Your working directory is /home/bojan
 $ cd ..
