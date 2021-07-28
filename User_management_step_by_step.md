@@ -194,17 +194,6 @@ The following example is just a very basic login - logout mechanism, that could 
 #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
 #include "./servers/network.h"
 
-// define how your ESP32 server is going to handle time: NTP servers where it will get GMT from and how local time will be calculated from GMT
-
-#define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
-#define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
-#define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
-
-// define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
-// ...
-// #define TIMEZONE  EASTERN_TIMEZONE
-// (default) #define TIMEZONE  CET_TIMEZONE               
-#include "./servers/time_functions.h"     
 
 // define how your ESP32 server is going to handle users
 // if you want to learn more about user management please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/User_management_step_by_step.md
