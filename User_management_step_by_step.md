@@ -172,8 +172,163 @@ Since there is nothing you can do from your code to interfere with FTP sessions 
 ## 3. Checking user rights inside web session (a working example)
 Normally everybody can use web server but if you would like to add login/logout functionality things are more complicated than with telnet sessions. The main difference comes from the fact that one telnet session consists of one TCP connection whereas one web session consists of many TCP connections. Normally there is one TCP connection for each web page that browser requests. When handling one TCP connection you cannot automatically know what happened in another. For example: if the user successfully passes user name and password to web server through one web page (one TCP connection handled by one server thread/task/process) there is no secure way you can get this information when the user tries to open another web page (in another TCP connection handled by another server thread/task/process). To overcome this difficulty web server and browser exchange pieces of information stored in cookies here and there, each time the browser requests a new page from web server.
 
+The following example is just a very basic login - logout mechanism, that could be improved in many ways. Its purpose is merely to demonstrate basic web session principles. If a random user tries to open session.html page which is allowed only for logged in users, he will be automatically redirected to login.html page. 
+
 ```C++
-... demo code to be added ...
+#include <WiFi.h>
+
+// define how your ESP32 server will present itself to the network and what the output of some telnet comands (like uname) would be
+
+#define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
+#define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
+
+// FAT file system is needed for configuration files and some built-in telnet commands
+
+#include "./servers/file_system.h"
+
+// define how your ESP32 server is going to connect to WiFi network - these are just default settings, you can edit configuration files later
+
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           "" // HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
+#define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
+#include "./servers/network.h"
+
+// define how your ESP32 server is going to handle time: NTP servers where it will get GMT from and how local time will be calculated from GMT
+
+#define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
+#define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
+#define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
+
+// define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
+// ...
+// #define TIMEZONE  EASTERN_TIMEZONE
+// (default) #define TIMEZONE  CET_TIMEZONE               
+#include "./servers/time_functions.h"     
+
+// define how your ESP32 server is going to handle users
+// if you want to learn more about user management please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/User_management_step_by_step.md
+
+// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+// #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
+// (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
+#include "./servers/user_management.h"
+
+// include code for web server
+#include "./servers/webServer.hpp"    
+
+
+// httpRequestHandler
+
+String sessionId = String (random (10000, 20000));  // this variable is initialized when ESP32 starts up
+                                                    // it remains the same for all sessions while ESP32 is running
+                                                    // this is one of weak points of this example
+
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+
+  // first check if user is logged in 
+  bool userIsLoggedIn = false;
+  
+  // - if he has just logged in then username and password would be in URL (// http://...?username=...&password=...)
+  // - if he has logged in once before then username would bi in username cookie and sessionId would have a value of variable sessionId
+
+  String userName = between (httpRequest, "username=", "&");
+  String password = between (httpRequest, "password=", " ");
+  if (userName > "") {
+    // the user is just trying to login - check userName and password against valid ESP32 users 
+    if (checkUserNameAndPassword (userName, password)) {    // OK
+      wsp->setHttpResponseCookie ("sessionId", sessionId);  // store sessionId in a cookie for later requests 
+      wsp->setHttpResponseCookie ("userName", userName);    // store userName in a cookie for later requests
+      userIsLoggedIn = true;
+      Serial.println (userName + " logged in.");
+    } else {                                                // FAILED
+      wsp->setHttpResponseCookie ("sessionId", "");         // delete sessionId cookie if it exists
+      wsp->setHttpResponseCookie ("userName", "");          // delete userName cookie if it exists
+      Serial.println (userName + " failed to log in.");
+    }    
+  } else {
+    // perhaps the user has logged in once before and sessionId is already stored in a cookie
+    if (wsp->getHttpRequestCookie ("sessionId") == sessionId) { // OK
+      userName = wsp->getHttpRequestCookie ("userName");
+      userIsLoggedIn = true;
+    } else {                                                    // wrong sessionId
+      wsp->setHttpResponseCookie ("sessionId", "");             // delete sessionId cookie if it exists
+      wsp->setHttpResponseCookie ("userName", "");              // delete userName cookie if it exists      
+    }
+  }
+
+
+  // then process HTTP request
+
+  if (httpRequest.substring (0, 15) == "GET /login.html") { // user requested login.html
+
+    // if already logged in user landed on this page then logg him out
+    wsp->setHttpResponseCookie ("sessionId", "");             // delete sessionId cookie if it exists
+    wsp->setHttpResponseCookie ("userName", "");              // delete userName cookie if it exists      
+    
+    // return HTML response
+    return "<html>\n"
+           "  <body>\n"
+           "    <h2>Please login</h2>\n"
+           "    <form action='/session.html'>\n"
+           "      <label for='username'>username:</label><br>\n"
+           "      <input type='text' id='username' name='username'><br>\n"
+           "      <label for='password'>password:</label><br>\n"
+           "      <input type='text' id='password' name='password'><br><br>\n"
+           "      <input type='submit' value='login'>\n"
+           "    </form>\n" 
+           "    <p>When you click the 'login' button, the form-data will be sent to a page 'session.html'.</p>\n"
+           "  </body>\n"
+           "</html>\n";
+
+  } else if (httpRequest.substring (0, 17) == "GET /session.html") { // user requested session.html page which is protected only for logged in users
+
+    // if the user is not logged in then reirect him to login.html
+    if (!userIsLoggedIn) {
+      wsp->httpResponseStatus = "307 temporary redirect";           // redirect browser ...
+      wsp->setHttpResponseHeaderField ("Location", "/login.html");  // ... to login.html
+      return "Not logged in.";                                      // whatever - browser will ignore this
+    }
+
+    // return HTML response 
+    return "<html>\n"
+           "  <body>\n"
+           "    <h2>You have successfully logged in.</h2>\n"
+           "    <form action='/login.html'>\n"
+           "      <input type='submit' value='logout'>\n"
+           "    </form>\n" 
+           "    <p>When you click the 'logout' button, you will be redirected to a page 'login.html'.</p>\n"
+           "  </body>\n"
+           "</html>\n";
+    
+  }
+
+  return "";
+}
+  
+void setup () {
+  Serial.begin (115200);
+ 
+  // FFat.format ();
+  mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
+
+  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+
+  // start web server 
+  httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                        NULL,                         // no wsRequestHandler
+                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
+                                        80,                           // HTTP port
+                                        NULL);                        // no firewall
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) webDmesg ("[httpServer] did not start.");
+}
+
+void loop () {
+                
+}
 ```
 
 
