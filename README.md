@@ -30,6 +30,7 @@ You can go directly to Setup instructions and examples now or continue reading t
    - support for HTTP 1.1 keep-alive directive,
    - optional firewall for incoming requests.
 
+-----> Please see [Step by step guide to web server](Web_server_step_by_step.md) for more information.
 
 **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. 
 
