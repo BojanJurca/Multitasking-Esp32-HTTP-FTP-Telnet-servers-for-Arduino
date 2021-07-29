@@ -182,5 +182,21 @@ ftp>
 ```
 
 
+## 3. Combining (large) .html files with (short) programmable responses
+The .html file will include most of the content and structure whereas programmable responses will provide dynamic or calculated content. Since programmable responses will be called from .html file we will also need a javascript mechanism (inside .html file) capable of this. Javascript already has built-in parser for JSON. All programmable responses will therefor use this format.
+
 
 ... to be continued ...
+
+
+## 4. Handling cookies
+
+
+... to be continued ...
+
+
+## 5. Websockets
+
+
+... to be continued ...
+
