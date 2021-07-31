@@ -185,8 +185,156 @@ ftp>
 ## 3. Combining (large) .html files with (short) programmable responses
 The .html file will include most of the content and structure whereas programmable responses will provide dynamic or calculated content. Since programmable responses will be called from .html file we will also need a javascript mechanism (inside .html file) capable of this. Javascript already has built-in parser for JSON. All programmable responses will therefor use this format.
 
+```C++
+#include <WiFi.h>
 
-... to be continued ...
+
+// define how your ESP32 server will present itself to the network and what the output of some telnet comands (like uname) would be
+
+#define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
+#define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
+
+
+// FAT file system is needed for full functionality: all configuration files are stored here as well and .html and other files
+
+#include "./servers/file_system.h"
+
+
+// define how your ESP32 server is going to connect to WiFi network - these are just default settings, you can edit configuration files later
+
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           "" // HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
+#define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
+#include "./servers/network.h"
+
+
+// include time function for FTP server is going to need them 
+  // define how your ESP32 server is going to handle time: NTP servers where it will get GMT from and how local time will be calculated from GMT
+  
+  // define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
+  // ...
+  // #define TIMEZONE  EASTERN_TIMEZONE
+  // (default) #define TIMEZONE  CET_TIMEZONE               
+  #include "./servers/time_functions.h"     
+
+// include user management for FTP server is going to need it
+  // define how your ESP32 server is going to handle users
+  // if you want to learn more about user management please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/User_management_step_by_step.md
+  
+  // #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+  // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
+  // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
+  #include "./servers/user_management.h"
+
+
+// include code FTP and web servers
+
+#include "./servers/webServer.hpp"    
+#include "./servers/ftpServer.hpp"    
+
+
+// httpRequestHandler for short HTTP replies – instead of HTML replies will be in JSON format 
+
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+
+  // debug:
+  Serial.print (httpRequest);
+
+  if (httpRequest.substring (0, 16) == "GET /builtInLed ") {
+getBuiltInLed:
+      String httpReplyInJsonFormat = "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + (digitalRead (2) == HIGH ? String ("on") : String ("off")) + "\"}";
+      // debug:
+      Serial.println (httpReplyInJsonFormat);
+      return httpReplyInJsonFormat;
+  } else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ") {
+      digitalWrite (2, HIGH);
+      goto getBuiltInLed;
+  } else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ") {
+      digitalWrite (2, LOW);
+      goto getBuiltInLed;
+  } 
+
+  return "";  // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
+}
+
+
+void setup () {
+  Serial.begin (115200);
+ 
+  // FFat.format ();
+  mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
+
+  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+
+  // start web server 
+  httpServer *httpSrv = new httpServer (httpRequestHandler,           // our httpRequestHandler
+                                        NULL,                         // no wsRequestHandler 
+                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
+                                        80,                           // HTTP port
+                                        NULL);                        // no firewall
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
+
+  // start FTP server
+  ftpServer *ftpSrv = new ftpServer ("0.0.0.0",                       // start FTP server on all available ip addresses
+                                     21,                              // controll connection FTP port
+                                     NULL);                           // no firewall
+  if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
+
+  // add your own code here
+  pinMode (2, OUTPUT); 
+
+}
+
+void loop () {
+                
+}
+```
+
+And the HTML file would look something like this:
+
+```HTML
+<html>
+  Combining (large) .html files with (short) programmable responses<br><br>
+  <hr />
+  Led: <input type='checkbox' disabled id='ledSwitch' onClick='turnLed (this.checked)'>
+  <hr />
+  <script type='text/javascript'>
+
+    // mechanism that makes HTTP requests
+    var httpClient = function () { 
+      this.request = function (url, method, callback) {
+        var httpRequest = new XMLHttpRequest ();
+        httpRequest.onreadystatechange = function () {
+          if (httpRequest.readyState == 4 && httpRequest.status == 200) callback (httpRequest.responseText);
+        }
+        httpRequest.open (method, url, true);
+        httpRequest.send (null);
+      }
+    }
+
+    // make a HTTP requests and initialize/populate this page
+    var client = new httpClient ();
+    client.request ('/builtInLed', 'GET', function (json) {
+                                                            // json reply will look like: {"id":"MyESP32Server","builtInLed":"on"}
+                                                            var obj=document.getElementById ('ledSwitch'); 
+                                                            obj.disabled = false; 
+                                                            obj.checked = (JSON.parse (json).builtInLed == 'on');
+                                                          });
+
+  function turnLed (switchIsOn) { // sends desired led state to ESP32 server and refreshes ledSwitch state
+    client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off' , 'PUT', function (json) {
+                                                            var obj = document.getElementById ('ledSwitch'); 
+                                                            obj.checked = (JSON.parse (json).builtInLed == 'on');                                                           
+                                                          });
+  }
+
+  </script>
+</html>
+```
 
 
 ## 4. Handling cookies
