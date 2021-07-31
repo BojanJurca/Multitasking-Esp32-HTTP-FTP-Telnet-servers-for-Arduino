@@ -108,6 +108,10 @@
   }
   void (* timeDmesg) (String) = __timeDmesg__;                      // use this pointer to display / record system messages
 
+  #ifndef dmesg
+    #define dmesg timeDmesg
+  #endif
+
 
   time_t __readBuiltInClock__ () {
     struct timeval now;

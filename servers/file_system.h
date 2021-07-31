@@ -51,6 +51,10 @@
   }
   void (* fileSystemDmesg) (String) = __fileSystemDmesg__; // use this pointer to display / record system messages
 
+  #ifndef dmesg
+    #define dmesg fileSystemDmesg
+  #endif
+
 
   #define FILE_PATH_MAX_LENGTH (256 - 1) // the number of characters of longest full file path on FAT (not counting closing 0)
 

@@ -55,6 +55,9 @@
   }
   void (* ftpDmesg) (String) = __ftpDmesg__; // use this pointer to display / record system messages
 
+  #ifndef dmesg
+    #define dmesg ftpDmesg
+  #endif
 
   /*
 

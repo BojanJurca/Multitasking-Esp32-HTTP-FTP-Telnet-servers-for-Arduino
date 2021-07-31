@@ -67,6 +67,9 @@
         }
         void (* webDmesg) (String) = __webDmesg__; // use this pointer to display / record system messages, if Telnet server is also included it will redirect it to its dmesg command
 
+        #ifndef dmesg
+          #define dmesg webDmesg
+        #endif
 
   #include "common_functions.h"   // stristr, between
   #include "TcpServer.hpp"        // webServer.hpp is built upon TcpServer.hpp  

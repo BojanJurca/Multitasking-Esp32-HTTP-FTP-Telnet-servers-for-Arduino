@@ -127,7 +127,7 @@
   portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
 
   // adds message into dmesg circular queue
-  void dmesg (String message) {
+  void telnetDmesg (String message) {
     portENTER_CRITICAL (&__csDmesg__); 
     __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
     __dmesgCircularQueue__ [__dmesgEnd__].time = getGmt ();
@@ -137,25 +137,27 @@
     Serial.printf ("[%10lu] %s\n", millis (), message.c_str ());
   }
 
+  #define dmesg telnetDmesg
+
   // redirect other moduls' dmesg here before setup () begins
   bool __redirectDmesg__ () {
     #ifdef __TCP_SERVER__
-      TcpDmesg = dmesg;
+      TcpDmesg = telnetDmesg;
     #endif  
     #ifdef __FILE_SYSTEM__
-      fileSystemDmesg = dmesg;
+      fileSystemDmesg = telnetDmesg;
     #endif  
     #ifdef __NETWORK__
-      networkDmesg = dmesg;
+      networkDmesg = telnetDmesg;
     #endif
     #ifdef __FTP_SERVER__
-      ftpDmesg = dmesg;
+      ftpDmesg = telnetDmesg;
     #endif    
     #ifdef __WEB_SERVER__
-      webDmesg = dmesg;
+      webDmesg = telnetDmesg;
     #endif  
     #ifdef __TIME_FUNCTIONS__
-      timeDmesg = dmesg;
+      timeDmesg = telnetDmesg;
     #endif      
     return true;
   }

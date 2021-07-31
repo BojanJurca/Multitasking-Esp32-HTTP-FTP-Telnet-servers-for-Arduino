@@ -58,9 +58,20 @@
      Serial console.
      
   */
-  
-  void __TcpDmesg__ (String message) { Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); }
-  void (* TcpDmesg) (String) = __TcpDmesg__; // use this pointer to display / record system messages
+
+
+  void __TcpServerDmesg__ (String message) { 
+    #ifdef __TELNET_SERVER__  // use dmesg from telnet server if possible
+      dmesg (message);
+    #else                     // if not just output to Serial
+      Serial.printf ("[%10lu] %s\n", millis (), message.c_str ()); 
+    #endif
+  }
+  void (* TcpServerDmesg) (String) = __TcpServerDmesg__; // use this pointer to display / record system messages
+
+  #ifndef dmesg
+    #define dmesg TcpServerDmesg
+  #endif
   
   
   // ----- includes, definitions and supporting functions -----
@@ -538,7 +549,7 @@
             if (connectionSocket != -1) { // non-blocking socket keeps returning -1 until new connection arrives
               if (!ths->__callFirewallCallback__ ((char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ())) {
                 close (connectionSocket);
-                TcpDmesg ("[TcpServer] firewall rejected connection from " + __inet_ntos__ (connectingAddress.sin_addr));
+                TcpServerDmesg ("[TcpServer] firewall rejected connection from " + __inet_ntos__ (connectingAddress.sin_addr));
                 continue;
               }
               if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {

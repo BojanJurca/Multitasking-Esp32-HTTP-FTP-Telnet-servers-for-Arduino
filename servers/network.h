@@ -144,6 +144,11 @@
   }
   void (* networkDmesg) (String) = __networkDmesg__;                // use this pointer to display / record system messages - it will be redirected to telnet dmesg function if telnet server will be included later
 
+  #ifndef dmesg
+    #define dmesg networkDmesg
+  #endif
+
+
   
   void startNetworkAndInitializeItAtFirstCall () {                  // starts WiFi according to configuration files, creates configuration files if they don't exist
     // WiFi.disconnect (true);
