@@ -419,6 +419,15 @@ void setHttpResponseCookie (String cookieName, String cookieValue, time_t expire
 
 ## 5. Websockets
 
+Basically, websockets are TCP connections between javascript web clients and web servers. These TCP connections are not the same through which HTTP requests are send in one directions and HTTP replies in another. These connections typically remain open very short time – they close when HTTP reply is sent back to the client. Unlike this, websocket remains open as long as javascript client and web server want them to be. The information between them can be exchanged in both ways. These are the reasons why there is a separate wsRequestHandler callback function passed to web server (in addition to httpRequestHandler that we have already seen).
+
+Two things are needed:
+
+  -	A web page whith javascript client that would handle websocket on the client side.
+  -	A wsRequestHandler function that would handle websocket on the server side.
+
+Of course, the web page would also be located on the server at first. But once it gets transferred to the client, javascript will run there.
+
 
 ... to be continued ...
 
