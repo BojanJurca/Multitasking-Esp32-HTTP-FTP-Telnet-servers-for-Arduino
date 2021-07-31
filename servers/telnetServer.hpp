@@ -142,7 +142,7 @@
   // redirect other moduls' dmesg here before setup () begins
   bool __redirectDmesg__ () {
     #ifdef __TCP_SERVER__
-      TcpDmesg = telnetDmesg;
+      TcpServerDmesg = telnetDmesg;
     #endif  
     #ifdef __FILE_SYSTEM__
       fileSystemDmesg = telnetDmesg;
