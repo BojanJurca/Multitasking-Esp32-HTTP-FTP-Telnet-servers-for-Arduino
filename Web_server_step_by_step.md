@@ -64,7 +64,7 @@ void setup () {
                                         "0.0.0.0",                    // start HTTP server on all available ip addresses
                                         80,                           // HTTP port
                                         NULL);                        // no firewall
-  if (!httpSrv || (httpSrv && !httpSrv->started ())) webDmesg ("[httpServer] did not start.");
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
 
   // ----- add your own code here -----
   
@@ -144,13 +144,13 @@ void setup () {
                                         "0.0.0.0",                    // start HTTP server on all available ip addresses
                                         80,                           // HTTP port
                                         NULL);                        // no firewall
-  if (!httpSrv || (httpSrv && !httpSrv->started ())) webDmesg ("[httpServer] did not start.");
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
 
   // start FTP server
   ftpServer *ftpSrv = new ftpServer ("0.0.0.0",                       // start FTP server on all available ip addresses
                                      21,                              // controll connection FTP port
                                      NULL);                           // no firewall
-  if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) ftpDmesg ("[ftpServer] did not start.");
+  if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
 
   // add your own code here
 
@@ -339,8 +339,78 @@ And the HTML file would look something like this:
 
 ## 4. Handling cookies
 
+This section is now about cookies in general nor it is about handling cookies in a browser (by javascript for example). It is only about setting cookies (in ESP32 web server) in HTTP replies before they are being sent to the browser and reading cookies that the browser sends to ESP32 web server through HTTP requests.
 
-... to be continued ...
+There are two functions available through wwwSessionParameters in httpRequestHandler function: getHttpRequestCookie and setHttpResponseCookie:
+
+```C++
+#include <WiFi.h>
+
+
+// define how your ESP32 server will present itself to the network and what the output of some telnet comands (like uname) would be
+
+#define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
+#define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
+
+
+// define how your ESP32 server is going to connect to WiFi network - these are just default settings, you can edit configuration files later
+
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           "" // HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
+#define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
+#include "./servers/network.h"
+
+
+// include code for web server
+
+#include "./servers/webServer.hpp"    // if you want to learn more about web server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Web_server_step_by_step.md
+
+// httpRequestHandler callback function
+
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+
+  // debug: Serial.print (httpRequest);
+
+  if (httpRequest.substring (0, 6) == "GET / ") { 
+    
+    // set 
+    String refreshCounter = wsp->getHttpRequestCookie ("refreshCounter"); // read the cookie sent by the broweser
+    if (refreshCounter == "") refreshCounter = "0"; // the browser did not send the cookie
+    refreshCounter = String (refreshCounter.toInt () + 1);
+    wsp->setHttpResponseCookie ("refreshCounter", refreshCounter);  // set a cookie that will be send to browser in HTTP reply
+    return  "<HTML>"
+            "  <BODY>"
+            "    This page has been refreshed " + refreshCounter + " times. Click refresh to see more."
+            "  </BODY>"
+            "</HTML>";
+  }
+
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning ""
+}
+
+void setup () {
+  Serial.begin (115200);
+ 
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+
+  // start web server 
+  httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                        NULL,                         // no wsRequestHandler
+                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
+                                        80,                           // HTTP port
+                                        NULL);                        // no firewall
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
+
+  // ----- add your own code here -----
+  
+}
+
+void loop () {
+              
+}
+```
 
 
 ## 5. Websockets
