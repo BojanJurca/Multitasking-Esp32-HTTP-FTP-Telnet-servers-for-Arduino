@@ -412,6 +412,10 @@ void loop () {
 }
 ```
 
+You can also set expiration and path by setHttpResponseCookie, full function definition is: 
+
+void setHttpResponseCookie (String cookieName, String cookieValue, time_t expires = 0, String path = "/");
+
 
 ## 5. Websockets
 
