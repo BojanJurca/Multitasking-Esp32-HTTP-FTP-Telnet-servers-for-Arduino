@@ -428,6 +428,112 @@ Two things are needed:
 
 Of course, the web page would also be located on the server at first. But once it gets transferred to the client, javascript will run there.
 
+Let’s suppose we want to track analog samples ESP32 reads on pins 36 and 39:
 
-... to be continued ...
+```C++
+#include <WiFi.h>
 
+
+// define how your ESP32 server will present itself to the network and what the output of some telnet comands (like uname) would be
+
+#define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
+#define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
+
+
+// define how your ESP32 server is going to connect to WiFi network - these are just default settings, you can edit configuration files later
+
+#define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
+#define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+#define DEFAULT_AP_SSID           "" // HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
+#define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
+#include "./servers/network.h"
+
+
+// include code for web server
+
+#include "./servers/webServer.hpp"    // if you want to learn more about web server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Web_server_step_by_step.md
+
+// httpRequestHandler callback function
+
+String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
+
+  if (httpRequest.substring (0, 6) == "GET / ") { 
+    return  "<html>\n"
+            "  <body>\n"
+            "    pin 36 <div id='pin36'>...</div>\n" 
+            "    pin 39 <div id='pin39'>...</div>\n"
+            "    <script type='text/javascript'>\n"
+            "      if ('WebSocket' in window) {\n"
+            "\n" // -------------------------------------------------------------------------------------------------------
+            "        // this is where you make a WS request to the server\n"
+            "        var ws = new WebSocket ('ws://' + self.location.host + '/streamSamples'); // open webSocket connection\n"
+            "\n" // -------------------------------------------------------------------------------------------------------
+            "        ws.onopen = function () {;};\n" //  doesn't to enything, but websockets don't work without it
+            "        ws.onmessage = function (evt) {\n" 
+            "          if (evt.data instanceof Blob) { // Sample readings\n"
+            "            // receive binary data as blob and then convert it into array\n"
+            "            var mySampleArray = null;\n"
+            "            var myArrayBuffer = null;\n"
+            "            var myFileReader = new FileReader ();\n"
+            "            myFileReader.onload = function (event) {\n"
+            "              myArrayBuffer = event.target.result;\n"
+            "              mySampleArray = new Uint16Array (myArrayBuffer); // sample values are now in the array of 16 bit unsigned integers\n"
+            "\n" // -------------------------------------------------------------------------------------------------------
+            "              // this is where you pass vlues received through websocket to a GUI controls\n"
+            "              for (var i = 0; i < mySampleArray.length; i++) {\n"
+            "                if (i % 2 == 0) document.getElementById('pin36').innerText = mySampleArray [i].toString ();\n"
+            "                else            document.getElementById('pin39').innerText = mySampleArray [i].toString ();\n"
+            "              }\n"
+            "\n" // -------------------------------------------------------------------------------------------------------
+            "            };\n"
+            "            myFileReader.readAsArrayBuffer (evt.data);\n"
+            "          }\n"
+            "        };\n"
+            "      } else {\n"
+            "        alert ('WebSockets are not supported by your browser.');\n"
+            "      }\n"
+            "    </script>\n"
+            "  </body>\n"
+            "</html>";
+  }
+
+  return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning ""
+}
+
+
+// wsRequestHandler faunction
+
+void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be reentrant!
+  if (wsRequest.substring (0, 19) == "GET /streamSamples ") {
+    uint16_t buffer [2];
+    do {
+      delay (100); // 1/10 of a second
+      buffer [0] = (int16_t) analogRead (36);
+      buffer [1] = (int16_t) analogRead (39);
+    } while (webSocket->sendBinary ((byte *) &buffer,  sizeof (buffer))); // push 2, 16 bit unsigned integers (4 bytes) into websocket 
+  }
+}
+
+
+void setup () {
+  Serial.begin (115200);
+ 
+  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+
+  // start web server 
+  httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                        wsRequestHandler,             // a callback function that will handle WS requests
+                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
+                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
+                                        80,                           // HTTP port
+                                        NULL);                        // no firewall
+  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
+
+  // ----- add your own code here -----
+  
+}
+
+void loop () {
+              
+}
+```
