@@ -1,4 +1,4 @@
 New in release 1.28
 
   - code review in order to make it more comprehensive
-  - different step-by-sep guides 
+  - different step-by-step guides 
