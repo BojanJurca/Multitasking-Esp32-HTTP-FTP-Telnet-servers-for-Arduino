@@ -5,17 +5,17 @@
 
 Before #include-ing “time_functions.h” the following definitions can be #defined:
 
-'''C++
+```
 #define TIMEZONE   CET_TIMEZONE   // this is the default definition
-'''
+```
 
   - TIMEZONE tells ESP32 server how it should calculate local time from GMT. You can change the default setting to one of already supported time zones: KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
-'''C++
+```C++
 #define DEFAULT_NTP_SERVER_1   "1.si.pool.ntp.org"   // this is the default definition 
 #define DEFAULT_NTP_SERVER_2   "2.si.pool.ntp.org"   // this is the default definition
 #define DEFAULT_NTP_SERVER_3   "3.si.pool.ntp.org"   // this is the default definition
-'''
+```
 
   - NTP_SERVER definitions tell ESP32 server where to get current time (GMT) from, when certain functions are being called (see startCronDaemonAndInitializeItAtFirstCall). You can change the default settings to NTP servers close to you. These #definitions will be written to /etc/ntp.conf file which ESP32 reads each time it starts up. 
 
@@ -28,9 +28,9 @@ setGmt sets ESP32 built-in clock with current time (GMT). If setLocalTime has al
 
 **Declaration**
 
-'''C++
+```C++
 void setGmt (time_t t)
-'''
+```
 
 **Parameter**
 
@@ -45,9 +45,9 @@ setLocalTime sets ESP32 built-in clock with current (local) time. It is differen
 
 **Declaration**
 
-'''C++
+```C++
 void setLocalTime (time_t t)
-'''
+```
 
 **Parameter**
 
@@ -62,9 +62,9 @@ getGmt returns the state of ESP32 built-in clock in GMT.
 
 **Declaration**
 
-'''C++
+```C++
 time_t getGmt ();
-'''
+```
 
 **Return value**
 
@@ -80,9 +80,9 @@ getLocalTime returns the state of ESP32 built-in clock in local time.
 
 **Declaration**
 
-'''C++
+```C++
 time_t getLocalTime ();
-'''
+```
 
 **Return value**
 
@@ -98,9 +98,9 @@ timeToLocalTime coverts GMT to local time. This function is the only function th
 
 **Declaration**
 
-'''C++
+```C++
 time_t timeToLocalTime (time_t t)
-'''
+```
 
 **Parameter**
 
@@ -119,9 +119,9 @@ timeToStructTime converts time_t to struct tm.
 
 **Declaration**
 
-'''C++
+```C++
 struct tm timeToStructTime (time_t t);
-'''
+```
 
 **Parameter**
 
@@ -140,9 +140,9 @@ timeToString converts time_t to String.
 
 **Declaration**
 
-'''C++
+```C++
 String timeToString (time_t t);
-'''
+```
 
 **Parameter**
 
@@ -162,9 +162,9 @@ ntpDate synchronizes ESP32 built-in clock with NTP server. ESP32 must have an in
 
 **Declaration**
 
-'''C++
+```C++
 String ntpDate (String ntpServer);
-'''
+```
 
 **Parameter**
 
@@ -184,9 +184,9 @@ ntpDate synchronizes ESP32 built-in clock with one of NTP servers specified in /
 
 **Declaration**
 
-'''C++
+```C++
 String ntpDate ();
-'''
+```
 
 **Return value**
 
@@ -206,9 +206,9 @@ startCronDaemonAndInitializeItAtFirstCall starts special task or process called 
 
 **Declaration**
 
-'''C++
+```C++
 void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024));
-'''
+```
 
 **Parameters**
 
@@ -225,9 +225,9 @@ cronTabAdd adds a new cron command definition into cron table.
 
 **Declaration**
 
-'''C++
+```C++
 bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, String cronCommand, bool readFromFile = false); 
-'''
+```
 
 **Parameters**
 
@@ -256,9 +256,9 @@ cronTabAdd adds a new cron command definition into cron table.
 
 **Declaration**
 
-'''C++
+```C++
 bool cronTabAdd (String cronTabLine, bool readFromFile = false); 
-'''
+```
 
 **Parameters**
 
@@ -275,9 +275,9 @@ cronTabDel deletes cron command definition from cron table.
 
 **Declaration**
 
-'''C++
+```C++
 int cronTabDel (String cronCommand);
-'''
+```
 
 **Parameters**
 
