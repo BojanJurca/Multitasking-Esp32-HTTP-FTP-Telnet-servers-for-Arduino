@@ -11,7 +11,7 @@ It is more or less about user interface:
 ![Screenshot](presentation.gif)
 
 
-In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, â€¦) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
+In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
 In case of Telnet user interface all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
 
@@ -19,11 +19,11 @@ You can go directly to Setup instructions and examples now or continue reading t
 
 ## Features
 
-**webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies â€“ see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
+**webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
    - Cookies
-   - WS protocol â€“ only basic support for WebSockets is included so far,
+   - WS protocol – only basic support for WebSockets is included so far,
    - webClient function is included for making simple HTTP requests from ESP32 to other servers,
    - threaded web server sessions,
    - time-out set to 1,5 seconds for HTTP protocol and 5 minutes for WS protocol to free up limited ESP32 resources used by inactive sessions,
@@ -33,8 +33,6 @@ You can go directly to Setup instructions and examples now or continue reading t
 -----> Please see [Step by step guide to web server](Web_server_step_by_step.md) for more information.
 
 **telnetServer** can, similarly to webserver, handle commands in two different ways. As a programmed response to some commands or it can handle some already built-in commands by itself. 
-
------> Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
 
 Built-in commands implemented so far:
 
@@ -83,10 +81,10 @@ Other features:
    - time-out set to 5 minutes to free up limited ESP32 resources used by inactive sessions,  
    - optional firewall for incoming connections.
 
+-----> Please see [Step by step guide to telnet server](Telnet_server_step_by_step.md) for more information.
+
 
 **ftpServer** is needed for uploading configuration files, .html files, etc. onto ESP32 file system. Unlike webServer and telnetServer it does not expose a programming interface. 
-
------> Please see [Step by step guide to FTP server](FTP_server_step_by_step.md) for more information.
 
 Built-in commands that are implemented so far:
 
@@ -105,6 +103,8 @@ Other features:
    - threaded FTP sessions,
    - time-out set to 5 minutes to free up limited ESP32 the resources used by inactive sessions,  
    - optional firewall for incoming connections.
+
+-----> Please see [Step by step guide to FTP server](FTP_server_step_by_step.md) for more information.
 
 
 **TcpServer** is the heart of all three servers mentioned above but it can also be used as stand-alone (see example). 
@@ -141,12 +141,12 @@ These files are created at first run of your sketch with default settings (you c
    - hardcoded (username is root, password is hardcoded in to Arduino sketch constants) - use #define USER_MANAGEMENT   HARDCODED_USER_MANAGEMENT,
    - no user management at all (everyone can Telnet or FTP to ESP32 servers without password) - use #define USER_MANAGEMENT   NO_USER_MANAGEMENT.
 
------> Please see [Step by step guide to user management](User_management_step_by_step.md) for more information.
-
 Only "root" user with "rootpassword" password, "webadmin" user with "webadminpassword" password, "webserver" (with no password, this is system account intended only to hold webserver home directory) and "telnetserver" (with no password, this is system account intended only to hold telnetserver home directory) users are created at initialization. You can create additional users if you need them or change their passwords at initialization (by modifying the part of code in user_management.h) or upload your own files onto ESP32 with FTP. User management implemented in Esp32_web_ftp_telnet_server_template is very basic, only 3 fields are used: user name, hashed password and home directory. The following files are used to store user management information:
 
    - /etc/passwd contains users' accounts information
    - /etc/shadow contains users' passwords
+
+-----> Please see [Step by step guide to user management](User_management_step_by_step.md) for more information.
 
 
 **Time functions**. Time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the following (or add your own and modify timeToLocalTime function appropriately): 
@@ -160,6 +160,8 @@ By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functi
 
 -----> Please see [Step-by-step guide to do something at specific time](cronDaemon_step_by_step.md) for more information.
 
+-----> or [Programmer's reference manual for time_functions.h](time_functions_referencece_manual.md) for more information.
+
 
 ## Setup instructions
 
@@ -171,7 +173,7 @@ By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functi
 
 Doing this the following will happen:
 
-  - ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
+  - ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
   - network configuration files will be created with the following settings:
   - your ESP32 will be configured to use DHCP in STAtion mode (with DEFAULT_STA_SSID / DEFAULT_STA_PASSWORD #definitions),
   - your ESP32 AccessPoint SSID will be MyESP32Server (with DEFAULT_AP_PASSWORD #definition),
@@ -343,7 +345,7 @@ We do not have C++ compiler available in browser, but Javascript will do the job
 
 **Example 03 - HTML page interacting with ESP32**
 
-We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional â€“ client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism except for the use of PUT method instead of GET in REST calls (the latter is only the matter of understanding; GET method would do the job just as well).
+We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism except for the use of PUT method instead of GET in REST calls (the latter is only the matter of understanding; GET method would do the job just as well).
 
 Server will have to handle two additional cases:
 
@@ -710,7 +712,7 @@ On the browser side Javascript program could look something like example10.html:
 
 **Example 11 - Morse server**
 
-In example 11 weâ€™ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
+In example 11 we’ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
 Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
 While starting and stopping the server is quite straightforward, more attention must be put to routine that handles the connection. Make sure it is reentrant for it can run in many threads simultaneously.
 
