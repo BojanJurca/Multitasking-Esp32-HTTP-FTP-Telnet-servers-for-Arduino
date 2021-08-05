@@ -2,17 +2,20 @@
 
 
 ## Compile time definitions
-Before #include-ing ìtime_functions.hî the following definitions can be #defined:
-ëííC++
+
+Before #include-ing ‚Äútime_functions.h‚Äù the following definitions can be #defined:
+
+'''C++
 #define TIMEZONE   CET_TIMEZONE   // this is the default definition
-ëíí
+'''
+
   - TIMEZONE tells ESP32 server how it should calculate local time from GMT. You can change the default setting to one of already supported time zones: KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
-ëííC++
+'''C++
 #define DEFAULT_NTP_SERVER_1   "1.si.pool.ntp.org"   // this is the default definition 
 #define DEFAULT_NTP_SERVER_2   "2.si.pool.ntp.org"   // this is the default definition
 #define DEFAULT_NTP_SERVER_3   "3.si.pool.ntp.org"   // this is the default definition
-ëíí
+'''
 
   - NTP_SERVER definitions tell ESP32 server where to get current time (GMT) from, when certain functions are being called (see startCronDaemonAndInitializeItAtFirstCall). You can change the default settings to NTP servers close to you. These #definitions will be written to /etc/ntp.conf file which ESP32 reads each time it starts up. 
 
@@ -23,12 +26,11 @@ Before #include-ing ìtime_functions.hî the following definitions can be #defined
 
 setGmt sets ESP32 built-in clock with current time (GMT). If setLocalTime has already been called there is no need of calling also setGmt. This function is also called internally by ntpDate function or ntpdate telnet command.
 
-
 **Declaration**
 
-ëííC++
+'''C++
 void setGmt (time_t t)
-ëíí
+'''
 
 **Parameter**
 
@@ -43,9 +45,9 @@ setLocalTime sets ESP32 built-in clock with current (local) time. It is differen
 
 **Declaration**
 
-ëííC++
+'''C++
 void setLocalTime (time_t t)
-ëíí
+'''
 
 **Parameter**
 
@@ -60,9 +62,9 @@ getGmt returns the state of ESP32 built-in clock in GMT.
 
 **Declaration**
 
-ëííC++
+'''C++
 time_t getGmt ();
-ëíí
+'''
 
 **Return value**
 
@@ -78,9 +80,9 @@ getLocalTime returns the state of ESP32 built-in clock in local time.
 
 **Declaration**
 
-ëííC++
+'''C++
 time_t getLocalTime ();
-ëíí
+'''
 
 **Return value**
 
@@ -96,9 +98,9 @@ timeToLocalTime coverts GMT to local time. This function is the only function th
 
 **Declaration**
 
-ëííC++
+'''C++
 time_t timeToLocalTime (time_t t)
-ëíí
+'''
 
 **Parameter**
 
@@ -117,9 +119,9 @@ timeToStructTime converts time_t to struct tm.
 
 **Declaration**
 
-ëííC++
+'''C++
 struct tm timeToStructTime (time_t t);
-ëíí
+'''
 
 **Parameter**
 
@@ -138,9 +140,9 @@ timeToString converts time_t to String.
 
 **Declaration**
 
-ëííC++
+'''C++
 String timeToString (time_t t);
-ëíí
+'''
 
 **Parameter**
 
@@ -160,9 +162,9 @@ ntpDate synchronizes ESP32 built-in clock with NTP server. ESP32 must have an in
 
 **Declaration**
 
-ëííC++
+'''C++
 String ntpDate (String ntpServer);
-ëíí
+'''
 
 **Parameter**
 
@@ -170,7 +172,7 @@ String ntpDate (String ntpServer);
 
 **Return value**
 
-  - ìî if synchronization succeeded
+  - ‚Äú‚Äù if synchronization succeeded
   - error message if not
 
 
@@ -178,17 +180,17 @@ String ntpDate (String ntpServer);
 
 **Description**
 
-ntpDate synchronizes ESP32 built-in clock with one of NTP servers specified in /etc/ntp.conf†configuration file. ESP32 must have an internet connection before ntpDate is called. File system must be mounted and /etc/ntp.conf†configured. If this is not the case, then ntpDate will try the default NTP_SERVER #definitions. This function is also called internally by ntpdate telnet command and cronDaemon.
+ntpDate synchronizes ESP32 built-in clock with one of NTP servers specified in /etc/ntp.conf¬†configuration file. ESP32 must have an internet connection before ntpDate is called. File system must be mounted and /etc/ntp.conf¬†configured. If this is not the case, then ntpDate will try the default NTP_SERVER #definitions. This function is also called internally by ntpdate telnet command and cronDaemon.
 
 **Declaration**
 
-ëííC++
+'''C++
 String ntpDate ();
-ëíí
+'''
 
 **Return value**
 
-  - ìî if synchronization succeeded
+  - ‚Äú‚Äù if synchronization succeeded
   - error message if not
 
 
@@ -204,9 +206,9 @@ startCronDaemonAndInitializeItAtFirstCall starts special task or process called 
 
 **Declaration**
 
-ëííC++
+'''C++
 void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024));
-ëíí
+'''
 
 **Parameters**
 
@@ -223,9 +225,9 @@ cronTabAdd adds a new cron command definition into cron table.
 
 **Declaration**
 
-ëííC++
+'''C++
 bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, String cronCommand, bool readFromFile = false); 
-ëíí
+'''
 
 **Parameters**
 
@@ -239,7 +241,7 @@ bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint
 
   - uint8_t month defines the month of year (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-  - uint8_t day_of_week defines the day of week (local time, Sunday = 1, Ö) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t day_of_week defines the day of week (local time, Sunday = 1, ‚Ä¶) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
   - String cronCommand is the croncommand that is going to be passed to cronHandler.
 
@@ -254,13 +256,13 @@ cronTabAdd adds a new cron command definition into cron table.
 
 **Declaration**
 
-ëííC++
+'''C++
 bool cronTabAdd (String cronTabLine, bool readFromFile = false); 
-ëíí
+'''
 
 **Parameters**
 
-  -  String cronTabLine contains definition cron command and when it should be called in text format. This is the same format as in /etc/crontab file: 6 numbers and cron command text. The numbers correspond to second, minute, hour, day of month, month of year, day of week when cronHandler will be called with cronCommand parameter. If it is not important set it to *.
+  - String cronTabLine contains definition cron command and when it should be called in text format. This is the same format as in /etc/crontab file: 6 numbers and cron command text. The numbers correspond to second, minute, hour, day of month, month of year, day of week when cronHandler will be called with cronCommand parameter. If it is not important set it to *.
 
   - bool readFromFile = false is used internally, normally it should be left false.
 
@@ -273,13 +275,13 @@ cronTabDel deletes cron command definition from cron table.
 
 **Declaration**
 
-ëííC++
+'''C++
 int cronTabDel (String cronCommand);
-ëíí
+'''
 
 **Parameters**
 
-  -  String cronCommand contains the nme of the command to be deleted from cron table.
+  - String cronCommand contains the nme of the command to be deleted from cron table.
 
 **Return value**
 
