@@ -38,7 +38,9 @@
             - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13, added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
               October 10, 2020, Bojan Jurca
             - code review in order to make it more comprehensive
-              May, 11, 2021, Bojan Jurca            
+              May, 11, 2021, Bojan Jurca
+            - added sendmail command
+              August, 12, 2021, Bojan Jurca 
 */
 
 
@@ -169,6 +171,7 @@
   #include "user_management.h"    // telnetServer.hpp needs user_management.h for login, home directory, ...
   #include "network.h"            // telnetServer.hpp needs network.h to process network commands such as arp, ...
   #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
+  #include "smtpClient.h"         // SMTP client for sendmail command
   #include "webServer.hpp"        // webClient needed for curl command
   // needed for ping command
   #include "lwip/inet_chksum.h"
@@ -236,10 +239,10 @@
       } telnetSessionParameters;    
   
       telnetServer (String (*telnetCommandHandler) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp),  // httpRequestHandler callback function provided by calling program
-                    unsigned int stackSize,                                                                                 // stack size of httpRequestHandler thread, usually 4 KB will do 
-                    String serverIP,                                                                                        // telnet server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+                    size_t stackSize,                                                                                       // stack size of httpRequestHandler thread, usually 16 KB will do 
+                    String serverIP,                                                                                        // telnet server IP address, 0.0.0.0 for all available IP addresses
                     int serverPort,                                                                                         // telnet server port
-                    bool (*firewallCallback) (String)                                                                       // a reference to callback function that will be celled when new connection arrives 
+                    bool (*firewallCallback) (String IP)                                                                    // a reference to callback function that will be celled when new connection arrives 
                    ): TcpServer (__telnetConnectionHandler__, (void *) this, stackSize, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                         {
                           this->__externalTelnetCommandHandler__ = telnetCommandHandler;
@@ -306,52 +309,35 @@
             connection->sendData ((char *) "\r\n");
 
             // ----- parse command line into arguments (max 32) -----
-            
-            int argc = 0; String argv [16] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""}; 
-            argv [0] = String (cmdLine); argv [0].trim ();
-            if (argv [0] != "") {
-              argc = 1;
-              while (argc < 16) {
-                int l;
-                
-                // try to parse against '\"' first to support long file names
-                if (argv [argc - 1].charAt (0) == '\"') {
-                  l = argv [argc - 1].indexOf ('\"', 1);
-                  if (l > 0) {
-                    argv [argc] = argv [argc - 1].substring (l + 1);
-                    argv [argc - 1] = argv [argc - 1].substring (0, l + 1); // no need to trim
-                    argv [argc].trim ();
-                    if (argv [argc] == "") break;
-                    argc ++;
-                    continue;
-                  }
-                }
-                // parse argv [argc - 1] against ' '
-                l = argv [argc - 1].indexOf (" ");
-                if (l > 0) {
-                  argv [argc] = argv [argc - 1].substring (l + 1);
-                  argv [argc - 1] = argv [argc - 1].substring (0, l); // no need to trim
-                  argv [argc].trim ();                  
-                  if (argv [argc] == "") break;
-                  argc ++;
-                  continue;
-                }
-                break;
+            cmdLine += ' ';
+            int argc = 0; String argv [32] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
+            bool quotation = false; 
+            for (int i = 0; i < cmdLine.length (); i++) {
+              switch (char c = cmdLine.charAt (i)) {
+                case '\"':  if (cmdLine.charAt (i + 1) == '\"') { argv [argc] += '\"'; i ++; }
+                            else quotation = !quotation;
+                            break;
+                case ' ':   if (quotation) argv [argc] += ' ';
+                            else if (argv [argc] > "") argc ++;
+                            break;
+                default:    argv [argc] += c;
               }
+              if (argc >= 32) break;
             }
+            if (quotation) {
+              connection->sendData ("Quotation not finished. Missing ending \".");
+            } else {
+              // debug: for (int i = 0; i < argc; i++) Serial.print ("|" + argv [i] + "|     "); Serial.println ();
+  
+              // ----- ask telnetCommandHandler (if it is provided by the calling program) if it is going to handle this command, otherwise try to handle it internally -----
+      
+              String r;
+              // unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
+              if (ths->__externalTelnetCommandHandler__ && (r = ths->__externalTelnetCommandHandler__ (argc, argv, &tsp)) != "") 
+                connection->sendData (r); // send reply to telnet client
+              else connection->sendData (ths->__internalTelnetCommandHandler__ (argc, argv, &tsp)); // send reply to telnet client
 
-            for (int i = 0; i < argc; i++) if (argv [i].charAt (0) == '\"' && argv [i].charAt (argv [i].length () - 1) == '\"') argv [i] = argv [i].substring (1, argv [i].length () - 1);
-
-            // debug: for (int i = 0; i < argc; i++) Serial.print ("|" + argv [i] + "|     "); Serial.println ();
-
-            // ----- ask telnetCommandHandler (if it is provided by the calling program) if it is going to handle this command, otherwise try to handle it internally -----
-    
-            String r;
-            // unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
-            if (ths->__externalTelnetCommandHandler__ && (r = ths->__externalTelnetCommandHandler__ (argc, argv, &tsp)) != "") 
-              connection->sendData (r); // send reply to telnet client
-            else connection->sendData (ths->__internalTelnetCommandHandler__ (argc, argv, &tsp)); // send reply to telnet client
-
+            } // if command line ended out of quotation
           } // if cmdLine is not empty
           connection->sendData (tsp.prompt);
         } // read and process comands in a loop
@@ -467,7 +453,7 @@
         } else if (argv [0] == "uname") { //----------------------------------- UNAME
     
           if (argc == 1 || (argc == 2 && argv [1] == "-a")) return this->__uname__ ();
-                                                            return "Wrong syntax. Use uname or uname -a";
+                                                            return "Wrong syntax. Use uname [-a]";
 
         } else if (argv [0] == "uptime") { //---------------------------------- UPTIME
     
@@ -488,24 +474,24 @@
           
           if (argc == 1)                     return this->__getDateTime__ ();
           if (argc == 4 && argv [1] == "-s") return this->__setDateTime__ (argv [2], argv [3]);
-                                             return "Wrong syntax. Use date or date -s YYYY/MM/DD hh:mm:ss (use hh in 24 hours time format).";
+                                             return "Wrong syntax. Use date [-s YYYY/MM/DD hh:mm:ss] (use hh in 24 hours time format)";
 
         } else if (argc >= 1 && argv [0] == "ntpdate") { //-------------------- NTPDATE
           
           if (argc == 1 || ((argc == 2 || argc == 3) && argv [1] == "-u")) return this->__ntpdate__ (argv [2]);
-                                                                           return "Wrong syntax. Use ntpdate or ntpdate -u or ntpdate -u ntpServer.";
+                                                                           return "Wrong syntax. Use ntpdate [-u [ntpServer]]";
 
         } else if (argc >= 1 && argv [0] == "crontab") { //-------------------- CRONTAB
           
           if (argc == 1 || (argc == 2 && argv [1] == "-l")) return cronTab ();
-                                                            return "Wrong syntax. Use crontab or crontab -l.";
+                                                            return "Wrong syntax. Use crontab [-l]";
 
         } else if (argv [0] == "free") { //------------------------------------ FREE
     
           long n;
           if (argc == 1)                                                               return this->__free__ (0, tsp);
           if (argc == 3 && argv [1] == "-s" && (n = argv [2].toInt ()) > 0 && n < 300) return this->__free__ (n, tsp);
-                                                                                       return "Wrong syntax. Use free or free -s n (where 0 < n < 300).";
+                                                                                       return "Wrong syntax. Use free [-s n] (where 0 < n < 300)";
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
 
@@ -514,7 +500,7 @@
           for (int i = 1; i < argc; i++) {
             if (argv [i] == "--follow") f = true;
             else if (argv [i] == "-T") t = true;
-            else return "Wrong syntax. Use dmesg or dmesg --follow or dmesg -T or both";
+            else return "Wrong syntax. Use dmesg [--follow] [-T]";
           }
           return this->__dmesg__ (f, t, tsp);
 
@@ -535,13 +521,13 @@
 
           if (argc == 1) return this->__ls__ (tsp->workingDir, tsp);
           if (argc == 2) return this->__ls__ (argv [1], tsp);
-                         return "Wrong syntax. Use ls or ls directoryName";
+                         return "Wrong syntax. Use ls [directoryName]";
 
         } else if (argv [0] == "tree") { //------------------------------------ TREE
 
           if (argc == 1) return this->__tree__ (tsp->workingDir, tsp);
           if (argc == 2) return this->__tree__ (argv [1], tsp);
-                         return "Wrong syntax. Use tree or tree directoryName";
+                         return "Wrong syntax. Use tree [directoryName]";
         
         } else if (argv [0] == "cat" || argv [0] == "type") { //--------------- CAT, TYPE
           
@@ -608,7 +594,7 @@
 
             if (tsp->userName != "root")                           return "Only root may add users.";
             if (argc == 6 && argv [1] == "-u" && argv [3] == "-d") return this->__userAdd__ (argv [5], argv [2], argv [4]);
-                                                                   return "Wrong syntax. Use useradd -u userId -d userHomeDirectory userName (where userId > 1000).";
+                                                                   return "Wrong syntax. Use useradd -u userId -d userHomeDirectory userName (where userId > 1000)";
 
           } else if (argv [0] == "userdel") { //------------------------------- USERDEL
 
@@ -633,7 +619,7 @@
     
           if (argc == 1)                       return arp_a (); // from network.h
           if ((argc == 2 && argv [1] == "-a")) return arp_a (); // from network.h
-                                               return "Wrong syntax. Use arp or arp -a";
+                                               return "Wrong syntax. Use arp [-a]";
     
         } else if (argv [0] == "ping") { //------------------------------------ PING
     
@@ -646,6 +632,37 @@
           if (argc == 2)                                                                 return this->__telnet__ (argv [1], 23, tsp);
           if (argc == 3 && (port = argv [2].toInt ()) && port > 0 && (int) port == port) return this->__telnet__ (argv [1], (int) port, tsp);
                                                                                          return "Wrong syntax. Use telnet ipAddress or telnet ipAddress portNumber";
+
+        } else if (argv [0] == "sendmail") { //-------------------------------- SENDMAIL
+
+          String smtpServer = "";
+          String smtpPort = "";
+          String userName = "";
+          String password = "";
+          String from = "";
+          String to = ""; 
+          String subject = ""; 
+          String message = "";
+          String nonsense = "";
+          String *sp = &nonsense;
+          const String syntaxError = "Use sendmail [-S smtpServer] [-P smtpPort] [-u userName] [-p password] [-f from address] [t to address list] [-s subject] [-m messsage]"; 
+
+          for (int i = 1; i < argc; i++) {
+                 if (argv [i] == "-S") sp = &smtpServer;
+            else if (argv [i] == "-P") sp = &smtpPort;
+            else if (argv [i] == "-u") sp = &userName;
+            else if (argv [i] == "-p") sp = &password;
+            else if (argv [i] == "-f") sp = &from;
+            else if (argv [i] == "-t") sp = &to;
+            else if (argv [i] == "-s") sp = &subject;
+            else if (argv [i] == "-m") sp = &message;
+            else { if (*sp == "") { *sp = argv [i]; sp = &nonsense; } else return syntaxError; }
+          }
+
+          if (nonsense > "") return syntaxError;
+          
+          return this->__sendmail__ (message, subject, to, from, password, userName, smtpPort.toInt (), smtpServer);
+                
         } else if (argv [0] == "curl") { //------------------------------------ CURL
           
           if (argc == 2) return this->__curl__ ("GET", argv [1]);
@@ -1405,7 +1422,7 @@
 
       String __telnet__ (String otherServerName, int otherServerPort, telnetSessionParameters *tsp) {
         // open TCP connection to the other server
-        TcpClient *otherServer = new TcpClient ((char *) otherServerName.c_str (), otherServerPort, (TIME_OUT_TYPE) 300000); // close also this connection if inactive for more than 5 minutes
+        TcpClient *otherServer = new TcpClient (otherServerName, otherServerPort, (TIME_OUT_TYPE) 300000); // close also this connection if inactive for more than 5 minutes
         if (!otherServer || !otherServer->connection () || !otherServer->connection ()->started ()) return "Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".";
     
         struct __telnetStruct__ telnetSessionSharedMemory = {tsp->connection, true, otherServer->connection (), true, false};
@@ -1470,6 +1487,10 @@
           return "Could not connect to " + otherServerName + ".";
         }
         return "";
+      }
+
+      String __sendmail__ (String message, String subject, String to, String from, String password, String userName, int smtpPort, String smtpServer) {
+        return sendMail (message, subject, to, from, password, userName, smtpPort, smtpServer);
       }
    
       String __curl__ (String method, String url) {

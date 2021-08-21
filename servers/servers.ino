@@ -26,6 +26,8 @@
 #include "webServer.hpp"                              // include HTTP Server
 #include "ftpServer.hpp"                              // include FTP server
 #include "telnetServer.hpp"                           // include Telnet server
+#include "smtpClient.h"                               // include SMTP client (sendMail)
+
 
 #include "oscilloscope.h"
 

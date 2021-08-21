@@ -342,26 +342,23 @@
   // removes configuration comments, empty lines, ...
   String compactConfigurationFileContent (String inp) { 
     String outp = "";
-    bool inComment = false;  
-    bool inQuotation = false;
+    bool comment = false;  
     char c;
     char lastc = '\n';
     
     for (int i = 0; i < inp.length (); i++) {
       switch ((c = inp.charAt (i))) {
-        case '#':   c = 0; inComment = true; break;
-        case '\"':  c = 0; inQuotation = !inQuotation; break;
+        case '#':   c = 0; comment = true; break;
         case '\r':  c = 0; break;        
         case '\n':  if (lastc != '\n') { if (outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1); }
                     else c = 0;
-                    inComment = inQuotation = false;
+                    comment = false;
                     break;        
         case '\t':  c = ' ';
-        case '=':   c = ' ';
         case ' ':   if (lastc == '\n' || lastc == ' ') c = 0;
         default:    break;
       }
-      if (!inComment && c) outp += (lastc = c); 
+      if (!comment && c) outp += (lastc = c); 
     }
     if (outp.endsWith (" ")) outp = outp.substring (0, outp.length () - 1);
     if (outp.endsWith ("\n")) outp = outp.substring (0, outp.length () - 1);

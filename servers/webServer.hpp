@@ -470,10 +470,10 @@ readingPayload:
 
       httpServer (String (*httpRequestHandler) (String& httpRequest, httpServer::wwwSessionParameters *wsp),  // httpRequestHandler callback function provided by calling program
                   void (*wsRequestHandler) (String& wsRequest, WebSocket *webSocket),                         // httpRequestHandler callback function provided by calling program      
-                  unsigned int stackSize,                                                                     // stack size of httpRequestHandler thread, usually 4 KB will do 
-                  char *serverIP,                                                                             // web server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+                  size_t stackSize,                                                                           // stack size of httpRequestHandler thread, usually 8 KB will do 
+                  String serverIP,                                                                            // web server IP address, 0.0.0.0 for all available IP addresses
                   int serverPort,                                                                             // web server port
-                  bool (*firewallCallback) (String)                                                           // a reference to callback function that will be celled when new connection arrives 
+                  bool (*firewallCallback) (String IP)                                                        // a reference to callback function that will be celled when new connection arrives 
                  ): TcpServer (__webConnectionHandler__, this, stackSize, (TIME_OUT_TYPE) 1500, serverIP, serverPort, firewallCallback)
                                 {
                                   __externalHttpRequestHandler__ = httpRequestHandler;
@@ -627,34 +627,25 @@ readingPayload:
    webClient function doesn't really belong to webServer, but it may came handy every now and then  
 */
 
-  String webClient (char *serverIP, int serverPort, TIME_OUT_TYPE timeOutMillis, String httpRequest) {
-    if (getWiFiMode () == WIFI_OFF) {
-      webDmesg ("[webClient] can't start, there is no network.");
-      return "";
-    }
-  
+  String webClient (String serverName, int serverPort, TIME_OUT_TYPE timeOutMillis, String httpRequest) {
     char *buffer = (char *) malloc (2048); // reserve some space from heap to hold blocks of response
-    if (!buffer) {
-      webDmesg ("[webClient] can't get heap memory.");
-      return "";      
-    }
+    if (!buffer) { webDmesg ("[webClient] could not get enough heap memory."); return ""; }
     *buffer = 0;
     
     String retVal = ""; // place for response
-    // create non-threaded TCP client instance
-    TcpClient myNonThreadedClient (serverIP, serverPort, timeOutMillis); 
+    TcpClient nonThreadedTcpClient (serverName, serverPort, timeOutMillis); // create non-threaded TCP client instance
     // get reference to TCP connection. Before non-threaded constructor of TcpClient returns the connection is established if this is possible
-    TcpConnection *myConnection = myNonThreadedClient.connection ();
+    TcpConnection *nonThreadedTcpConnection = nonThreadedTcpClient.connection ();
     // test if connection is established
-    if (myConnection) {
-      httpRequest += " \r\n\r\n"; // make sure HTTP request ends properly
-      /* int sentTotal = */ myConnection->sendData (httpRequest); // send HTTP request
+    if (nonThreadedTcpConnection) {
+      httpRequest += " \r\n\r\n"; // make sure HTTP request ends properly - add ending sequence
+      /* int sentTotal = */ nonThreadedTcpConnection->sendData (httpRequest); // send HTTP request
       // Serial.printf ("[%10lu] [webClient] sent %i bytes.\n", millis (), sentTotal);
       // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
       // if the response is short enough it will normally arrive in one data block although
       // TCP does not guarantee that it would
       int receivedTotal = 0;
-      while (int received = myConnection->recvData (buffer, 2048 - 1)) {
+      while (int received = nonThreadedTcpConnection->recvData (buffer, sizeof (buffer) - 1)) {
         receivedTotal += received;
         buffer [received] = 0; // mark the end of the string we have just read
         retVal += String (buffer);
@@ -678,7 +669,7 @@ readingPayload:
       if (receivedTotal) webDmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
       else               webDmesg ("[webClient] time-out, httpRequest = " + httpRequest);
     } else {
-      webDmesg ("[webClient] unable to connect to " + String (serverIP) + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
+      webDmesg ("[webClient] unable to connect to " + serverName + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
     }     
     free (buffer);
     return ""; // response arrived, it may even be OK but it doesn't match content-length field

@@ -98,9 +98,9 @@
         // feel free to add more
       } ftpSessionParameters;        
   
-      ftpServer (char *serverIP,                                       // FTP server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
+      ftpServer (String serverIP,                                      // FTP server IP address, 0.0.0.0 for all available IP addresses
                  int serverPort,                                       // FTP server port
-                 bool (* firewallCallback) (String)                    // a reference to callback function that will be celled when new connection arrives 
+                 bool (* firewallCallback) (String IP)                 // a reference to callback function that will be celled when new connection arrives 
                 ): TcpServer (__ftpConnectionHandler__, (void *) this, 8 * 1024, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                                                 {
                                                   if (started ()) ftpDmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
@@ -513,7 +513,7 @@ closeFtpConnection:
         if (dataConnection) {
           File f = FFat.open (fp, FILE_WRITE);
           if (f) {
-            byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
+            byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the )
             if (buff) {
               int received;
               do {
