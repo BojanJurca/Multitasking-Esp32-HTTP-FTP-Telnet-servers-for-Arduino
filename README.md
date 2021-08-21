@@ -187,6 +187,23 @@ By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functi
 1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
 2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
 3. modify the default #definitions that will be written into configuration files when sketch runs for the first time.
+```C++
+   #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
+   #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
+
+   #define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
+   #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+   #define DEFAULT_AP_SSID           HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
+   #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long	
+
+   #define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
+   #define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
+   #define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
+	
+   #define TIMEZONE  CET_TIMEZONE                                  // define time zone you are in (see time_functions.h)  
+	
+   #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT               // define the kind of user management project is going to use (see user_management.h)
+```
 4. Select one of FAT partition schemas (Tool | Partition Scheme).
 5. Compile sketch and run it on your ESP32.
 
