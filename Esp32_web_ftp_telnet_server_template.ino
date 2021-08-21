@@ -76,11 +76,12 @@
 #include "./servers/user_management.h"
 
 
-// include code for 3 servers
+// include code for 3 servers and 1 client
 
 #include "./servers/webServer.hpp"    // if you want to learn more about web server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Web_server_step_by_step.md
 #include "./servers/ftpServer.hpp"    // if you want to learn more about FTP server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/FTP_server_step_by_step.md
 #include "./servers/telnetServer.hpp" // if you want to learn more about telnet server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Telnet_server_step_by_step.md
+#include "./servers/smtpClient.h"     // include sendMail function
 
 
               // ----- measurements are just for demonstration - delete this code if it is not needed -----

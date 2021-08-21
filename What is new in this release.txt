@@ -1,4 +1,3 @@
-New in release 1.28
+New in 1.29 (development)
 
-  - code review in order to make it more comprehensive
-  - different step-by-step guides 
+  - SMTP client (sendMail function) 

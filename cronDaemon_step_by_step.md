@@ -11,7 +11,7 @@ Cron table resides in ESP32 server memory and can be filled in two ways:
 
  
 ## 1. A minimal cron example (a working example)
-In this example we are only going to start cronDaemon. Since we are not going to provide cronHandler function the only task of cronDaemon would be to synchronise ESP32 serverâ€™s time with NTP server(s) once a day.
+In this example we are only going to start cronDaemon. Since we are not going to provide cronHandler function the only task of cronDaemon would be to synchronise ESP32 server’s time with NTP server(s) once a day.
 
 ```C++
 #include <WiFi.h>
@@ -96,7 +96,7 @@ Current local time is 2021/07/25 20:52:31
 
 
 ## 2. Handling /etc/crontab (a working example)
-CronDaemon doesnâ€™t handle cron table commands by itself. Weâ€™ll have to provide cronHandler function that would do this task. This example will only handle cron commands in /etc/crontab file so we will also start telnet server that will enable us to edit /etc/crontab file with the help of vi command.
+CronDaemon doesn’t handle cron table commands by itself. We’ll have to provide cronHandler function that would do this task. This example will only handle cron commands in /etc/crontab file so we will also start telnet server that will enable us to edit /etc/crontab file with the help of vi command.
 Don't forget to change partition scheme to one that uses FAT (Tools | Partition scheme |  ...).
 
 ```C++

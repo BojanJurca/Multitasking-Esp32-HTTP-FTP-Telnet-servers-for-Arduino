@@ -2,13 +2,13 @@
 
 The initial idea was to develop a tiny web server for ESP32 projects that allows fast development of web user interface. Two things were needed:
 
-  -	A  httpRequestHandler function that would handle (small) programmable responses. httpRequestHandler function takes HTTP request as an argument and returns HTTP response (just the content part to be precise, web server will add HTTP header itself before sending HTTP reply to browser, so you donâ€™t have to worry about this). 
+  -	A  httpRequestHandler function that would handle (small) programmable responses. httpRequestHandler function takes HTTP request as an argument and returns HTTP response (just the content part to be precise, web server will add HTTP header itself before sending HTTP reply to browser, so you don’t have to worry about this). 
   -	Ability to send (large) .html files as responses to HTTP requests. As it turned out this also required FTP server to be able to upload the .html files to ESP32 in the first place.
 
 Web server can handle both or just one of them. If you need only programmable responses than you can get rid of file system and FTP server. If you only need to serve .html files than you can get rid of httpRequestHandler function. All you have to do in this case is to upload .html files to /var/www/html directory. But you have to set up FTP server
 and file system, of course. Don't forget to change partition scheme to one that uses FAT (Tools | Partition scheme |  ...) befor uploading the code to ESP32.
 
-Everything is already prepared in the template. Whatever you are doing it would be a good idea to start with the template and then just start deleting everything you donâ€™t need.
+Everything is already prepared in the template. Whatever you are doing it would be a good idea to start with the template and then just start deleting everything you don’t need.
 
 ## 1. A minimal web server for short, programmable responses (a working example)
 
@@ -234,7 +234,7 @@ The .html file will include most of the content and structure whereas programmab
 #include "./servers/ftpServer.hpp"    
 
 
-// httpRequestHandler for short HTTP replies â€“ instead of HTML replies will be in JSON format 
+// httpRequestHandler for short HTTP replies – instead of HTML replies will be in JSON format 
 
 String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
 
@@ -419,7 +419,7 @@ void setHttpResponseCookie (String cookieName, String cookieValue, time_t expire
 
 ## 5. Websockets
 
-Basically, websockets are TCP connections between javascript web clients and web servers. These TCP connections are not the same through which HTTP requests are send in one directions and HTTP replies in another and which typically remain open very short time â€“ they close when HTTP reply is sent back to the client. Unlike this, websocket remains open as long as javascript client and web server want it to be. The information between them can be exchanged in both ways. This is the reasons why there is a separate wsRequestHandler callback function passed to web server (in addition to httpRequestHandler that we have already seen).
+Basically, websockets are TCP connections between javascript web clients and web servers. These TCP connections are not the same through which HTTP requests are send in one directions and HTTP replies in another and which typically remain open very short time – they close when HTTP reply is sent back to the client. Unlike this, websocket remains open as long as javascript client and web server want it to be. The information between them can be exchanged in both ways. This is the reasons why there is a separate wsRequestHandler callback function passed to web server (in addition to httpRequestHandler that we have already seen).
 
 Two things are needed:
 
@@ -428,7 +428,7 @@ Two things are needed:
 
 Of course, the web page would also be located on the server at first. But once it gets transferred to the client, javascript will run there.
 
-Letâ€™s suppose we want to track analog samples ESP32 reads on pins 36 and 39:
+Let’s suppose we want to track analog samples ESP32 reads on pins 36 and 39:
 
 ```C++
 #include <WiFi.h>

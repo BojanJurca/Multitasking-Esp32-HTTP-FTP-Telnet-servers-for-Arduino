@@ -29,12 +29,12 @@ webadmin:$5$40c6af3d1540ca2af132e1e93e7f5a5f624280b9d4d552a0bb103afe17c75c53::::
 #
 ```
 
-You can not set access rights for different objects, files for example, so everything a logged in user can or can't do must be checked by your code. A rough idea is that the level of access rights is determined by user‚Äôs home directory (as stored in /etc/passwd). This principle is fully respected by built-in telnet and FTP commands, but you must take care of everything else you write yourself, meaning if you don't prevent something based on user's name or user's home directory then the code will be executed. You can use all the functions in user_management.h for his purpose like: checkUserNameAndPassword, getUserHomeDirectory, userAdd, userDel, ‚Ä¶
+You can not set access rights for different objects, files for example, so everything a logged in user can or can't do must be checked by your code. A rough idea is that the level of access rights is determined by userís home directory (as stored in /etc/passwd). This principle is fully respected by built-in telnet and FTP commands, but you must take care of everything else you write yourself, meaning if you don't prevent something based on user's name or user's home directory then the code will be executed. You can use all the functions in user_management.h for his purpose like: checkUserNameAndPassword, getUserHomeDirectory, userAdd, userDel, Ö
 
-What we can see from the files above is that by default ESP32_web_ftp_telnet_server_template already creates two real users with their passwords: root/rootpassword and webadmin/webadminpassword. Webserver and telnetserver doesn‚Äôt have their passwords since they are not real users. The records in /etc/passwd only hold their home directories. This is where web server is going to look for .html, .png and other files and where telnet server is going to look for help.txt file.  
+What we can see from the files above is that by default ESP32_web_ftp_telnet_server_template already creates two real users with their passwords: root/rootpassword and webadmin/webadminpassword. Webserver and telnetserver doesnít have their passwords since they are not real users. The records in /etc/passwd only hold their home directories. This is where web server is going to look for .html, .png and other files and where telnet server is going to look for help.txt file.  
 
 ## 1. Checking user rights inside telnet session (a working example)
-Telnet session is just a TCP connection through which characters are being send in both directions. At the beginning, the user introduces himself by logging in and this stays the same until telnet session or TCP connection ends. It is easy to remember which user has logged in since one TCP connection is handled by one thread/task/process on the server side. This is not something you would do from your code, but user's name and user‚Äôs home directory are passed to telnetCommandHandler by telnet server each time the user sends a command to execution by pressing enter. You can access this information through telnetSessionParameters and do with it whatever you consider necessary.
+Telnet session is just a TCP connection through which characters are being send in both directions. At the beginning, the user introduces himself by logging in and this stays the same until telnet session or TCP connection ends. It is easy to remember which user has logged in since one TCP connection is handled by one thread/task/process on the server side. This is not something you would do from your code, but user's name and userís home directory are passed to telnetCommandHandler by telnet server each time the user sends a command to execution by pressing enter. You can access this information through telnetSessionParameters and do with it whatever you consider necessary.
 
 ```C++
 #include <WiFi.h>
@@ -166,7 +166,7 @@ $
 
 
 ## 2. Checking user rights inside FTP session
-Since there is nothing you can do from your code to interfere with FTP sessions you can‚Äôt do anything about user access rights as well. 
+Since there is nothing you can do from your code to interfere with FTP sessions you canít do anything about user access rights as well. 
 
 
 ## 3. Checking user rights inside web session (a working example)
@@ -324,6 +324,6 @@ void loop () {
 ## 4. Simplified user management
 There are three levels of user management. You can choose which one to use by #define-ing USER_MANAGEMENT inside your code before #include-ing user_management.h. By default, USER_MANAGEMENT is #define-d as UNIX_LIKE_USER_MANAGEMENT. This is the case that is described above.
 
-If you want to simplify thing a little bit you can #define USER_MANAGEMENT to be HARDCODED_USER_MANAGEMENT. In this case you will only have one user: root. Its ROOT_PASSWORD is #defined as ‚Äúrootpassword‚Äù which is stored in ESP32‚Äôs RAM during start up. You can change this definition and keep it secret if you wish.
+If you want to simplify thing a little bit you can #define USER_MANAGEMENT to be HARDCODED_USER_MANAGEMENT. In this case you will only have one user: root. Its ROOT_PASSWORD is #defined as ìrootpasswordî which is stored in ESP32ís RAM during start up. You can change this definition and keep it secret if you wish.
 
 Another simplification is to #define USER_MANAGEMENT as NO_USER_MANAGEMENT. In this case user password and access rights are not going to be checked at all so everyone can do everithing.
