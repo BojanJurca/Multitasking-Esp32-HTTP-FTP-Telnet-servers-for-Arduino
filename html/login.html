@@ -5,7 +5,7 @@
 		<link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
 		<meta http-equiv='content-type' content='text/html;charset=utf-8' />
 
-		<title>Example 07 - login</title>
+		<title>Prijava v Moj pametni dom</title>
 
 		<style>
 			hr {
@@ -58,9 +58,9 @@
 			div.d4 {
 				position:relative;
 				float:left;
-				width:45%;
+				width:40%;
 				font-family:verdana;
-				font-size:15px;
+				font-size:22px;
 				color:black;
 			}
 
@@ -123,29 +123,29 @@
 	</head>
 <body>
 
-	<h1>Example 07 - login</h1>
+	<h1>Prijava v Moj pametni dom</h1>
 
 	<br>
 
 	<hr />
 
 	<div class='d1'>
-		<div class='d2'>&nbsp;User name</div>
+		<div class='d2'>&nbsp;Uporabnik</div>
 		<div class='d3'> 
-			<input type="text" id="userName" style="width:300px;" required>
+			<input type="text" id="userName" style="width:280px;" required>
 		</div>
 		<div class='d4'>
-			Enter your ESP32 user name (like root for example).
+			Tvoje uporabni&#353;ko ime.
 		</div>
 	</div>
 
 	<div class='d1'>
-		<div class='d2'>&nbsp;Password</div>
+		<div class='d2'>&nbsp;Geslo</div>
 		<div class='d3'> 
-			<input type="password" id="userPassword" style="width:300px;" required>
+			<input type="password" id="userPassword" style="width:280px;" required>
 		</div>
 		<div class='d4'>
-			Enter password for user name (like rootpassword for example).
+			Tvoje geslo.
 		</div>
 	</div>
 
@@ -156,10 +156,10 @@
 	<div class='d1'>
 		<div class='d2'>&nbsp;</div>
 		<div class='d3'> 
-			<button class='button button1' id='loginButton' onclick="tryToLogin ()">&nbsp;Login&nbsp;</button>
+			<button class='button button1' id='loginButton' onclick="tryToLogin ()">&nbsp;Prijava&nbsp;</button>
 		</div>
 		<div class='d4'>
-			We use two cookies that are essential to ensure login feature to work. Without using them you cannot log in. 
+			Uporabljamo dva pi&#353;kotka, izklju&#269;no za to, da prijava deluje.
 		</div>
 	</div>
 
@@ -177,8 +177,8 @@
 			var clientRequest = 'login' + '/' + document.getElementById ('userName').value + '%20' + document.getElementById ('userPassword').value;
 			client.request 	(clientRequest, 'GET', function (serverReply) 	{
 												if (serverReply == "loggedIn") {
-													alert (document.cookie); // success, got sessionToken cookie
-													window.location.href = "/logout.html";
+													// alert (document.cookie); // success, got sessionToken cookie
+													window.location.href = "/";
 												} else {
 													alert (serverReply); // report error
 												}
