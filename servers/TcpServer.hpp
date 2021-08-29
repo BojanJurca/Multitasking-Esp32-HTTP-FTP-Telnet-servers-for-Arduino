@@ -40,7 +40,7 @@
             - elimination of compiler warnings and some bugs
               Jun 10, 2020, Bojan Jurca
             - port from SPIFFS to FAT file system, adjustments for Arduino 1.8.13
-            - added isOpened and isClosed functions to TcpConnection
+            - added isOpen and isClosed functions to TcpConnection
               Nov 14, 2020, Bojan Jurca
             - code review in order to make it more comprehensive
               May, 11, 2021, Bojan Jurca
@@ -123,12 +123,12 @@
       */
 
       
-      TcpConnection (void (* connectionHandlerCallback) (TcpConnection *, void *),  // a reference to callback function that will handle the connection
-                     void *connectionHandlerCallbackParamater,                      // a reference to parameter that will be passed to connectionHandlerCallback
-                     size_t stackSize,                                              // stack size of a thread where connection runs - this value depends on what server really does (see connectionHandler function) should be set appropriately
-                     int socket,                                                    // connection socket
-                     String otherSideIP,                                            // IP address of the other side of connection - 15 characters at most!
-                     TIME_OUT_TYPE timeOutMillis)                                   // connection time-out in milli seconds
+      TcpConnection (void (* connectionHandlerCallback) (TcpConnection *connection, void *parameter), // a reference to callback function that will handle the connection
+                     void *connectionHandlerCallbackParamater,                                        // a reference to parameter that will be passed to connectionHandlerCallback
+                     size_t stackSize,                                                                // stack size of a thread where connection runs - this value depends on what server really does (see connectionHandler function) should be set appropriately
+                     int socket,                                                                      // connection socket
+                     String otherSideIP,                                                              // IP address of the other side of connection
+                     TIME_OUT_TYPE timeOutMillis)                                                     // connection time-out in milli seconds
       {
         // copy constructor parameters to local structure
         __connectionHandlerCallback__ = connectionHandlerCallback;
@@ -149,8 +149,7 @@
             __connectionState__ = TcpConnection::RUNNING;                                        
           } else {
             // DEBUG: Serial.printf ("[Thread: %lu][Core: %i][Socket: %i] xTaskCreate error in threaded constructor %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), socket, __func__);
-            TcpServerDmesg ("[TcpConnection] xTaskCreate error.");
-            // TO DO: make constructor return NULL
+            dmesg ("[TcpConnection] xTaskCreate error.");
           }
         }
       }
@@ -165,7 +164,7 @@
 
 
       TcpConnection (int socket,                                   // connection socket
-                     String otherSideIP,                           // IP address of the other side of connection - 15 characters at most!
+                     String otherSideIP,                           // IP address of the other side of connection
                      TIME_OUT_TYPE timeOutMillis)                  // connection time-out in milli seconds
       {
         // copy constructor parameters to local structure
@@ -178,7 +177,7 @@
       }
   
       virtual ~TcpConnection () {
-        closeConnection (); // close connection socket if it is still opened - this will, in consequence, cause __connectionHandlerCallback__ to finish regulary by itself and clean up ist memory before returning (if threaded mode is used)
+        closeConnection (); // close connection socket if it is still open - this will, in consequence, cause __connectionHandlerCallback__ to finish regulary by itself and clean up ist memory before returning (if threaded mode is used)
         while (__connectionState__ < TcpConnection::FINISHED) delay (1); // wait for __connectionHandler__ to finish before releasing the memory occupied by this instance (if threaded mode is used)
       }
   
@@ -193,7 +192,7 @@
   
       bool isClosed () { return __socket__ == -1; }
   
-      bool isOpened () { return __socket__ != -1; }
+      bool isOpen () { return __socket__ != -1; }
   
       int getSocket () { return __socket__; }
 
@@ -368,13 +367,13 @@
       */
 
       
-      TcpServer      (void (* connectionHandlerCallback) (TcpConnection *, void *), // a reference to callback function that will handle the connection
-                      void *connectionHandlerCallbackParameter,                     // a reference to parameter that will be passed to connectionHandlerCallback
-                      unsigned int connectionStackSize,                             // stack size of a thread where connection runs - this value depends on what server really does (see connectionHandler function) should be set appropriately (not to use too much memory and not to crush ESP)
-                      TIME_OUT_TYPE timeOutMillis,                                  // connection time-out in milli seconds
-                      String serverIP,                                              // server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
-                      int serverPort,                                               // server port
-                      bool (* firewallCallback) (String)                            // a reference to callback function that will be celled when new connection arrives
+      TcpServer      (void (* connectionHandlerCallback) (TcpConnection *connection, void *parameter),  // a reference to callback function that will handle the connection
+                      void *connectionHandlerCallbackParameter,                                         // a reference to parameter that will be passed to connectionHandlerCallback
+                      size_t connectionStackSize,                                                       // stack size of a thread where connection runs - this value depends on what server really does (see connectionHandler function) should be set appropriately (not to use too much memory and not to crush ESP)
+                      TIME_OUT_TYPE timeOutMillis,                                                      // connection time-out in milli seconds
+                      String serverIP,                                                                  // server IP address, 0.0.0.0 for all available IP addresses
+                      int serverPort,                                                                   // server port
+                      bool (* firewallCallback) (String connectingIP)                                   // a reference to callback function that will be celled when new connection arrives
                      ) {
         // copy constructor parameters to local structure
         __connectionHandlerCallback__ = connectionHandlerCallback;
@@ -396,8 +395,7 @@
           while (__listenerState__ == TcpServer::NOT_RUNNING) delay (1); // listener thread has started successfully and will change listener state soon
         } else {
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i] xTaskCreate error in threaded constructor %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __func__);
-          TcpServerDmesg ("[TcpServer] xTaskCreate error in threaded constructor.");
-          // TO DO: make constructor return NULL
+          dmesg ("[TcpServer] xTaskCreate error in threaded constructor.");
         }
       }
   
@@ -410,10 +408,10 @@
       */
 
       
-      TcpServer      (TIME_OUT_TYPE timeOutMillis,                  // connection time-out in milli seconds
-                      String serverIP,                              // server IP address, 0.0.0.0 for all available IP addresses - 15 characters at most!
-                      int serverPort,                               // server port
-                      bool (* firewallCallback) (String)            // a reference to callback function that will be celled when new connection arrives
+      TcpServer      (TIME_OUT_TYPE timeOutMillis,                    // connection time-out in milli seconds
+                      String serverIP,                                // server IP address, 0.0.0.0 for all available IP addresses
+                      int serverPort,                                 // server port
+                      bool (* firewallCallback) (String connectingIP) // a reference to callback function that will be celled when new connection arrives
                      ) {
         // copy constructor parameters to local structure
         __timeOutMillis__ = timeOutMillis;
@@ -432,8 +430,7 @@
           while (__listenerState__ == TcpServer::NOT_RUNNING) delay (1); // listener thread has started successfully and will change listener state soon
         } else {
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i] xTaskCreate error in not-threaded constructor %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), __func__);
-          TcpServerDmesg ("[TcpServer] xTaskCreate error in not-threaded constructor.");
-          // TO DO: make constructor return NULL
+          dmesg ("[TcpServer] xTaskCreate error in not-threaded constructor.");
         }
       }
   
@@ -468,11 +465,11 @@
   
       void (* __connectionHandlerCallback__) (TcpConnection *, void *) = NULL; // local copy of constructor parameters
       void *__connectionHandlerCallbackParameter__ = NULL;
-      unsigned int __connectionStackSize__;
+      size_t __connectionStackSize__;
       TIME_OUT_TYPE __timeOutMillis__;
       String __serverIP__;
       int __serverPort__;
-      bool (* __firewallCallback__) (String IP);
+      bool (* __firewallCallback__) (String);
   
       TcpConnection *__connection__ = NULL;                           // pointer to TcpConnection instance (not-threaded TcpServer only)
       enum LISTENER_STATE_TYPE {
@@ -490,7 +487,7 @@
   
       bool __threadedMode__ () { return (__connectionHandlerCallback__ != NULL); } // returns true if server is working in threaded mode - in this case it has to have a callback function
   
-      bool __callFirewallCallback__ (char *IP) { return __firewallCallback__ ? __firewallCallback__ (IP) : true; } // calls firewall function
+      bool __callFirewallCallback__ (String connectingIP) { return __firewallCallback__ ? __firewallCallback__ (connectingIP) : true; } // calls firewall function
 
       void __newConnection__ (int connectionSocket, String otherSideIP) { // creates new TcpConnection instance for connectionSocket
         TcpConnection *newConnection;
@@ -544,9 +541,9 @@
             socklen_t connectingAddressSize = sizeof (connectingAddress);
             connectionSocket = accept (listenerSocket, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
             if (connectionSocket != -1) { // non-blocking socket keeps returning -1 until new connection arrives
-              if (!ths->__callFirewallCallback__ ((char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ())) {
+              if (!ths->__callFirewallCallback__ (__inet_ntos__ (connectingAddress.sin_addr))) {
                 close (connectionSocket);
-                TcpServerDmesg ("[TcpServer] firewall rejected connection from " + __inet_ntos__ (connectingAddress.sin_addr));
+                dmesg ("[TcpServer] firewall rejected connection from " + __inet_ntos__ (connectingAddress.sin_addr));
                 continue;
               }
               if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
@@ -592,26 +589,23 @@
         IPAddress serverIP;
         if (!WiFi.hostByName (serverName.c_str (), serverIP)) { 
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i][Socket: %i] hostByName error in %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, __func__);
-          TcpServerDmesg ("[TcpClient] hostByName could not resolve '" + serverName + "'.");
+          dmesg ("[TcpClient] hostByName could not resolve '" + serverName + "'.");
           return;
-          // TO DO: make constructor return NULL
         } 
                               
         // make TCP socket (SOCK_STREAM) for internet protocol family (PF_INET) - protocol family and address family are connected (PF__INET protokol and AF__INET)
         int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
         if (connectionSocket == -1) {
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i][Socket: %i] socket error in %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, __func__);
-          TcpServerDmesg ("[TcpClient] soclet error.");          
+          dmesg ("[TcpClient] soclet error.");          
           return;
-          // TO DO: make constructor return NULL
         }
         // make the socket non-blocking - needed for time-out detection
         if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i][Socket: %i] fcntl error in %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, __func__);
-          TcpServerDmesg ("[TcpClient] fcntl error.");          
+          dmesg ("[TcpClient] fcntl error.");          
           close (connectionSocket);
           return;
-          // TO DO: make constructor return NULL
         }
         // connect to server
         struct sockaddr_in serverAddress;
@@ -622,18 +616,16 @@
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i][Socket: %i] connect error in %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, __func__);
           #define EINPROGRESS 119
           if (errno != EINPROGRESS) {
-            TcpServerDmesg ("[TcpClient] connect error " + String (errno) + ".");          
+            dmesg ("[TcpClient] connect error " + String (errno) + ".");          
             close (connectionSocket);
             return;
-            // TO DO: make constructor return NULL
           }
-        } // it is likely that socket is not opened yet at this point
+        } // it is likely that socket is not open yet at this point
         __connection__ = new TcpConnection (connectionSocket, serverIP.toString (), timeOutMillis); // load not-threaded TcpConnection instance
         if (!__connection__) {
-          TcpServerDmesg ("[TcpClient] could not create a new TcpConnection.");
+          dmesg ("[TcpClient] could not create a new TcpConnection.");
           close (connectionSocket);
           return;
-          // TO DO: make constructor return NULL
         }
       }
   

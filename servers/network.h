@@ -100,7 +100,7 @@
   #define DEFAULT_AP_SUBNET_MASK  "255.255.255.0"
 
 
-  // converts dotted (text) IP address into IPAddress structure
+  // converts doted (text) IP address into IPAddress structure
   IPAddress IPAddressFromString (String ipAddress) { 
     int ip1, ip2, ip3, ip4; 
     if (4 == sscanf (ipAddress.c_str (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
@@ -346,7 +346,7 @@
       } else 
     #endif    
           {
-            networkDmesg ("[network] file system not mounted, can't read or write configuration files.");
+            dmesg ("[network] file system not mounted, can't read or write configuration files.");
 
             #ifdef DEFAULT_STA_SSID
               staSSID = DEFAULT_STA_SSID;
@@ -382,83 +382,83 @@
       static bool staStarted = false; // to prevent unneccessary messages
       switch (event) {
           case SYSTEM_EVENT_WIFI_READY:           // do not report this event - it is too frequent
-                                                  // networkDmesg ("[network] WiFi interface ready.");
+                                                  // dmesg ("[network] WiFi interface ready.");
                                                   break;
-          case SYSTEM_EVENT_SCAN_DONE:            networkDmesg ("[network] [STA] completed scan for access points.");
+          case SYSTEM_EVENT_SCAN_DONE:            dmesg ("[network] [STA] completed scan for access points.");
                                                   break;
           case SYSTEM_EVENT_STA_START:            if (!staStarted) {
                                                     staStarted = true;
-                                                    networkDmesg ("[network] [STA] WiFi client started.");
+                                                    dmesg ("[network] [STA] WiFi client started.");
                                                   }
                                                   break;
-          case SYSTEM_EVENT_STA_STOP:             networkDmesg ("[network] [STA] WiFi clients stopped.");
+          case SYSTEM_EVENT_STA_STOP:             dmesg ("[network] [STA] WiFi clients stopped.");
                                                   break;
-          case SYSTEM_EVENT_STA_CONNECTED:        networkDmesg ("[network] [STA] connected to WiFi " + WiFi.SSID () + ".");
+          case SYSTEM_EVENT_STA_CONNECTED:        dmesg ("[network] [STA] connected to WiFi " + WiFi.SSID () + ".");
                                                   break;
           case SYSTEM_EVENT_STA_DISCONNECTED:     if (staStarted) {
                                                     staStarted = false;
-                                                    networkDmesg ("[network] [STA] disconnected from WiFi.");
+                                                    dmesg ("[network] [STA] disconnected from WiFi.");
                                                   }
                                                   break;
-          case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:  networkDmesg ("[network] [STA] authentication mode has changed.");
+          case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:  dmesg ("[network] [STA] authentication mode has changed.");
                                                   break;
-          case SYSTEM_EVENT_STA_GOT_IP:           networkDmesg ("[network] [STA] got IP address: " + WiFi.localIP ().toString () + ".");
+          case SYSTEM_EVENT_STA_GOT_IP:           dmesg ("[network] [STA] got IP address: " + WiFi.localIP ().toString () + ".");
                                                   break;
-          case SYSTEM_EVENT_STA_LOST_IP:          networkDmesg ("[network] [STA] lost IP address and IP address is reset to 0.");
+          case SYSTEM_EVENT_STA_LOST_IP:          dmesg ("[network] [STA] lost IP address and IP address is reset to 0.");
                                                   break;
-          case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:   networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): succeeded in enrollee mode.");
+          case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:   dmesg ("[network] [STA] WiFi Protected Setup (WPS): succeeded in enrollee mode.");
                                                   break;
-          case SYSTEM_EVENT_STA_WPS_ER_FAILED:    networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): failed in enrollee mode.");
+          case SYSTEM_EVENT_STA_WPS_ER_FAILED:    dmesg ("[network] [STA] WiFi Protected Setup (WPS): failed in enrollee mode.");
                                                   break;
-          case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:   networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): timeout in enrollee mode.");
+          case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:   dmesg ("[network] [STA] WiFi Protected Setup (WPS): timeout in enrollee mode.");
                                                   break;
-          case SYSTEM_EVENT_STA_WPS_ER_PIN:       networkDmesg ("[network] [STA] WiFi Protected Setup (WPS): pin code in enrollee mode.");
+          case SYSTEM_EVENT_STA_WPS_ER_PIN:       dmesg ("[network] [STA] WiFi Protected Setup (WPS): pin code in enrollee mode.");
                                                   break;
-          case SYSTEM_EVENT_AP_START:             networkDmesg ("[network] [AP] WiFi access point started.");
+          case SYSTEM_EVENT_AP_START:             dmesg ("[network] [AP] WiFi access point started.");
                                                   // AP hostname can't be set until AP interface is mounted 
-                                                  { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
+                                                  { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
                                                   break;
-          case SYSTEM_EVENT_AP_STOP:              networkDmesg ("[network] [AP] WiFi access point stopped.");
+          case SYSTEM_EVENT_AP_STOP:              dmesg ("[network] [AP] WiFi access point stopped.");
                                                   break;
           case SYSTEM_EVENT_AP_STACONNECTED:      // do not report this event - it is too frequent
-                                                  // networkDmesg ("[network] [AP] client connected.");
+                                                  // dmesg ("[network] [AP] client connected.");
                                                   break;
           case SYSTEM_EVENT_AP_STADISCONNECTED:   // do not report this event - it is too frequent
-                                                  // networkDmesg ("[network] [AP] client disconnected.");
+                                                  // dmesg ("[network] [AP] client disconnected.");
                                                   break;
           case SYSTEM_EVENT_AP_STAIPASSIGNED:     // do not report this event - it is too frequent
-                                                  // networkDmesg ("[network] [AP] assigned IP address to client.");
+                                                  // dmesg ("[network] [AP] assigned IP address to client.");
                                                   break;
-          case SYSTEM_EVENT_AP_PROBEREQRECVED:    networkDmesg ("[network] [AP] received probe request.");
+          case SYSTEM_EVENT_AP_PROBEREQRECVED:    dmesg ("[network] [AP] received probe request.");
                                                   break;
-          case SYSTEM_EVENT_GOT_IP6:              networkDmesg ("[network] IPv6 is preferred.");
+          case SYSTEM_EVENT_GOT_IP6:              dmesg ("[network] IPv6 is preferred.");
                                                   break;
           /*
-          case SYSTEM_EVENT_ETH_START:            networkDmesg ("[network] ethernet started.");
+          case SYSTEM_EVENT_ETH_START:            dmesg ("[network] ethernet started.");
                                                   break;
-          case SYSTEM_EVENT_ETH_STOP:             networkDmesg ("[network] ethernet stopped.");
+          case SYSTEM_EVENT_ETH_STOP:             dmesg ("[network] ethernet stopped.");
                                                   break;
-          case SYSTEM_EVENT_ETH_CONNECTED:        networkDmesg ("[network] ethernet connected.");
+          case SYSTEM_EVENT_ETH_CONNECTED:        dmesg ("[network] ethernet connected.");
                                                   break;
-          case SYSTEM_EVENT_ETH_DISCONNECTED:     networkDmesg ("[network] ethernet disconnected.");
+          case SYSTEM_EVENT_ETH_DISCONNECTED:     dmesg ("[network] ethernet disconnected.");
                                                   break;
-          case SYSTEM_EVENT_ETH_GOT_IP:           networkDmesg ("[network] ethernet got IP address.");
+          case SYSTEM_EVENT_ETH_GOT_IP:           dmesg ("[network] ethernet got IP address.");
                                                   break;        
           */
-          default:                                networkDmesg ("[network] event: " + String (event)); // shouldn't happen
+          default:                                dmesg ("[network] event: " + String (event)); // shouldn't happen
                                                   break;
       }
     });    
 
-    networkDmesg ("[network] starting WiFi");
+    dmesg ("[network] starting WiFi");
     // connect STA and AP 
     if (staSSID > "") { 
 
       if (staIP > "") { 
-        networkDmesg ("[network] [STA] connecting STAtion to router with static IP: " + staIP + " GW: " + staGateway + " MSK: " + staSubnetMask + " DNS: " + staDns1 + ", " + staDns2);
+        dmesg ("[network] [STA] connecting STAtion to router with static IP: " + staIP + " GW: " + staGateway + " MSK: " + staSubnetMask + " DNS: " + staDns1 + ", " + staDns2);
         WiFi.config (IPAddressFromString (staIP), IPAddressFromString (staGateway), IPAddressFromString (staSubnetMask), staDns1 == "" ? IPAddress (255, 255, 255, 255) : IPAddressFromString (staDns1), staDns2 == "" ? IPAddress (255, 255, 255, 255) : IPAddressFromString (staDns2)); // INADDR_NONE == 255.255.255.255
       } else { 
-        networkDmesg ("[network] [STA] connecting STAtion to router using DHCP.");
+        dmesg ("[network] [STA] connecting STAtion to router using DHCP.");
       }
       WiFi.begin (staSSID.c_str (), staPassword.c_str ());
       
@@ -467,13 +467,13 @@
     if (apSSID > "") { // setup AP
 
         if (WiFi.softAP (apSSID.c_str (), apPassword.c_str ())) { 
-          networkDmesg ("[network] [AP] initializing access point: " + apSSID + "/" + apPassword + ", " + apIP + ", " + apGateway + ", " + apSubnetMask); 
+          dmesg ("[network] [AP] initializing access point: " + apSSID + "/" + apPassword + ", " + apIP + ", " + apGateway + ", " + apSubnetMask); 
           WiFi.softAPConfig (IPAddressFromString (apIP), IPAddressFromString (apGateway), IPAddressFromString (apSubnetMask));
           WiFi.begin ();
-          networkDmesg ("[network] [AP] access point IP: " + WiFi.softAPIP ().toString ());
+          dmesg ("[network] [AP] access point IP: " + WiFi.softAPIP ().toString ());
         } else {
           // ESP.restart ();
-          networkDmesg ("[network] [AP] failed to initialize access point mode."); 
+          dmesg ("[network] [AP] failed to initialize access point mode."); 
         }
 
         arp_a (); // call arp_a immediatelly after network setup to obtain pointer to ARP table
@@ -483,14 +483,14 @@
     if (staSSID > "") { 
       if (apSSID > "") {
       
-        { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change STA adapter hostname."); } // outdated, use: esp_netif_set_hostname
-        // AP hostname can't be set until AP interface is mounted { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
+        { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change STA adapter hostname."); } // outdated, use: esp_netif_set_hostname
+        // AP hostname can't be set until AP interface is mounted { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
         // WiFi.setHostname (HOSTNAME); // only for STA interface
         WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
       
       } else {
 	
-	      { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change STA adapter hostname."); } // outdated, use: esp_netif_set_hostname
+	      { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change STA adapter hostname."); } // outdated, use: esp_netif_set_hostname
         // WiFi.setHostname (HOSTNAME); // only for STA interface
         WiFi.mode (WIFI_STA); // only STA mode
         
@@ -498,7 +498,7 @@
     } else {
       
       if (apSSID > "") {
-        // AP hostname can't be set until AP interface is mounted { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) networkDmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
+        // AP hostname can't be set until AP interface is mounted { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
         WiFi.mode (WIFI_AP); // only AP mode
       }
       
@@ -507,7 +507,7 @@
 
   wifi_mode_t getWiFiMode () {
     wifi_mode_t retVal = WIFI_OFF;
-    if (esp_wifi_get_mode (&retVal) != ESP_OK) {;} // networkDmesg ("[network] couldn't get WiFi mode.");
+    if (esp_wifi_get_mode (&retVal) != ESP_OK) {;} // dmesg ("[network] couldn't get WiFi mode.");
     return retVal;
   }
   
@@ -566,7 +566,7 @@
       struct netif *netif;
       struct eth_addr *mac;
       if (etharp_get_entry (0, &ipaddr, &netif, &mac)) {
-        // networkDmesg ("[network] [ARP] got ARP table address.");
+        // dmesg ("[network] [ARP] got ARP table address.");
         byte offset = (byte *) &arpTablePointer->ipaddr - (byte *) arpTablePointer;
         arpTablePointer = (struct etharp_entry *) ((byte *) ipaddr - offset); // success
       }

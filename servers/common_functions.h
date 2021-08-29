@@ -43,6 +43,7 @@
       i = input.indexOf (closingBracket);
       if (i >= 0) {
         input = input.substring (0, i);
+        input.trim ();
         return input;
       }
     }

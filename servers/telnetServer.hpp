@@ -242,7 +242,7 @@
                     size_t stackSize,                                                                                       // stack size of httpRequestHandler thread, usually 16 KB will do 
                     String serverIP,                                                                                        // telnet server IP address, 0.0.0.0 for all available IP addresses
                     int serverPort,                                                                                         // telnet server port
-                    bool (*firewallCallback) (String IP)                                                                    // a reference to callback function that will be celled when new connection arrives 
+                    bool (*firewallCallback) (String connectingIP)                                                          // a reference to callback function that will be celled when new connection arrives 
                    ): TcpServer (__telnetConnectionHandler__, (void *) this, stackSize, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                         {
                           this->__externalTelnetCommandHandler__ = telnetCommandHandler;
@@ -325,7 +325,7 @@
               if (argc >= 32) break;
             }
             if (quotation) {
-              connection->sendData ("Quotation not finished. Missing ending \".");
+              connection->sendData ((char *) "Quotation not finished. Missing ending \".");
             } else {
               // debug: for (int i = 0; i < argc; i++) Serial.print ("|" + argv [i] + "|     "); Serial.println ();
   

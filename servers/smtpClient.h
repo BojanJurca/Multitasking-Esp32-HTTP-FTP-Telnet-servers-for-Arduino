@@ -61,7 +61,7 @@
     r = __smtpReply__ (smtpConnection); if (r.substring (0, 3) != "250") { smtpConnection->closeConnection (); return "SMTP error: " + r; }
   
     // 5. send login request
-    smtpConnection->sendData ("AUTH LOGIN\r\n");
+    smtpConnection->sendData ((char *) "AUTH LOGIN\r\n");
     r = __smtpReply__ (smtpConnection); if (r.substring (0, 3) != "334") { smtpConnection->closeConnection (); return "SMTP error: " + r; }
   
     // 6. send base64 encoded user name and password
@@ -115,7 +115,7 @@
     }
   
     // 9. DATA
-    smtpConnection->sendData ("DATA\r\n");
+    smtpConnection->sendData ((char *) "DATA\r\n");
     r = __smtpReply__ (smtpConnection); if (r.substring (0, 3) != "354") { smtpConnection->closeConnection (); return "SMTP error: " + r; }
   
     String s = "From:" + from + "\r\n"
@@ -136,7 +136,7 @@
     r = __smtpReply__ (smtpConnection); if (r.substring (0, 3) != "250") { smtpConnection->closeConnection (); return "SMTP error: " + r; }
   
     // 10. QUIT
-    smtpConnection->sendData ("QUIT\r\n");
+    smtpConnection->sendData ((char *) "QUIT\r\n");
   
     return r; // return (last) OK response from SMTP server
   }
@@ -163,9 +163,14 @@
           if (subject == "")    subject     = between (fileContent, "subject ", "\n");
           if (message == "")    subject     = between (fileContent, "message ", "\n");
         }
-      }
+      } else
     #endif
-
+              {
+                #ifdef dmesg
+                  dmesg ("[SMTP client] file system not mounted, can't read /etc/mail/sendmail.cf");
+                #endif
+              }
+    
     return __sendMail__ (message, subject, to, from, password, userName, smtpPort, smtpServer);    
   }
   

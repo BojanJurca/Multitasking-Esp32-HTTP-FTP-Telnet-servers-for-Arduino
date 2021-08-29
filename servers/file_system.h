@@ -70,25 +70,25 @@
       if (formatIfUnformatted) {
         Serial.printf ("[%10lu] [file system] formatting, please wait ...\n", millis ());
         if (FFat.format ()) {
-          fileSystemDmesg ("[file system] formatted.");
+          dmesg ("[file system] formatted.");
           if (FFat.begin (false)) {
             __fileSystemMounted__ = true;
           }
         } else {
-          fileSystemDmesg ("[file system] formatting failed.");
+          dmesg ("[file system] formatting failed.");
         }
       }
     }
 
-    if (__fileSystemMounted__) fileSystemDmesg ("[file system] mounted."); else fileSystemDmesg ("[file system] failed to mount.");
+    if (__fileSystemMounted__) dmesg ("[file system] mounted."); else dmesg ("[file system] failed to mount.");
     return __fileSystemMounted__;
   }
 
   bool deleteFile (String fileName) {
-    if (!__fileSystemMounted__) { fileSystemDmesg ("[file system] requested to delete a file but file system is not mounted." ); return false; }
+    if (!__fileSystemMounted__) { dmesg ("[file system] requested to delete a file but file system is not mounted." ); return false; }
 
     if (!FFat.remove (fileName)) {
-      fileSystemDmesg ("[file system] unable to delete " + fileName);
+      dmesg ("[file system] unable to delete " + fileName);
       return false;
     }
     return true;    
@@ -101,24 +101,24 @@
   }
   
   bool makeDir (String directory) {
-    if (!__fileSystemMounted__) { fileSystemDmesg ("[file system] requested to make a directory but file system is not mounted." ); return false; }
+    if (!__fileSystemMounted__) { dmesg ("[file system] requested to make a directory but file system is not mounted." ); return false; }
 
     directory = removeExtraSlash (directory);
 
     if (!FFat.mkdir (directory)) {
-      fileSystemDmesg ("[file system] unable to make " + directory);
+      dmesg ("[file system] unable to make " + directory);
       return false;
     }
     return true;    
   }
 
   bool removeDir (String directory) {
-    if (!__fileSystemMounted__) { fileSystemDmesg ("[file system] requested to remove a directory but file system is not mounted." ); return false; }
+    if (!__fileSystemMounted__) { dmesg ("[file system] requested to remove a directory but file system is not mounted." ); return false; }
 
     directory = removeExtraSlash (directory);
 
     if (!FFat.rmdir (directory)) {
-      fileSystemDmesg ("[file system] unable to remove " + directory);
+      dmesg ("[file system] unable to remove " + directory);
       return false;
     }
     return true;    
@@ -135,7 +135,7 @@
         f.close ();
         return true;
       } else { 
-        fileSystemDmesg ("[file_system] " + String (fileName) + " is a directory.");
+        dmesg ("[file_system] " + String (fileName) + " is a directory.");
       }
       f.close ();
     }             
@@ -158,7 +158,7 @@
           f.close ();
           return true;        
         } else {
-          fileSystemDmesg ("[file_system] can't write " + String (fileName));
+          dmesg ("[file_system] can't write " + String (fileName));
         }
       }
       f.close ();

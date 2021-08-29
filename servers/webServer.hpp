@@ -164,7 +164,7 @@
 
       bool isClosed ()                          { return __connection__->isClosed (); }
 
-      bool isOpened ()                          { return __connection__->isOpened (); }
+      bool isOpen ()                            { return __connection__->isOpen (); }
 
       enum WEBSOCKET_DATA_TYPE {
         NOT_AVAILABLE = 0,          // no data is available to be read 
@@ -304,7 +304,7 @@ readingPayload:
                                                 }
 
       size_t binarySize ()                      { // returns how many bytes has arrived from browser, 0 if data is not ready (yet) to be read
-                                                  return __bufferState__ == FULL ? __payloadLength__ : 0;                                                    return 0;
+                                                  return __bufferState__ == FULL ? __payloadLength__ : 0;                                                    
                                                 }
 
       size_t readBinary (byte *buffer, size_t bufferSize) { // returns number bytes copied into buffer
@@ -473,21 +473,21 @@ readingPayload:
                   size_t stackSize,                                                                           // stack size of httpRequestHandler thread, usually 8 KB will do 
                   String serverIP,                                                                            // web server IP address, 0.0.0.0 for all available IP addresses
                   int serverPort,                                                                             // web server port
-                  bool (*firewallCallback) (String IP)                                                        // a reference to callback function that will be celled when new connection arrives 
+                  bool (*firewallCallback) (String connectingIP)                                              // a reference to callback function that will be celled when new connection arrives 
                  ): TcpServer (__webConnectionHandler__, this, stackSize, (TIME_OUT_TYPE) 1500, serverIP, serverPort, firewallCallback)
                                 {
                                   __externalHttpRequestHandler__ = httpRequestHandler;
                                   __externalWsRequestHandler__ = wsRequestHandler; 
                                   __webServerHomeDirectory__ = getUserHomeDirectory ("webserver"); 
                                   if (__webServerHomeDirectory__ == "") { 
-                                    webDmesg ("[httpServer] home directory for webserver system account is not set.");
+                                    dmesg ("[httpServer] home directory for webserver system account is not set.");
                                     return;
                                   }
                                   __started__ = true; // we have initialized everything needed for TCP connection
-                                  if (started ()) webDmesg ("[httpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                  if (started ()) dmesg ("[httpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
                                 }
       
-      ~httpServer ()            { if (started ()) webDmesg ("[httpServer] stopped."); }
+      ~httpServer ()            { if (started ()) dmesg ("[httpServer] stopped."); }
       
       bool started ()           { return TcpServer::started () && __started__; } 
 
@@ -529,11 +529,11 @@ readingPayload:
             if (stristr (buffer, (char *) "UPGRADE: WEBSOCKET")) {
               connection->setTimeOut ((TIME_OUT_TYPE) 300000); // set time-out to 5 minutes for WebSockets (by default if is 1.5 s for HTTP requests)
               WebSocket *webSocket = new WebSocket (connection, httpRequest); 
-              if (webSocket && webSocket->isOpened ()) { // check success
+              if (webSocket && webSocket->isOpen ()) { // check success
                 if (ths->__externalWsRequestHandler__) ths->__externalWsRequestHandler__ (httpRequest, webSocket);
                 delete (webSocket);
               } else {
-                webDmesg ("[httpServer] can't open WebSocket.");
+                dmesg ("[httpServer] can't open WebSocket.");
               }
               return; // close this connection
             }
@@ -613,7 +613,7 @@ readingPayload:
                   return ""; // success
                 } // if file is a file, not a directory
                 f.close ();
-              } // if file is opened
+              } // if file is open
             }
           }
         #endif
@@ -629,7 +629,7 @@ readingPayload:
 
   String webClient (String serverName, int serverPort, TIME_OUT_TYPE timeOutMillis, String httpRequest) {
     char *buffer = (char *) malloc (2048); // reserve some space from heap to hold blocks of response
-    if (!buffer) { webDmesg ("[webClient] could not get enough heap memory."); return ""; }
+    if (!buffer) { dmesg ("[webClient] could not get enough heap memory."); return ""; }
     *buffer = 0;
     
     String retVal = ""; // place for response
@@ -666,10 +666,10 @@ readingPayload:
           }
         }
       }
-      if (receivedTotal) webDmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
-      else               webDmesg ("[webClient] time-out, httpRequest = " + httpRequest);
+      if (receivedTotal) dmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
+      else               dmesg ("[webClient] time-out, httpRequest = " + httpRequest);
     } else {
-      webDmesg ("[webClient] unable to connect to " + serverName + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
+      dmesg ("[webClient] unable to connect to " + serverName + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
     }     
     free (buffer);
     return ""; // response arrived, it may even be OK but it doesn't match content-length field
