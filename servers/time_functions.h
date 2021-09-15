@@ -152,7 +152,7 @@
     // send NTP request
     IPAddress ntpServerIp;
     WiFiUDP udp;
-    if (!WiFi.hostByName (ntpServer.c_str (), ntpServerIp)) return ntpServer + " is not available.";
+    if (!WiFi.hostByName (ntpServer.c_str (), ntpServerIp)) return "Could not find host " + ntpServer;
     // open internal port
     #define INTERNAL_NTP_PORT 2390
     if (!udp.begin (INTERNAL_NTP_PORT)) return "Internal port number " + String (INTERNAL_NTP_PORT) + " is not available for NTP.";
@@ -355,8 +355,8 @@
       previous = now;
     }
   }
-  
-  void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default onee
+
+  void startCronDaemon (void (* cronHandler) (String&), size_t cronStack = (3 * 1024)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default onee
     #ifdef __FILE_SYSTEM__
       if (__fileSystemMounted__) {
         
@@ -418,6 +418,11 @@
     // run periodic synchronization with NTP servers and execute cron commands in a separate thread
     #define tskNORMAL_PRIORITY 1
     if (pdPASS != xTaskCreate (cronDaemon, "cronDaemon", cronStack, (void *) cronHandler, tskNORMAL_PRIORITY, NULL)) dmesg ("[cronDaemon] could not start cronDaemon.");
+  }
+
+  [[deprecated("Replaced by startCronDaemon (void (* cronHandler) (String&), size_t cronStack = (3 * 1024));")]]
+  void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024)) { 
+    startCronDaemonAndInitializeItAtFirstCall (cronHandler, cronStack); 
   }
  
   time_t getGmt () { // returns current GMT or 0 it the time has not been set yet 

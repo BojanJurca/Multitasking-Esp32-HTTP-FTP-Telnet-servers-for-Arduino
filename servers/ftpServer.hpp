@@ -101,21 +101,26 @@
       ftpServer (String serverIP,                                      // FTP server IP address, 0.0.0.0 for all available IP addresses
                  int serverPort,                                       // FTP server port
                  bool (* firewallCallback) (String connectingIP)       // a reference to callback function that will be celled when new connection arrives 
-                ): TcpServer (__ftpConnectionHandler__, (void *) this, 8 * 1024, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
+                ): TcpServer (__staticFtpConnectionHandler__, (void *) this, 8 * 1024, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                                                 {
-                                                  if (started ()) dmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                                                  else            dmesg ("[ftpServer] couldn't start.");
+                                                  if (started ()) dmesg ("[" + __class__ + "] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                                  else            dmesg ("[" + __class__ + "] couldn't start.");
                                                 }
       
-      ~ftpServer ()                             { if (started ()) dmesg ("[ftpServer] stopped."); }
+      ~ftpServer ()                             { if (started ()) dmesg ("[" + __class__ + "] stopped."); }
                                      
     private:
 
-      static void __ftpConnectionHandler__ (TcpConnection *connection, void *thisFtpServer) { // connectionHandler callback function
+      String __class__ = "ftpServer";    
+
+      static void __staticFtpConnectionHandler__ (TcpConnection *connection, void *ths) {  // connectionHandler callback function
+        ((ftpServer *) ths)->__ftpConnectionHandler__ (connection);
+      }
+
+      virtual void __ftpConnectionHandler__ (TcpConnection *connection) { // connectionHandler callback function
 
         // this is where ftp session begins
         
-        ftpServer *ths = (ftpServer *) thisFtpServer; // we've got this pointer into static member function
         ftpSessionParameters fsp = {"", "", "", connection, NULL, NULL};
         
         String cmdLine;
@@ -159,7 +164,7 @@
               //debug FTP protocol: Serial.print ("<--"); for (int i = 0; i < argc; i++) Serial.print (argv [i] + " "); Serial.println ();
 
             // ----- try to handle ftp command -----
-            String s = ths->__internalFtpCommandHandler__ (argc, argv, param, &fsp);
+            String s = __internalFtpCommandHandler__ (argc, argv, param, &fsp);
             connection->sendData (s); // send reply to telnet client
               
               //debug FTP protocol: Serial.println ("-->" + s);
@@ -168,7 +173,7 @@
         } // read and process comands in a loop
 
 closeFtpConnection:      
-        if (fsp.userName != "") dmesg ("[ftpServer] " + fsp.userName + " logged out.");
+        if (fsp.userName != "") dmesg ("[" + __class__ + "] " + fsp.userName + " logged out.");
       }
     
       // returns last chracter pressed (Enter or 0 in case of error
@@ -292,10 +297,10 @@ closeFtpConnection:
       inline String __PASS__ (String password, ftpSessionParameters *fsp) { // login
         if (checkUserNameAndPassword (fsp->userName, password)) fsp->workingDir = fsp->homeDir = getUserHomeDirectory (fsp->userName);
         if (fsp->homeDir > "") { // if logged in
-          dmesg ("[ftpServer] " + fsp->userName + " logged in.");
+          dmesg ("[" + __class__ + "] " + fsp->userName + " logged in.");
                                                       return "230 logged on, your home directory is \"" + fsp->homeDir + "\"\r\n";
         } else { 
-          dmesg ("[ftpServer] " + fsp->userName + " login attempt failed.");
+          dmesg ("[" + __class__ + "] " + fsp->userName + " login attempt failed.");
                                                       return "530 user name or password incorrect\r\n"; 
         }
       }
@@ -525,7 +530,7 @@ closeFtpConnection:
             }
             f.close ();
           } else {
-            dmesg ("[ftpServer] could not open " + fp + " for writing.");
+            dmesg ("[" + __class__ + "] could not open " + fp + " for writing.");
           }
         }
 

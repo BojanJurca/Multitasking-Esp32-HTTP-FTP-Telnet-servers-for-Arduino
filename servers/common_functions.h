@@ -5,10 +5,9 @@
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
 
     It contins some useful functions used by other modules 
-
-    History:
-            - first release, 
-              February 3, 2021, Bojan Jurca
+    
+    September, 13, 2021, Bojan Jurca
+    
  */
 
 
@@ -53,6 +52,45 @@
   // pad string with spaces
   String pad (String s, int toLenght) {
     while (s.length () < toLenght) s += " ";
+    return s;
+  }
+
+  // inet_ntos
+  static SemaphoreHandle_t __ntosSemaphore__ = xSemaphoreCreateMutex (); // to prevent two threads to call inet_ntoa simultaneously
+  
+  String inet_ntos (ip_addr_t addr) { // equivalent of inet_ntoa
+    char s [40];
+    xSemaphoreTake (__ntosSemaphore__, portMAX_DELAY);
+      strcpy (s, inet_ntoa (addr)); 
+    xSemaphoreGive (__ntosSemaphore__);
+    return String (s);
+  }
+
+  String inet_ntos (ip4_addr_t addr) { // equivalent of inet_ntoa
+    char s [40];
+    xSemaphoreTake (__ntosSemaphore__, portMAX_DELAY);
+      strcpy (s, inet_ntoa (addr)); 
+    xSemaphoreGive (__ntosSemaphore__);
+    return String (s);
+  }
+
+  String inet_ntos (in_addr addr) { // equivalent of inet_ntoa
+    char s [40];
+    xSemaphoreTake (__ntosSemaphore__, portMAX_DELAY);
+      strcpy (s, inet_ntoa (addr)); 
+    xSemaphoreGive (__ntosSemaphore__);
+    return String (s);
+  }
+
+  // converts binary MAC address into String
+  String mac_ntos (byte *MacAddress, byte MacAddressLength) {
+    String s = "";
+    char c [3];
+    for (byte i = 0; i < MacAddressLength; i++) {
+      sprintf (c, "%02x", *(MacAddress ++));
+      s += String (c);
+      if (i < 5) s += ":";
+    }
     return s;
   }
 

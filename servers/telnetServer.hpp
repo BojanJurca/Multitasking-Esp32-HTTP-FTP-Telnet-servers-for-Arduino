@@ -173,16 +173,6 @@
   #include "file_system.h"        // telnetServer.hpp needs file_system.h to process file system commands sucn as ls, ...
   #include "smtpClient.h"         // SMTP client for sendmail command
   #include "webServer.hpp"        // webClient needed for curl command
-  // needed for ping command
-  #include "lwip/inet_chksum.h"
-  #include "lwip/ip.h"
-  #include "lwip/ip4.h"
-  #include "lwip/err.h"
-  #include "lwip/icmp.h"
-  #include "lwip/sockets.h"
-  #include "lwip/sys.h"
-  #include "lwip/netdb.h"
-  #include "lwip/dns.h"
   // needed for (hard) reset command
   #include "esp_int_wdt.h"
   #include "esp_task_wdt.h"
@@ -191,12 +181,6 @@
   void setGmt (time_t t);
   time_t getUptime ();                    
   time_t timeToLocalTime (time_t t);
-
-  
-            //----- for IW: TO DO: try to put this variables and initializer inside class definition  -----
-            static SemaphoreHandle_t __WiFiSnifferSemaphore__ = xSemaphoreCreateMutex (); // to prevent two threads to start sniffing simultaneously
-            static String __macToSniffRssiFor__;  // input to __sniffWiFiForRssi__ function
-            static int __rssiSniffedForMac__;     // output of __sniffWiFiForRssi__ function
 
 
   /*
@@ -243,25 +227,29 @@
                     String serverIP,                                                                                        // telnet server IP address, 0.0.0.0 for all available IP addresses
                     int serverPort,                                                                                         // telnet server port
                     bool (*firewallCallback) (String connectingIP)                                                          // a reference to callback function that will be celled when new connection arrives 
-                   ): TcpServer (__telnetConnectionHandler__, (void *) this, stackSize, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
+                   ): TcpServer (__staticTelnetConnectionHandler__, (void *) this, stackSize, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                         {
-                          this->__externalTelnetCommandHandler__ = telnetCommandHandler;
+                          __externalTelnetCommandHandler__ = telnetCommandHandler;
 
-                          if (started ()) dmesg ("[telnetServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                          else            dmesg ("[telnetServer] couldn't start.");
+                          if (started ()) dmesg ("[" + __class__ + "] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                          else            dmesg ("[" + __class__ + "] couldn't start.");
                         }
 
-      ~telnetServer ()  { if (started ()) dmesg ("[telnetServer] stopped."); }
+      ~telnetServer ()  { if (started ()) dmesg ("[" + __class__ + "] stopped."); }
       
     private:
 
+      String __class__ = "telnetServer";    
+
       String (* __externalTelnetCommandHandler__) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) = NULL; // telnet command handler supplied by calling program 
 
-      static void __telnetConnectionHandler__ (TcpConnection *connection, void *thisTelnetServer) { // connectionHandler callback function
+      static void __staticTelnetConnectionHandler__ (TcpConnection *connection, void *ths) {  // connectionHandler callback function
+        ((telnetServer *) ths)->__telnetConnectionHandler__ (connection);
+      }
+
+      virtual void __telnetConnectionHandler__ (TcpConnection *connection) { // connectionHandler callback function
 
         // this is where telnet session begins
-        
-        telnetServer *ths = (telnetServer *) thisTelnetServer; // we've got this pointer into static member function
         telnetSessionParameters tsp = {"", "", (char *) "", NULL, 0, 0, 0, 0};
         String password;
         
@@ -333,9 +321,9 @@
       
               String r;
               // unsigned long timeOutMillis = connection->getTimeOut (); connection->setTimeOut (TcpConnection::INFINITE); // disable time-out checking while proessing telnetCommandHandler to allow longer processing times
-              if (ths->__externalTelnetCommandHandler__ && (r = ths->__externalTelnetCommandHandler__ (argc, argv, &tsp)) != "") 
+              if (__externalTelnetCommandHandler__ && (r = __externalTelnetCommandHandler__ (argc, argv, &tsp)) != "") 
                 connection->sendData (r); // send reply to telnet client
-              else connection->sendData (ths->__internalTelnetCommandHandler__ (argc, argv, &tsp)); // send reply to telnet client
+              else connection->sendData (__internalTelnetCommandHandler__ (argc, argv, &tsp)); // send reply to telnet client
 
             } // if command line ended out of quotation
           } // if cmdLine is not empty
@@ -437,48 +425,48 @@
 
         if (argv [0] == "help") { //------------------------------------------- HELP
           
-          if (argc == 1) return this->__help__ (tsp);
+          if (argc == 1) return __help__ (tsp);
                          return "Wrong syntax. Use help";
 
         } else if (argv [0] == "quit") { //------------------------------------ QUIT
           
-          if (argc == 1) return this->__quit__ (tsp);
+          if (argc == 1) return __quit__ (tsp);
                          return "Wrong syntax. Use quit";
 
         } else if (argv [0] == "clear" || argv [0] == "cls") { //-------------- CLEAR, CLS
           
-          if (argc == 1) return this->__clear__ (tsp);
+          if (argc == 1) return __clear__ (tsp);
                          return "Wrong syntax. Use clear or cls";
                          
         } else if (argv [0] == "uname") { //----------------------------------- UNAME
     
-          if (argc == 1 || (argc == 2 && argv [1] == "-a")) return this->__uname__ ();
+          if (argc == 1 || (argc == 2 && argv [1] == "-a")) return __uname__ ();
                                                             return "Wrong syntax. Use uname [-a]";
 
         } else if (argv [0] == "uptime") { //---------------------------------- UPTIME
     
-          if (argc == 1) return this->__uptime__ ();
+          if (argc == 1) return __uptime__ ();
                          return "Wrong syntax. Use uptime";
 
         } else if (argv [0] == "reboot") { //---------------------------------- REBOOT
     
-          if (argc == 1) return this->__reboot__ (tsp);
+          if (argc == 1) return __reboot__ (tsp);
                          return "Wrong syntax. Use reboot";
           
         } else if (argv [0] == "reset") { //----------------------------------- RESET
     
-          if (argc == 1) return this->__reset__ (tsp);
+          if (argc == 1) return __reset__ (tsp);
                          return "Wrong syntax. Use reset";
     
         } else if (argc >= 1 && argv [0] == "date") { //----------------------- DATE
           
-          if (argc == 1)                     return this->__getDateTime__ ();
-          if (argc == 4 && argv [1] == "-s") return this->__setDateTime__ (argv [2], argv [3]);
+          if (argc == 1)                     return __getDateTime__ ();
+          if (argc == 4 && argv [1] == "-s") return __setDateTime__ (argv [2], argv [3]);
                                              return "Wrong syntax. Use date [-s YYYY/MM/DD hh:mm:ss] (use hh in 24 hours time format)";
 
         } else if (argc >= 1 && argv [0] == "ntpdate") { //-------------------- NTPDATE
           
-          if (argc == 1 || ((argc == 2 || argc == 3) && argv [1] == "-u")) return this->__ntpdate__ (argv [2]);
+          if (argc == 1 || ((argc == 2 || argc == 3) && argv [1] == "-u")) return __ntpdate__ (argv [2]);
                                                                            return "Wrong syntax. Use ntpdate [-u [ntpServer]]";
 
         } else if (argc >= 1 && argv [0] == "crontab") { //-------------------- CRONTAB
@@ -489,8 +477,8 @@
         } else if (argv [0] == "free") { //------------------------------------ FREE
     
           long n;
-          if (argc == 1)                                                               return this->__free__ (0, tsp);
-          if (argc == 3 && argv [1] == "-s" && (n = argv [2].toInt ()) > 0 && n < 300) return this->__free__ (n, tsp);
+          if (argc == 1)                                                               return __free__ (0, tsp);
+          if (argc == 3 && argv [1] == "-s" && (n = argv [2].toInt ()) > 0 && n < 300) return __free__ (n, tsp);
                                                                                        return "Wrong syntax. Use free [-s n] (where 0 < n < 300)";
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
@@ -502,79 +490,79 @@
             else if (argv [i] == "-T") t = true;
             else return "Wrong syntax. Use dmesg [--follow] [-T]";
           }
-          return this->__dmesg__ (f, t, tsp);
+          return __dmesg__ (f, t, tsp);
 
         } else if (argv [0] == "mkfs.fat") { //-------------------------------- MKFS.FAT
           
           if (argc == 1) {
-            if (tsp->userName == "root") return this->__mkfs__ (tsp);
+            if (tsp->userName == "root") return __mkfs__ (tsp);
             else                         return "Only root user may format disk.";
           }
                                          return "Wrong syntax. Use mkfs.fat";
           
         } else if (argv [0] == "fs_info") { // -------------------------------- FS_INFO
           
-          if (argc <= 2) return this->__fs_info__ ();
+          if (argc <= 2) return __fs_info__ ();
                          return "Wrong syntax. Use fs_info";          
 
         } else if (argv [0] == "ls" || argv [0] == "dir") { //----------------- LS, DIR
 
-          if (argc == 1) return this->__ls__ (tsp->workingDir, tsp);
-          if (argc == 2) return this->__ls__ (argv [1], tsp);
+          if (argc == 1) return __ls__ (tsp->workingDir, tsp);
+          if (argc == 2) return __ls__ (argv [1], tsp);
                          return "Wrong syntax. Use ls [directoryName]";
 
         } else if (argv [0] == "tree") { //------------------------------------ TREE
 
-          if (argc == 1) return this->__tree__ (tsp->workingDir, tsp);
-          if (argc == 2) return this->__tree__ (argv [1], tsp);
+          if (argc == 1) return __tree__ (tsp->workingDir, tsp);
+          if (argc == 2) return __tree__ (argv [1], tsp);
                          return "Wrong syntax. Use tree [directoryName]";
         
         } else if (argv [0] == "cat" || argv [0] == "type") { //--------------- CAT, TYPE
           
-          if (argc == 2) return this->__catFileToClient__ (argv [1], tsp);
-          if (argc == 3 && argv [1] == ">") return this->__catClientToFile__ (argv [2], tsp);
+          if (argc == 2) return __catFileToClient__ (argv [1], tsp);
+          if (argc == 3 && argv [1] == ">") return __catClientToFile__ (argv [2], tsp);
                          return "Wrong syntax. Use cat fileName or cat > fileName";
 
         } else if (argv [0] == "rm" || argv [0] == "del") { //----------------- RM
           
-          if (argc == 2) return this->__rm__ (argv [1], tsp);
+          if (argc == 2) return __rm__ (argv [1], tsp);
                          return "Wrong syntax. Use rm fileName";
 
         } else if (argv [0] == "mkdir") { //----------------------------------- MKDIR
           
-          if (argc == 2) return this->__mkdir__ (argv [1], tsp);
+          if (argc == 2) return __mkdir__ (argv [1], tsp);
                          return "Wrong syntax. Use mkdir directoryName";
 
         } else if (argv [0] == "rmdir") { //----------------------------------- RMDIR
           
-          if (argc == 2) return this->__rmdir__ (argv [1], tsp);
+          if (argc == 2) return __rmdir__ (argv [1], tsp);
                          return "Wrong syntax. Use rmdir directoryName";
 
         } else if (argv [0] == "cd") { //-------------------------------------- CD
           
-          if (argc == 2) return this->__cd__ (argv [1], tsp);
+          if (argc == 2) return __cd__ (argv [1], tsp);
                          return "Wrong syntax. Use cd directoryName";
 
         } else if (argv [0] == "pwd") { //------------------------------------- PWD
           
-          if (argc == 1) return this->__pwd__ (tsp);
+          if (argc == 1) return __pwd__ (tsp);
                          return "Wrong syntax. Use pwd";
 
         } else if (argv [0] == "mv" || argv [0] == "ren") { //----------------- MV
           
-          if (argc == 3) return this->__mv__ (argv [1], argv [2], tsp);
+          if (argc == 3) return __mv__ (argv [1], argv [2], tsp);
                          return "Wrong syntax. Use mv srcFileName dstFileName or mv srcDirectoryName dstDirectoryName";
 
         } else if (argv [0] == "cp" || argv [0] == "copy") { //---------------- CP
           
-          if (argc == 3) return this->__cp__ (argv [1], argv [2], tsp);
+          if (argc == 3) return __cp__ (argv [1], argv [2], tsp);
                          return "Wrong syntax. Use cp srcFileName dstFileName";
 
         } else if (argv [0] == "vi") { //-------------------------------------- VI
 
           if (argc == 2)  {
                             TIME_OUT_TYPE timeOutMillis = tsp->connection->getTimeOut (); tsp->connection->setTimeOut (INFINITE); // we don't want TcpConnection to break during editing
-                            String s = this->__vi__ (argv [1], tsp);
+                            String s = __vi__ (argv [1], tsp);
                             tsp->connection->setTimeOut (timeOutMillis); // restore original time-out
                             return s;
                           }
@@ -584,16 +572,16 @@
 
           } else if (argv [0] == "passwd") { //-------------------------------- PASSWD
             
-            if (argc == 1)                                              return this->__passwd__ (tsp->userName, tsp);
+            if (argc == 1)                                              return __passwd__ (tsp->userName, tsp);
             if (argc == 2) {
-              if (tsp->userName == "root" || argv [1] == tsp->userName) return this->__passwd__ (argv [1], tsp); 
+              if (tsp->userName == "root" || argv [1] == tsp->userName) return __passwd__ (argv [1], tsp); 
               else                                                      return "You may not change password for " + argv [1] + ".";
             }
 
           } else if (argv [0] == "useradd") { //------------------------------- USERADD
 
             if (tsp->userName != "root")                           return "Only root may add users.";
-            if (argc == 6 && argv [1] == "-u" && argv [3] == "-d") return this->__userAdd__ (argv [5], argv [2], argv [4]);
+            if (argc == 6 && argv [1] == "-u" && argv [3] == "-d") return __userAdd__ (argv [5], argv [2], argv [4]);
                                                                    return "Wrong syntax. Use useradd -u userId -d userHomeDirectory userName (where userId > 1000)";
 
           } else if (argv [0] == "userdel") { //------------------------------- USERDEL
@@ -601,36 +589,36 @@
             if (tsp->userName != "root") return "Only root may delete users.";
             if (argc != 2)               return "Wrong syntax. Use userdel userName";
             if (argv [1] == "root")      return "You don't really want to to this.";
-                                         return this->__userDel__ (argv [1]);
+                                         return __userDel__ (argv [1]);
 
         #endif
 
         } else if (argv [0] == "ifconfig" || argv [0] == "ipconfig") { //------ IFCONFIG, IPCONFIG
           
-          if (argc == 1) return this->__ifconfig__ ();
+          if (argc == 1) return ifconfig ();
                          return "Unknown option.";
 
         } else if (argv [0] == "iw") { //-------------------------------------- IW
     
-          if (argc == 1) return this->__iw__ (tsp);
+          if (argc == 1) return iw (tsp->connection);
                          return "Wrong syntax. Use ifconfig";
 
         } else if (argv [0] == "arp") { //------------------------------------- ARP
     
-          if (argc == 1)                       return arp_a (); // from network.h
-          if ((argc == 2 && argv [1] == "-a")) return arp_a (); // from network.h
+          if (argc == 1)                       return arp (); // from network.h
+          if ((argc == 2 && argv [1] == "-a")) return arp (); // from network.h
                                                return "Wrong syntax. Use arp [-a]";
     
         } else if (argv [0] == "ping") { //------------------------------------ PING
-    
-          if (argc == 2) return this->__ping__ (tsp->connection, (char *) argv [1].c_str ()); 
+
+          if (argc == 2) { ping (argv [1], PING_DEFAULT_COUNT, PING_DEFAULT_INTERVAL, PING_DEFAULT_SIZE, PING_DEFAULT_TIMEOUT, tsp->connection); return ""; }
                          return "Wrong syntax. Use ping ipAddres";
    
         } else if (argv [0] == "telnet") { //---------------------------------- TELENT
 
           long port;
-          if (argc == 2)                                                                 return this->__telnet__ (argv [1], 23, tsp);
-          if (argc == 3 && (port = argv [2].toInt ()) && port > 0 && (int) port == port) return this->__telnet__ (argv [1], (int) port, tsp);
+          if (argc == 2)                                                                 return __telnet__ (argv [1], 23, tsp);
+          if (argc == 3 && (port = argv [2].toInt ()) && port > 0 && (int) port == port) return __telnet__ (argv [1], (int) port, tsp);
                                                                                          return "Wrong syntax. Use telnet ipAddress or telnet ipAddress portNumber";
 
         } else if (argv [0] == "sendmail") { //-------------------------------- SENDMAIL
@@ -661,12 +649,12 @@
 
           if (nonsense > "") return syntaxError;
           
-          return this->__sendmail__ (message, subject, to, from, password, userName, smtpPort.toInt (), smtpServer);
+          return __sendmail__ (message, subject, to, from, password, userName, smtpPort.toInt (), smtpServer);
                 
         } else if (argv [0] == "curl") { //------------------------------------ CURL
           
-          if (argc == 2) return this->__curl__ ("GET", argv [1]);
-          if (argc == 3) return this->__curl__ (argv [1], argv [2]);
+          if (argc == 2) return __curl__ ("GET", argv [1]);
+          if (argc == 3) return __curl__ (argv [1], argv [2]);
                          return "Wrong syntax. Use curl http://url or curl method http://url (where method is GET, PUT, ...):";
 
         }
@@ -677,7 +665,7 @@
       }
 
       inline String __help__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
-        String e = this->__catFileToClient__ (getUserHomeDirectory ("telnetserver") + "help.txt", tsp);
+        String e = __catFileToClient__ (getUserHomeDirectory ("telnetserver") + "help.txt", tsp);
         return e == "" ? "" : e + " Please use FTP, loggin as root and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + getUserHomeDirectory ("telnetserver") + " directory.";  
       }
 
@@ -755,7 +743,7 @@
           time_t t = mktime (&tm); // time in local time
           if (t != -1) {
             setLocalTime (t);
-            return this->__getDateTime__ ();          
+            return __getDateTime__ ();          
           }
         }
         return "Wrong format of date/time specified.";
@@ -1106,309 +1094,6 @@
         }
         
       #endif
-
-      inline String __ifconfig__ () __attribute__((always_inline)) {
-        String s = "";
-        struct netif *netif;
-        for (netif = netif_list; netif; netif = netif->next) {
-          if (netif_is_up (netif)) {
-            if (s != "") s += "\r\n";
-            s += String (netif->name [0]) + String (netif->name [1]) + "      hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" + 
-                     "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
-                     "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n" + 
-                     "        mtu: " + String (netif->mtu) + "\r\n";
-          }
-        }
-        return s;    
-      }
-
-      // ----- IW -----
-            
-            typedef struct {
-              unsigned frame_ctrl:16;
-              unsigned duration_id:16;
-              uint8_t addr1 [6]; // receiver address 
-              uint8_t addr2 [6]; // sender address 
-              uint8_t addr3 [6]; // filtering address 
-              unsigned sequence_ctrl:16;
-              uint8_t addr4 [6]; // optional 
-            } wifi_ieee80211_mac_hdr_t;
-            
-            typedef struct {
-              wifi_ieee80211_mac_hdr_t hdr;
-              uint8_t payload [0]; // network data ended with 4 bytes csum (CRC32)
-            } wifi_ieee80211_packet_t;      
-
-            int __sniffWiFiForRssi__ (String stationMac) { // sniff WiFi trafic for station RSSI - since we are sniffing connected stations we can stay on AP WiFi channel
-                                                           // sniffing WiFi is not well documented, there are some working examples on internet however:
-                                                           // https://www.hackster.io/p99will/esp32-wifi-mac-scanner-sniffer-promiscuous-4c12f4
-                                                           // https://esp32.com/viewtopic.php?t=1314
-                                                           // https://blog.podkalicki.com/esp32-wifi-sniffer/
-              int rssi;                                          
-              xSemaphoreTake (__WiFiSnifferSemaphore__, portMAX_DELAY);
-                __macToSniffRssiFor__ = stationMac;
-                __rssiSniffedForMac__ = 0;
-                esp_wifi_set_promiscuous (true);
-                const wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};      
-                esp_wifi_set_promiscuous_filter (&filter);
-                // esp_wifi_set_promiscuous_rx_cb (&__WiFiSniffer__);
-                esp_wifi_set_promiscuous_rx_cb ([] (void* buf, wifi_promiscuous_pkt_type_t type) {
-                                                                                                    const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *) buf;
-                                                                                                    const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *) ppkt->payload;
-                                                                                                    const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
-                                                                                                    // TO DO: I'm not 100% sure that this works in all cases since source mac address may not be
-                                                                                                    //        always in the same place for all types and subtypes of frame
-                                                                                                    if (__macToSniffRssiFor__ == MacAddressAsString ((byte *) hdr->addr2, 6)) __rssiSniffedForMac__ = ppkt->rx_ctrl.rssi;
-                                                                                                    return;
-                                                                                                  });
-                  unsigned long startTime = millis ();
-                  while (__rssiSniffedForMac__ == 0 && millis () - startTime < 5000) delay (1); // sniff max 5 second, it should be enough
-                  // Serial.printf ("RSSI obtained in %lu milliseconds\n", millis () - startTime);
-                  rssi = __rssiSniffedForMac__;
-                esp_wifi_set_promiscuous (false);
-          
-              xSemaphoreGive (__WiFiSnifferSemaphore__);
-              return rssi;
-            }
-
-      String __iw__ (telnetSessionParameters *tsp) {
-        String s = "";
-        struct netif *netif;
-        for (netif = netif_list; netif; netif = netif->next) {
-          if (netif_is_up (netif)) {
-            if (s != "") s += "\r\n";
-            // display the following information for STA and AP interface (similar to ifconfig)
-            s += String (netif->name [0]) + String (netif->name [1]) + "      hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
-                 "        hwaddr: " + MacAddressAsString (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
-                 "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n";
- 
-                    // display the following information for STA interface
-                    if (inet_ntos (netif->ip_addr) == WiFi.localIP ().toString ()) {
-                      if (WiFi.status () == WL_CONNECTED) {
-                        int rssi = WiFi.RSSI ();
-                        String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
-                        s += String ("           STAtion is connected to router:\r\n\r\n") + 
-                                     "              inet addr: " + WiFi.gatewayIP ().toString () + "\r\n" +
-                                     "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
-                      } else {
-                        s += "           STAtion is disconnected from router\r\n";
-                      }
-                    // display the following information for local loopback interface
-                    } else if (inet_ntos (netif->ip_addr) == "127.0.0.1") {
-                        s += "           local loopback\r\n";
-                    // display the following information for AP interface
-                    } else {
-                      wifi_sta_list_t wifi_sta_list = {};
-                      tcpip_adapter_sta_list_t adapter_sta_list = {};
-                      esp_wifi_ap_get_sta_list (&wifi_sta_list);
-                      tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
-                      if (adapter_sta_list.num) {
-                        s += "           stations connected to Access Point (" + String (adapter_sta_list.num) + "):\r\n";
-                        for (int i = 0; i < adapter_sta_list.num; i++) {
-                          tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
-                          s += String ("\r\n") + 
-                                       "              hwaddr: " + MacAddressAsString ((byte *) &station.mac, 6) + "\r\n" + 
-                                       "              inet addr: " + inet_ntos (station.ip) + "\r\n";
-                                       tsp->connection->sendData (s);
-                                       s = "";
-                                       int rssi = __sniffWiFiForRssi__ (MacAddressAsString ((byte *) &station.mac, 6));
-                                       String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
-                                       s = "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
-                        }
-                      } else {
-                        s += "           there are no stations connected to Access Point\r\n";
-                      }
-                    }
-
-          }
-        }
-        tsp->connection->sendData (s);
-        return "";
-      }
-
-      // ----- PING -----      
-
-          // according to: https://github.com/pbecchi/ESP32_ping
-          #define PING_DEFAULT_COUNT     4
-          #define PING_DEFAULT_INTERVAL  1
-          #define PING_DEFAULT_SIZE     32
-          #define PING_DEFAULT_TIMEOUT   1
-    
-          struct __pingDataStructure__ {
-            uint16_t ID;
-            uint16_t pingSeqNum;
-            uint8_t stopped = 0;
-            uint32_t transmitted = 0;
-            uint32_t received = 0;
-            float minTime = 0;
-            float maxTime = 0;
-            float meanTime = 0;
-            float lastMeanTime = 0;
-            float varTime = 0;
-          };
-    
-          static void __pingPrepareEcho__ (__pingDataStructure__ *pds, struct icmp_echo_hdr *iecho, uint16_t len) {
-            size_t i;
-            size_t data_len = len - sizeof (struct icmp_echo_hdr);
-          
-            ICMPH_TYPE_SET (iecho, ICMP_ECHO);
-            ICMPH_CODE_SET (iecho, 0);
-            iecho->chksum = 0;
-            iecho->id = pds->ID;
-            iecho->seqno = htons (++pds->pingSeqNum);
-          
-            /* fill the additional data buffer with some data */
-            for (i = 0; i < data_len; i++) ((char*) iecho)[sizeof (struct icmp_echo_hdr) + i] = (char) i;
-          
-            iecho->chksum = inet_chksum (iecho, len);
-          }
-    
-          static err_t __pingSend__ (__pingDataStructure__ *pds, int s, ip4_addr_t *addr, int pingSize) {
-            struct icmp_echo_hdr *iecho;
-            struct sockaddr_in to;
-            size_t ping_size = sizeof (struct icmp_echo_hdr) + pingSize;
-            int err;
-          
-            if (!(iecho = (struct icmp_echo_hdr *) mem_malloc ((mem_size_t) ping_size))) return ERR_MEM;
-          
-            __pingPrepareEcho__ (pds, iecho, (uint16_t) ping_size);
-          
-            to.sin_len = sizeof (to);
-            to.sin_family = AF_INET;
-            to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
-            
-            if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
-          
-            return (err ? ERR_OK : ERR_VAL);
-          }
-        
-          static bool __pingRecv__ (__pingDataStructure__ *pds, TcpConnection *telnetConnection, int s) {
-            char buf [64];
-            int fromlen, len;
-            struct sockaddr_in from;
-            struct ip_hdr *iphdr;
-            struct icmp_echo_hdr *iecho = NULL;
-            char ipa[16];
-            struct timeval begin;
-            struct timeval end;
-            uint64_t microsBegin;
-            uint64_t microsEnd;
-            float elapsed;
-        
-            char cstr [255];    
-          
-            // Register begin time
-            gettimeofday (&begin, NULL);
-          
-            // Send
-            while ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr *) &from, (socklen_t *) &fromlen)) > 0) {
-              if (len >= (int)(sizeof(struct ip_hdr) + sizeof(struct icmp_echo_hdr))) {
-                // Register end time
-                gettimeofday (&end, NULL);
-          
-                /// Get from IP address
-                ip4_addr_t fromaddr;
-                fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
-                
-                strcpy (ipa, inet_ntos (fromaddr).c_str ()); 
-          
-                // Get echo
-                iphdr = (struct ip_hdr *) buf;
-                iecho = (struct icmp_echo_hdr *) (buf + (IPH_HL(iphdr) * 4));
-          
-                // Print ....
-                if ((iecho->id == pds->ID) && (iecho->seqno == htons (pds->pingSeqNum))) {
-                  pds->received ++;
-          
-                  // Get elapsed time in milliseconds
-                  microsBegin = begin.tv_sec * 1000000;
-                  microsBegin += begin.tv_usec;
-          
-                  microsEnd = end.tv_sec * 1000000;
-                  microsEnd += end.tv_usec;
-          
-                  elapsed = (float) (microsEnd - microsBegin) / (float) 1000.0;
-          
-                  // Update statistics
-                  // Mean and variance are computed in an incremental way
-                  if (elapsed < pds->minTime) pds->minTime = elapsed;
-                  if (elapsed > pds->maxTime) pds->maxTime = elapsed;
-          
-                  pds->lastMeanTime = pds->meanTime;
-                  pds->meanTime = (((pds->received - 1) * pds->meanTime) + elapsed) / pds->received;
-          
-                  if (pds->received > 1) pds->varTime = pds->varTime + ((elapsed - pds->lastMeanTime) * (elapsed - pds->meanTime));
-          
-                  // Print ...
-                  sprintf (cstr, "%d bytes from %s: icmp_seq=%d time=%.3f ms\r\n", len, ipa, ntohs (iecho->seqno), elapsed);
-                  if (!telnetConnection->sendData (cstr)) return false;
-                  
-                  return true;
-                }
-                else {
-                  // TODO: 
-                }
-              }
-            }
-          
-            if (len < 0) {
-              sprintf (cstr, "Request timeout for icmp_seq %d\r\n", pds->pingSeqNum);
-              telnetConnection->sendData (cstr);
-            }
-            return false;
-          }  
-        
-      String __ping__ (TcpConnection *telnetConnection, char *targetIP, int pingCount = PING_DEFAULT_COUNT, int pingInterval = PING_DEFAULT_INTERVAL, int pingSize = PING_DEFAULT_SIZE, int timeOut = PING_DEFAULT_TIMEOUT) {
-        // struct sockaddr_in address;
-        ip4_addr_t pingTarget;
-        int s;
-        char cstr [256];
-      
-        // Create socket
-        if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
-          return "Error creating socket.";
-        }
-      
-        pingTarget.addr = inet_addr (targetIP); 
-      
-        // Setup socket
-        struct timeval tOut;
-      
-        // Timeout
-        tOut.tv_sec = timeOut;
-        tOut.tv_usec = 0;
-      
-        if (setsockopt (s, SOL_SOCKET, SO_RCVTIMEO, &tOut, sizeof (tOut)) < 0) {
-          closesocket (s);
-          return "Error setting socket options";
-        }
-    
-        __pingDataStructure__ pds = {};
-        pds.ID = random (0, 0xFFFF); // each consequently running ping command should have its own unique ID otherwise we won't be able to distinguish packets 
-        pds.minTime = 1.E+9; // FLT_MAX;
-      
-        // Begin ping ...
-      
-        sprintf (cstr, "ping %s: %d data bytes\r\n",  targetIP, pingSize);
-        if (!telnetConnection->sendData (cstr)) return "";
-        
-        while ((pds.pingSeqNum < pingCount) && (!pds.stopped)) {
-          if (__pingSend__ (&pds, s, &pingTarget, pingSize) == ERR_OK) if (!__pingRecv__ (&pds, telnetConnection, s)) return "";
-          delay (pingInterval * 1000L);
-        }
-      
-        closesocket (s);
-      
-        sprintf (cstr, "%u packets transmitted, %u packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
-        if (!telnetConnection->sendData (cstr)) return "";
-      
-        if (pds.received) {
-          sprintf (cstr, "round-trip min/avg/max/stddev = %.3f/%.3f/%.3f/%.3f ms", pds.minTime, pds.meanTime, pds.maxTime, sqrt (pds.varTime / pds.received));
-          if (!telnetConnection->sendData (cstr)) return "";
-          return ""; // ok
-        }
-        return ""; // errd
-      }
 
       // ----- TELNET -----
             

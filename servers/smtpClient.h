@@ -44,7 +44,7 @@
   
     // 1. get SMTP server IP number
     IPAddress smtpServerIP;
-    if (!WiFi.hostByName (smtpServer.c_str (), smtpServerIP)) return smtpServer + " is not available.";
+    if (!WiFi.hostByName (smtpServer.c_str (), smtpServerIP)) return "Could not find host " + smtpServer;
     // debug: Serial.println ("[SMTP] getHostByName: " + smtpServerIP.toString ()); 
   
     // 2. create non-threaded TCP client instance and connect to SMTP server

@@ -32,12 +32,19 @@
 #include "oscilloscope.h"
 
 
-  String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { return ""; }
-  void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { return; }
+  String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { 
+    return "<html><body>Is this working?</body></html>"; 
+  }
 
-  String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { return ""; }
+  void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { 
+    return; 
+  }
 
-  bool firewall (String IP) { return true; }
+  String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { 
+    return ""; 
+  }
+
+  bool firewall (String connectiongIP) { return true; }
 
 
 void setup () {  
@@ -63,24 +70,24 @@ void setup () {
   startNetworkAndInitializeItAtFirstCall ();
 
   // start telnet server
-  telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, 16 * 1024, "0.0.0.0", 23, firewall);
-  if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) Serial.println ("[telnetServer] did not start.");
+  //telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, 16 * 1024, "0.0.0.0", 23, firewall);
+  //if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) Serial.println ("[telnetServer] did not start.");
   
   // start web server
   httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
                                         wsRequestHandler,             // a callback function that will handle WS requests, NULL to ignore WS requests
                                         8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
-                                        (char *) "0.0.0.0",           // start HTTP server on all available ip addresses
+                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
                                         80,                           // HTTP port
                                         NULL);                        // we won't use firewall callback function for HTTP server
   if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
 
   // start FTP server
-  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",              // start FTP server on all available ip addresses
+  ftpServer *ftpSrv = new ftpServer ("0.0.0.0",                       // start FTP server on all available ip addresses
                                      21,                              // controll connection FTP port
                                      firewall);                       // use firewall callback function for FTP server (replace with NULL if not needed)
   if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
-  
+
 }
 
 void loop () {  

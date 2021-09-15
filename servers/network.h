@@ -52,7 +52,7 @@
   #include <lwip/netif.h>
   #include <netif/etharp.h>
   #include <lwip/sockets.h>
-  #include "common_functions.h" // between, pad
+  #include "common_functions.h" // between, pad, inet_ntos, mac_ntos
   #include "esp_wifi.h"
   #include "file_system.h"  // network.h needs file_system.h to read configurations files from
 
@@ -111,20 +111,9 @@
     }
   }
 
-  // converts binary MAC address into String
-  String MacAddressAsString (byte *MacAddress, byte addressLength) {
-    String s = "";
-    char c [3];
-    for (byte i = 0; i < addressLength; i++) {
-      sprintf (c, "%02x", *(MacAddress ++));
-      s += String (c);
-      if (i < 5) s += ":";
-    }
-    return s;
-  }
 
   // returns output of arp (telnet) command
-  String arp_a ();
+  String arp ();
 
 
   /*
@@ -149,8 +138,7 @@
   #endif
 
 
-  
-  void startNetworkAndInitializeItAtFirstCall () {                  // starts WiFi according to configuration files, creates configuration files if they don't exist
+  void startWiFi () {                  // starts WiFi according to configuration files, creates configuration files if they don't exist
     // WiFi.disconnect (true);
     WiFi.mode (WIFI_OFF);
 
@@ -402,9 +390,9 @@
                                                   break;
           case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:  dmesg ("[network] [STA] authentication mode has changed.");
                                                   break;
-          case SYSTEM_EVENT_STA_GOT_IP:           dmesg ("[network] [STA] got IP address: " + WiFi.localIP ().toString () + ".");
+          case SYSTEM_EVENT_STA_GOT_IP:           dmesg ("[network] [STA] got IP address: " + WiFi.localIP ().toString ());
                                                   break;
-          case SYSTEM_EVENT_STA_LOST_IP:          dmesg ("[network] [STA] lost IP address and IP address is reset to 0.");
+          case SYSTEM_EVENT_STA_LOST_IP:          dmesg ("[network] [STA] lost IP address. IP address reset to 0");
                                                   break;
           case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:   dmesg ("[network] [STA] WiFi Protected Setup (WPS): succeeded in enrollee mode.");
                                                   break;
@@ -476,7 +464,7 @@
           dmesg ("[network] [AP] failed to initialize access point mode."); 
         }
 
-        arp_a (); // call arp_a immediatelly after network setup to obtain pointer to ARP table
+        arp (); // call arp immediatelly after network setup to obtain pointer to ARP table
     } 
 
     // set WiFi mode
@@ -505,28 +493,13 @@
     }      
   }
 
+  [[deprecated("Replaced by void startWiFi ();")]]
+  void startNetworkAndInitializeItAtFirstCall () { startWiFi (); }
+
   wifi_mode_t getWiFiMode () {
     wifi_mode_t retVal = WIFI_OFF;
     if (esp_wifi_get_mode (&retVal) != ESP_OK) {;} // dmesg ("[network] couldn't get WiFi mode.");
     return retVal;
-  }
-  
-  String inet_ntos (ip_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 
-                                      // inet_ntoa returns pointer to static string which may
-                                      // be a problem in multi-threaded environment
-    return String (*(((byte *) &addr) + 0)) + "." + 
-           String (*(((byte *) &addr) + 1)) + "." + 
-           String (*(((byte *) &addr) + 2)) + "." + 
-           String (*(((byte *) &addr) + 3));
-  }
-
-  String inet_ntos (ip4_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr) 
-                                       // inet_ntoa returns pointer to static string which may
-                                       // be a problem in multi-threaded environment
-    return String (*(((byte *) &addr) + 0)) + "." + 
-           String (*(((byte *) &addr) + 1)) + "." + 
-           String (*(((byte *) &addr) + 2)) + "." + 
-           String (*(((byte *) &addr) + 3));
   }
   
   // ----- arp reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c -----
@@ -557,7 +530,7 @@
   };
 
   // returns output of arp (telnet) command
-  String arp_a () {
+  String arp () {
     // get pointer to arp table the first time function is called
     struct etharp_entry *arpTablePointer = NULL;
     if (!arpTablePointer) {
@@ -589,7 +562,7 @@
               struct netif *arp_table_netif = p->netif; // make a copy of a pointer to netif in case arp_table entry is just beeing deleted
               if (arp_table_netif && arp_table_netif->num == netif->num) { // if ARP entry is for the same as netif we are displaying
                 s += "\r\n  " + pad (inet_ntos (*(ip_addr_t *) &p->ipaddr), 22) +
-                     MacAddressAsString ((byte *) &p->ethaddr, 6) +  
+                     mac_ntos ((byte *) &p->ethaddr, 6) +  
                      (p->state > ETHARP_STATE_STABLE_REREQUESTING_2 ? "     static" : "     dynamic");
               } 
             }
@@ -601,5 +574,331 @@
     return s + "\r\n";
   }  
 
+  //------ IW -----
+
+  #include "TcpServer.hpp" // TcpConnection needed for displaying intermediate results over telnet sessions
+
+  static SemaphoreHandle_t __WiFiSnifferSemaphore__ = xSemaphoreCreateMutex (); // to prevent two threads to start sniffing simultaneously
+  static String __macToSniffRssiFor__;  // input to __sniffWiFiForRssi__ function
+  static int __rssiSniffedForMac__;     // output of __sniffWiFiForRssi__ function
+
+  typedef struct {
+    unsigned frame_ctrl:16;
+    unsigned duration_id:16;
+    uint8_t addr1 [6]; // receiver address 
+    uint8_t addr2 [6]; // sender address 
+    uint8_t addr3 [6]; // filtering address 
+    unsigned sequence_ctrl:16;
+    uint8_t addr4 [6]; // optional 
+  } wifi_ieee80211_mac_hdr_t;
+  
+  typedef struct {
+    wifi_ieee80211_mac_hdr_t hdr;
+    uint8_t payload [0]; // network data ended with 4 bytes csum (CRC32)
+  } wifi_ieee80211_packet_t;      
+
+  int __sniffWiFiForRssi__ (String stationMac) { // sniff WiFi trafic for station RSSI - since we are sniffing connected stations we can stay on AP WiFi channel
+                                                 // sniffing WiFi is not well documented, there are some working examples on internet however:
+                                                 // https://www.hackster.io/p99will/esp32-wifi-mac-scanner-sniffer-promiscuous-4c12f4
+                                                 // https://esp32.com/viewtopic.php?t=1314
+                                                 // https://blog.podkalicki.com/esp32-wifi-sniffer/
+    int rssi;                                          
+    xSemaphoreTake (__WiFiSnifferSemaphore__, portMAX_DELAY);
+      __macToSniffRssiFor__ = stationMac;
+      __rssiSniffedForMac__ = 0;
+      esp_wifi_set_promiscuous (true);
+      const wifi_promiscuous_filter_t filter = {.filter_mask = WIFI_PROMIS_FILTER_MASK_MGMT | WIFI_PROMIS_FILTER_MASK_DATA};      
+      esp_wifi_set_promiscuous_filter (&filter);
+      // esp_wifi_set_promiscuous_rx_cb (&__WiFiSniffer__);
+      esp_wifi_set_promiscuous_rx_cb ([] (void* buf, wifi_promiscuous_pkt_type_t type) {
+                                                                                          const wifi_promiscuous_pkt_t *ppkt = (wifi_promiscuous_pkt_t *) buf;
+                                                                                          const wifi_ieee80211_packet_t *ipkt = (wifi_ieee80211_packet_t *) ppkt->payload;
+                                                                                          const wifi_ieee80211_mac_hdr_t *hdr = &ipkt->hdr;
+                                                                                          // TO DO: I'm not 100% sure that this works in all cases since source mac address may not be
+                                                                                          //        always in the same place for all types and subtypes of frame
+                                                                                          if (__macToSniffRssiFor__ == mac_ntos ((byte *) hdr->addr2, 6)) __rssiSniffedForMac__ = ppkt->rx_ctrl.rssi;
+                                                                                          return;
+                                                                                        });
+        unsigned long startTime = millis ();
+        while (__rssiSniffedForMac__ == 0 && millis () - startTime < 5000) delay (1); // sniff max 5 second, it should be enough
+        // Serial.printf ("RSSI obtained in %lu milliseconds\n", millis () - startTime);
+        rssi = __rssiSniffedForMac__;
+      esp_wifi_set_promiscuous (false);
+
+    xSemaphoreGive (__WiFiSnifferSemaphore__);
+    return rssi;
+  }
+
+  String iw (TcpConnection *connection = NULL) { // if called from telnetServer connection != NULL so that iw can dispely intermediate results over TCP connection
+    String s = "";
+    struct netif *netif;
+    for (netif = netif_list; netif; netif = netif->next) {
+      if (netif_is_up (netif)) {
+        if (s != "") s += "\r\n";
+        // display the following information for STA and AP interface (similar to ifconfig)
+        s += String (netif->name [0]) + String (netif->name [1]) + "      hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" +
+             "        hwaddr: " + mac_ntos (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
+             "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n";
+
+                // display the following information for STA interface
+                if (inet_ntos (netif->ip_addr) == WiFi.localIP ().toString ()) {
+                  if (WiFi.status () == WL_CONNECTED) {
+                    int rssi = WiFi.RSSI ();
+                    String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+                    s += String ("           STAtion is connected to router:\r\n\r\n") + 
+                                 "              inet addr: " + WiFi.gatewayIP ().toString () + "\r\n" +
+                                 "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
+                  } else {
+                    s += "           STAtion is disconnected from router\r\n";
+                  }
+                // display the following information for local loopback interface
+                } else if (inet_ntos (netif->ip_addr) == "127.0.0.1") {
+                    s += "           local loopback\r\n";
+                // display the following information for AP interface
+                } else {
+                  wifi_sta_list_t wifi_sta_list = {};
+                  tcpip_adapter_sta_list_t adapter_sta_list = {};
+                  esp_wifi_ap_get_sta_list (&wifi_sta_list);
+                  tcpip_adapter_get_sta_list (&wifi_sta_list, &adapter_sta_list);
+                  if (adapter_sta_list.num) {
+                    s += "           stations connected to Access Point (" + String (adapter_sta_list.num) + "):\r\n";
+                    for (int i = 0; i < adapter_sta_list.num; i++) {
+                      tcpip_adapter_sta_info_t station = adapter_sta_list.sta [i];
+                      s += String ("\r\n") + 
+                                   "              hwaddr: " + mac_ntos ((byte *) &station.mac, 6) + "\r\n" + 
+                                   "              inet addr: " + inet_ntos (station.ip) + "\r\n";
+                                   if (connection) { connection->sendData (s); s = ""; } // display intermediate result if called from telnetServer
+                                   int rssi = __sniffWiFiForRssi__ (mac_ntos ((byte *) &station.mac, 6));
+                                   String rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi >= -90) */ rssiDescription = "unusable";
+                                   s = "              RSSI: " + String (rssi) + " dBm (" + rssiDescription + ")\r\n";
+                    }
+                  } else {
+                    s += "           there are no stations connected to Access Point\r\n";
+                  }
+                }
+
+      }
+    }
+    if (connection) { connection->sendData (s); s = ""; } // display intermediate result if called from telnetServer
+    return s;
+  }
+
+  //------ IFCONFIG -----
+
+  String ifconfig () {
+    String s = "";
+    struct netif *netif;
+    for (netif = netif_list; netif; netif = netif->next) {
+      if (netif_is_up (netif)) {
+        if (s != "") s += "\r\n";
+        s += String (netif->name [0]) + String (netif->name [1]) + "      hostname: " + (netif->hostname ? String (netif->hostname) : "") + "\r\n" + 
+                 "        hwaddr: " + mac_ntos (netif->hwaddr, netif->hwaddr_len) + "\r\n" +
+                 "        inet addr: " + inet_ntos (netif->ip_addr) + "\r\n" + 
+                 "        mtu: " + String (netif->mtu) + "\r\n";
+      }
+    }
+    return s;    
+  }
+
+  //------ PING: https://github.com/pbecchi/ESP32_ping -----
+
+  #include "TcpServer.hpp" // TcpConnection needed for displaying intermediate results over telnet sessions
+
+  #include "lwip/inet_chksum.h"
+  #include "lwip/ip.h"
+  #include "lwip/ip4.h"
+  #include "lwip/err.h"
+  #include "lwip/icmp.h"
+  #include "lwip/sockets.h"
+  #include "lwip/sys.h"
+  #include "lwip/netdb.h"
+  #include "lwip/dns.h"
+
+  #define PING_DEFAULT_COUNT     4
+  #define PING_DEFAULT_INTERVAL  1
+  #define PING_DEFAULT_SIZE     32
+  #define PING_DEFAULT_TIMEOUT   1
+
+  struct __pingDataStructure__ {
+    uint16_t ID;
+    uint16_t pingSeqNum;
+    uint8_t stopped = 0;
+    uint32_t transmitted = 0;
+    uint32_t received = 0;
+    float minTime = 0;
+    float maxTime = 0;
+    float meanTime = 0;
+    float lastMeanTime = 0;
+    float varTime = 0;
+  };
+
+  static void __pingPrepareEcho__ (__pingDataStructure__ *pds, struct icmp_echo_hdr *iecho, uint16_t len) {
+    size_t i;
+    size_t data_len = len - sizeof (struct icmp_echo_hdr);
+  
+    ICMPH_TYPE_SET (iecho, ICMP_ECHO);
+    ICMPH_CODE_SET (iecho, 0);
+    iecho->chksum = 0;
+    iecho->id = pds->ID;
+    iecho->seqno = htons (++pds->pingSeqNum);
+  
+    /* fill the additional data buffer with some data */
+    for (i = 0; i < data_len; i++) ((char*) iecho)[sizeof (struct icmp_echo_hdr) + i] = (char) i;
+  
+    iecho->chksum = inet_chksum (iecho, len);
+  }
+
+  static err_t __pingSend__ (__pingDataStructure__ *pds, int s, ip4_addr_t *addr, int pingSize) {
+    struct icmp_echo_hdr *iecho;
+    struct sockaddr_in to;
+    size_t ping_size = sizeof (struct icmp_echo_hdr) + pingSize;
+    int err;
+  
+    if (!(iecho = (struct icmp_echo_hdr *) mem_malloc ((mem_size_t) ping_size))) return ERR_MEM;
+  
+    __pingPrepareEcho__ (pds, iecho, (uint16_t) ping_size);
+  
+    to.sin_len = sizeof (to);
+    to.sin_family = AF_INET;
+    to.sin_addr = *(in_addr *) addr; // inet_addr_from_ipaddr (&to.sin_addr, addr);
+    
+    if ((err = sendto (s, iecho, ping_size, 0, (struct sockaddr*) &to, sizeof (to)))) pds->transmitted ++;
+  
+    return (err ? ERR_OK : ERR_VAL);
+  }
+
+  static bool __pingRecv__ (__pingDataStructure__ *pds, TcpConnection *telnetConnection, int s) {
+    char buf [64];
+    int fromlen, len;
+    struct sockaddr_in from;
+    struct ip_hdr *iphdr;
+    struct icmp_echo_hdr *iecho = NULL;
+    char ipa[16];
+    struct timeval begin;
+    struct timeval end;
+    uint64_t microsBegin;
+    uint64_t microsEnd;
+    float elapsed;
+
+    char cstr [255];    
+  
+    // Register begin time
+    gettimeofday (&begin, NULL);
+  
+    // Send
+    while ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr *) &from, (socklen_t *) &fromlen)) > 0) {
+      if (len >= (int)(sizeof(struct ip_hdr) + sizeof(struct icmp_echo_hdr))) {
+        // Register end time
+        gettimeofday (&end, NULL);
+  
+        /// Get from IP address
+        ip4_addr_t fromaddr;
+        fromaddr = *(ip4_addr_t *) &from.sin_addr; // inet_addr_to_ipaddr (&fromaddr, &from.sin_addr);
+        strcpy (ipa, inet_ntos (fromaddr).c_str ()); 
+  
+        // Get echo
+        iphdr = (struct ip_hdr *) buf;
+        iecho = (struct icmp_echo_hdr *) (buf + (IPH_HL(iphdr) * 4));
+  
+        // Print ....
+        if ((iecho->id == pds->ID) && (iecho->seqno == htons (pds->pingSeqNum))) {
+          pds->received ++;
+  
+          // Get elapsed time in milliseconds
+          microsBegin = begin.tv_sec * 1000000;
+          microsBegin += begin.tv_usec;
+  
+          microsEnd = end.tv_sec * 1000000;
+          microsEnd += end.tv_usec;
+  
+          elapsed = (float) (microsEnd - microsBegin) / (float) 1000.0;
+  
+          // Update statistics
+          // Mean and variance are computed in an incremental way
+          if (elapsed < pds->minTime) pds->minTime = elapsed;
+          if (elapsed > pds->maxTime) pds->maxTime = elapsed;
+  
+          pds->lastMeanTime = pds->meanTime;
+          pds->meanTime = (((pds->received - 1) * pds->meanTime) + elapsed) / pds->received;
+  
+          if (pds->received > 1) pds->varTime = pds->varTime + ((elapsed - pds->lastMeanTime) * (elapsed - pds->meanTime));
+  
+          // Print ...
+          sprintf (cstr, "%d bytes from %s: icmp_seq = %d time = %.3f ms\r\n", len, ipa, ntohs (iecho->seqno), elapsed);
+          if (telnetConnection && !telnetConnection->sendData (cstr)) return false;
+          
+          return true;
+        }
+        else {
+          // TODO: 
+        }
+      }
+    }
+  
+    if (len < 0) {
+      sprintf (cstr, "Request timeout for icmp_seq %d\r\n", pds->pingSeqNum);
+      if (telnetConnection && !telnetConnection->sendData (cstr)) return false;
+    }
+    return false;
+  }  
+
+  uint32_t ping (String targetName, int pingCount = PING_DEFAULT_COUNT, int pingInterval = PING_DEFAULT_INTERVAL, int pingSize = PING_DEFAULT_SIZE, int timeOut = PING_DEFAULT_TIMEOUT, TcpConnection *telnetConnection = NULL) {
+    // struct sockaddr_in address;
+    ip4_addr_t pingTarget;
+    int s;
+    char cstr [256];
+
+    // get target IP
+    IPAddress targetIP;
+    if (!WiFi.hostByName (targetName.c_str (), targetIP)) {
+      if (telnetConnection) telnetConnection->sendData ("Could not find host " + targetName); 
+      return 0;
+    }
+    
+    // Create socket
+    if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
+      if (telnetConnection) telnetConnection->sendData ("Error creating socket."); 
+      return 0;
+    }
+    
+    pingTarget.addr = inet_addr (targetIP.toString ().c_str ()); 
+    
+    // Setup socket
+    struct timeval tOut;
+    
+    // Timeout
+    tOut.tv_sec = timeOut;
+    tOut.tv_usec = 0;
+    
+    if (setsockopt (s, SOL_SOCKET, SO_RCVTIMEO, &tOut, sizeof (tOut)) < 0) {
+      closesocket (s);
+      if (telnetConnection) telnetConnection->sendData ((char *) "Error setting socket options."); 
+      return 0;
+    }
+    
+    __pingDataStructure__ pds = {};
+    pds.ID = random (0, 0xFFFF); // each consequently running ping command should have its own unique ID otherwise we won't be able to distinguish packets 
+    pds.minTime = 1.E+9; // FLT_MAX;
+    
+    // Begin ping ...
+    
+    sprintf (cstr, "ping %s: %d data bytes\r\n",  targetIP.toString ().c_str (), pingSize);
+    if (telnetConnection && !telnetConnection->sendData (cstr)) return 0;
+    
+    while ((pds.pingSeqNum < pingCount) && (!pds.stopped)) {
+      if (__pingSend__ (&pds, s, &pingTarget, pingSize) == ERR_OK) if (!__pingRecv__ (&pds, telnetConnection, s)) return pds.received;
+      delay (pingInterval * 1000L);
+    }
+    
+    closesocket (s);
+    
+    sprintf (cstr, "\r\n%u packets transmitted, %u packets received, %.1f%% packet loss\r\n", pds.transmitted, pds.received, ((((float) pds.transmitted - (float) pds.received) / (float) pds.transmitted) * 100.0));
+    if (pds.received) { // ok
+      sprintf (cstr + strlen (cstr), "round-trip min / avg / max / stddev = %.3f / %.3f / %.3f / %.3f ms\r\n", pds.minTime, pds.meanTime, pds.maxTime, sqrt (pds.varTime / pds.received));
+    } // else errd
+    if (telnetConnection) telnetConnection->sendData (cstr);
+    
+    return pds.received;
+  }
 
 #endif

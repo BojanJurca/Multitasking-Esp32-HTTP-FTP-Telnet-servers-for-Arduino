@@ -149,6 +149,29 @@
     return fileContent;
   }
 
+  // reads entire file into buffer allocted by malloc, if successful returns pointer to buffer - it has to be free-d after not needed any more
+  byte *readFile (String fileName, size_t *buffSize) {
+    byte *retVal = NULL;
+
+    File f = FFat.open (fileName, FILE_READ);
+    if (f) {
+      if (!f.isDirectory ()) {
+        *buffSize = f.size ();
+        retVal = (byte *) malloc (*buffSize);
+        if (retVal) {
+          byte *p = (byte *) retVal;
+          int i = 0;
+          while (f.available () && i++ < *buffSize) *(p++) = (byte) f.read ();
+          *buffSize = i;
+        } else dmesg ("[file system] malloc failed in " + String (__func__)); 
+        f.close ();
+      }
+    }
+
+    return retVal;      
+  }
+
+
   // writes String into file file, returns success
   bool writeFile (String& fileContent, String fileName) {
     File f = FFat.open (fileName, FILE_WRITE);

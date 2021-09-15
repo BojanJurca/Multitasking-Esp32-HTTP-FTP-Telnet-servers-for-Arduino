@@ -17,39 +17,18 @@
       - not-threaded TcpServer (with time-out functionality while waiting for a connection, firewall functionality),
       - TcpClient (with time-out functionality while handling the connection).
 
-    History:
-            - first release,
-              October 31, 2018, Bojan Jurca
-            - added user-defined connectionHandler parameter, added TcpConnection::getTimeOut (),
-              November 22, 2018, Bojan Jurca
-            - added SPIFFSsemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876),
-              April 13, 2019, Bojan Jurca
-            - added available () member function to TcpConnection object
-              May 12, 2019, Bojan Jurca
-            - added sendData (char []) and sendData (String) to TcpConnection object
-              September 5, 2019, Bojan Jurca
-            - bug fixes (stopping the server) and minor improvements,
-              minor structural changes
-              September 14, 2019, Bojan Jurca
-            - increased BACKLOG from 5 to 16,
-              inet_ntoa replaced with thread-safe __inet_ntos__
-              December 27, 2019, Bojan Jurca
-            - added TcpDmesg to log/display system messages/errors
-              added support for SSL extensions, SSL extensions themselves included yet
-              February 26, 2020, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca
-            - port from SPIFFS to FAT file system, adjustments for Arduino 1.8.13
-            - added isOpen and isClosed functions to TcpConnection
-              Nov 14, 2020, Bojan Jurca
-            - code review in order to make it more comprehensive
-              May, 11, 2021, Bojan Jurca
+    September, 13, 2021, Bojan Jurca
+
 */
 
 
 #ifndef __TCP_SERVER__
   #define __TCP_SERVER__
-  
+
+  #include <WiFi.h>
+  #include <lwip/sockets.h>
+  #include "common_functions.h" // inet_ntos
+
   
   /*
 
@@ -73,19 +52,6 @@
     #define dmesg TcpServerDmesg
   #endif
   
-  
-  // ----- includes, definitions and supporting functions -----
-  
-  #include <WiFi.h>
-  #include <lwip/sockets.h>
-
-  // thread-safe variant of inet_ntoa which returns pointer to static string - this could be a problem in multi-threaded environment
-  String __inet_ntos__ (ip_addr_t addr) { // equivalent of inet_ntoa (struct in_addr addr)
-    return String (*(((byte *) &addr) + 0)) + "." + String (*(((byte *) &addr) + 1)) + "." + String (*(((byte *) &addr) + 2)) + "." + String (*(((byte *) &addr) + 3));
-  }
-  String __inet_ntos__ (in_addr addr) { // equivalent of inet_ntoa (struct in_addr addr)
-    return String (*(((byte *) &addr) + 0)) + "." + String (*(((byte *) &addr) + 1)) + "." + String (*(((byte *) &addr) + 2)) + "." + String (*(((byte *) &addr) + 3));
-  }
 
   // control TcpServer critical sections
   portMUX_TYPE csTcpConnectionInternalStructure = portMUX_INITIALIZER_UNLOCKED;
@@ -202,7 +168,7 @@
         struct sockaddr_in thisAddress = {};
         socklen_t len = sizeof (thisAddress);
         if (getsockname (__socket__, (struct sockaddr *) &thisAddress, &len) == -1) return "";
-        else                                                                        return __inet_ntos__ (thisAddress.sin_addr);
+        else                                                                        return inet_ntos (thisAddress.sin_addr);
         // port number could also be obtained if needed: ntohs (thisAddress.sin_port);
       }
 
@@ -312,7 +278,7 @@
       TIME_OUT_TYPE getTimeOut () { return __timeOutMillis__; } // returns time-out milliseconds
 
     private:
-  
+    
       void (* __connectionHandlerCallback__) (TcpConnection *, void *) = NULL;  // local copy of constructor parameters
       void *__connectionHandlerCallbackParamater__ = NULL;
       int __socket__ = -1;
@@ -462,6 +428,7 @@
       friend class telnetServer;
       friend class ftpServer;
       friend class httpServer;
+      friend class httpsServer;
   
       void (* __connectionHandlerCallback__) (TcpConnection *, void *) = NULL; // local copy of constructor parameters
       void *__connectionHandlerCallbackParameter__ = NULL;
@@ -541,16 +508,16 @@
             socklen_t connectingAddressSize = sizeof (connectingAddress);
             connectionSocket = accept (listenerSocket, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
             if (connectionSocket != -1) { // non-blocking socket keeps returning -1 until new connection arrives
-              if (!ths->__callFirewallCallback__ (__inet_ntos__ (connectingAddress.sin_addr))) {
+              if (!ths->__callFirewallCallback__ (inet_ntos (connectingAddress.sin_addr))) {
                 close (connectionSocket);
-                dmesg ("[TcpServer] firewall rejected connection from " + __inet_ntos__ (connectingAddress.sin_addr));
+                dmesg ("[TcpServer] firewall rejected connection from " + inet_ntos (connectingAddress.sin_addr));
                 continue;
               }
               if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
                 close (connectionSocket);
                 continue;
               }
-              ths->__newConnection__ (connectionSocket, (char *) __inet_ntos__ (connectingAddress.sin_addr).c_str ());
+              ths->__newConnection__ (connectionSocket, inet_ntos (connectingAddress.sin_addr));
               if (!ths->__threadedMode__ ()) goto terminateListener; // in non-threaded mode server only accepts one connection
             } // new connection
           } // handle incomming connections
@@ -589,7 +556,7 @@
         IPAddress serverIP;
         if (!WiFi.hostByName (serverName.c_str (), serverIP)) { 
           // DEBUG: Serial.printf ("[Thread: %lu][Core: %i][Socket: %i] hostByName error in %s\n", (unsigned long) xTaskGetCurrentTaskHandle (), xPortGetCoreID (), connectionSocket, __func__);
-          dmesg ("[TcpClient] hostByName could not resolve '" + serverName + "'.");
+          dmesg ("[TcpClient] hostByName could not find host " + serverName);
           return;
         } 
                               

@@ -52,8 +52,10 @@
   #define USER_PASSWORD_MAX_LENGTH 64 // the number of characters of longest user name or password (not counting closing 0)
   
   #if USER_MANAGEMENT == NO_USER_MANAGEMENT           // ----- NO_USER_MANAGEMENT -----
-    
-    inline void initializeUsersAtFirstCall () {;}        // don't need to initialize users in this mode, we are not going to use user name and password at all
+
+    void initializeUsers () {;}                       // don't need to initialize users in this mode, we are not going to use user name and password at all
+    [[deprecated("Replaced by void initializeUsers ();")]]
+    void initializeUsersAtFirstCall () {;} 
     bool checkUserNameAndPassword (String& userName, String& password) { return true; } // everyone can logg in
     String getUserHomeDirectory (String userName) {
                                                     if (userName == "webserver")    return "/var/www/html/";
@@ -69,7 +71,9 @@
     #endif
 
 
-    inline void initializeUsersAtFirstCall () {;}        // don't need to initialize users in this mode
+    void initializeUsers () {;}                       // don't need to initialize users in this mode, we are not going to use user name and password at all
+    [[deprecated("Replaced by void initializeUsers ();")]]
+    void initializeUsersAtFirstCall () {;} 
     bool checkUserNameAndPassword (String userName, String password) { return (userName == "root" && password == ROOT_PASSWORD); }
     String getUserHomeDirectory (String userName) { 
                                                     if (userName == "webserver")    return "/var/www/html/";
@@ -100,7 +104,7 @@
       return String (shaCharResult);  
     }
   
-    void initializeUsersAtFirstCall () {                                     // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+    void initializeUsers () {                                                // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
                                                                              // only 3 fields are used: user name, hashed password and home directory
       if (!__fileSystemMounted__) {
         Serial.printf ("[%10lu] [user management] file system is not mounted, can't read or write user configuration files.\n", millis ()); 
@@ -141,7 +145,10 @@
         else                                        Serial.printf ("error.\n");        
       }
     }
-    
+
+    [[deprecated("Replaced by void initializeUsers ();")]]
+    void initializeUsersAtFirstCall () { initializeUsers (); } 
+
     bool checkUserNameAndPassword (String& userName, String& password) { // scan through /etc/shadow file for (user name, pasword) pair and return true if found
       // /etc/shadow file: https://www.cyberciti.biz/faq/understanding-etcshadow-file/
       return (between (between ("\n" + readTextFile ("/etc/shadow") + "\n", "\n" + userName + ":", "\n"), "$5$", ":") == __sha256__ ((char *) password.c_str ()));
