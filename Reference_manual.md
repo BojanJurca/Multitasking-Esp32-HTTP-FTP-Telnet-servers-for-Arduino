@@ -1,3 +1,89 @@
+# Programmer's reference manual for network.h
+
+
+## startWiFi () function
+
+startWiFi reads WiFi configuration parameters from files: /network/interfaces, /etc/wpa_supplicant/wpa_supplicant.conf, /etc/dhcpcd.conf and /etc/hostapd/hostapd.conf and starts WiFi accordingly. These files are pretty much the same as it is normal in Linux and can be edited by vi telnet command. If the file system is not mounted then it just take network configuration parameters from #definitions: DEFAULT_STA_SSID, DEFAULT_STA_PASSWORD, DEFAULT_AP_SSID (#define it as "" if you don't want AP), DEFAULT_AP_PASSWORD (at least 8 charCTERS), HOSTNAME, DEFAULT_STA_IP, DEFAULT_STA_SUBNET_MASK, DEFAULT_STA_GATEWAY, DEFAULT_STA_DNS_1, DEFAULT_STA_DNS_2, DEFAULT_AP_IP, DEFAULT_AP_SUBNET_MASK. When being called the first time after the file system is formatted it creates configuration files with default #definitions.
+
+**Declaration**
+
+```C++
+void startWiFi ();
+```
+ 
+## ifconfig () function
+
+**Declaration**
+
+```C++
+String ifconfig ();
+```
+
+**Return value**
+
+ifconfig returns basic network configuration information, the result is the same as with ifconfig telnet command.
+
+
+## ping (String, int, int, int, int, TcpConnection) function
+
+ping function pings target with ping packets and waits for the replies. ping function is also called internally by the ping telnet command.
+
+**Declaration**
+
+```C++
+uint32_t ping (String targetName, int pingCount = 1, int pingInterval = 1, int pingSize = 32, int timeOut = 1, TcpConnection *telnetConnection = NULL);
+```
+
+**Parameters**
+
+  - String targetName is target device name or IP number to be pinged.
+
+  - int pingCount = 1 is the number of ping packets to be sent.
+
+  - int pingInterval = 1 is the number of seconds between ping packets.  
+
+  - int pingSize = 32 is the number of bytes in the ping packet.
+
+  - int timeOut = 1 is the number of seconds ping is supposed to wait for a reply from the target.
+
+  - TcpConnection *telnetConnection = NULL is only used by the telnet server to let ping display intermediate results. It should be left NULL otherwise.
+
+**Return value**
+
+ping returns the number of packets received from target.
+
+
+## arp () function
+
+**Declaration**
+
+```C++
+String arp ();
+```
+
+**Return value**
+
+arp returns the current content of ARP table, the result is the same as with arp telnet command.
+
+
+## iw (TcpConnection) function
+
+**Declaration**
+
+```C++
+String iw (TcpConnection *connection = NULL)
+```
+
+**Parameter**
+
+   - TcpConnection *connection = NULL is only used by the telnet server to display intermediate results. It should be left NULL otherwise.
+
+**Return value**
+
+iw returns some WiFi information, the result is the same as with iw telnet command.
+
+
+
 # Programmer's reference manual for webServer.hpp
 
 
@@ -10,20 +96,19 @@
 httpServer (String (*httpRequestHandler) (String&, httpServer::wwwSessionParameters *), void (*wsRequestHandler) (String&, WebSocket *), size_t, String, int, bool (*firewallCallback) (String))
 ```
 
-
 **Parameters**
 
-Â  - String (*httpRequestHandler) (String& httpRequest, httpServer::wwwSessionParameters *wsp) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use httpRequestHandler. Please see examples to learn how to use the httpRequestHandler function and wwwSessionParameters class. Â 
+  - String (*httpRequestHandler) (String& httpRequest, httpServer::wwwSessionParameters *wsp) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use httpRequestHandler. Please see examples to learn how to use the httpRequestHandler function and wwwSessionParameters class.  
 
-Â  - void (*wsRequestHandler) (String& wsRequest, WebSocket *webSocket) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use wsRequestHandler. Please see examples to learn how to use wsRequestHandler function and WebSocket class.
+  - void (*wsRequestHandler) (String& wsRequest, WebSocket *webSocket) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use wsRequestHandler. Please see examples to learn how to use wsRequestHandler function and WebSocket class.
 
-Â  - size_t stackSize is the stack size that each HTTP session is going to use. 8 KB will usually do but if your httpRequestHandler or wsRequestHandler need more, increase this value until the server is stable.
+  - size_t stackSize is the stack size that each HTTP session is going to use. 8 KB will usually do but if your httpRequestHandler or wsRequestHandler need more, increase this value until the server is stable.
 
-Â  - String serverIP is the IP address which httpServer will be using. Pass "0.0.0.0" for all IP addresses available to httpServer.
+  - String serverIP is the IP address which httpServer will be using. Pass "0.0.0.0" for all IP addresses available to httpServer.
 
-Â  - int serverPort is the port number httpServer will be using. The default HTTP port is 80.
+  - int serverPort is the port number httpServer will be using. The default HTTP port is 80.
 
-Â  - bool (*firewallCallback) (String connectingIP) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use firewallCallback. Please see examples to learn how to use firewallCallback function.
+  - bool (*firewallCallback) (String connectingIP) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use firewallCallback. Please see examples to learn how to use firewallCallback function.
 
 
 **Testing success**
@@ -140,11 +225,11 @@ bool isOpen ();
 
 ```C++
 enum WEBSOCKET_DATA_TYPE {
-Â  NOT_AVAILABLE = 0, Â  Â  Â  Â  Â // no data is available to be read 
-Â  STRING = 1, Â  Â  Â  Â  Â  Â  Â  Â  // text data is available to be read
-Â  BINARY = 2, Â  Â  Â  Â  Â  Â  Â  Â  // binary data is available to be read
-Â  CLOSE = 8, Â  Â  Â  Â 
-Â  ERROR = 3
+  NOT_AVAILABLE = 0,          // no data is available to be read 
+  STRING = 1,                 // text data is available to be read
+  BINARY = 2,                 // binary data is available to be read
+  CLOSE = 8,        
+  ERROR = 3
 };
 ```
 
@@ -209,9 +294,9 @@ size_t readBinary (byte *buffer, size_t bufferSize);
 
 **Parameters**
 
-Â  - byte *buffer is a pointer to a buffer that will receive binary data.
+  - byte *buffer is a pointer to a buffer that will receive binary data.
 
-Â  - size_t bufferSize it the size of the buffer.
+  - size_t bufferSize it the size of the buffer.
 
 
 **Return value**
@@ -232,7 +317,7 @@ bool sendString (String text);
 
 **Parameter**
 
-Â  - String text is String data to be sent.
+  - String text is String data to be sent.
 
 
 **Return value**
@@ -254,9 +339,9 @@ bool sendBinary (byte *buffer, size_t bufferSize);
 
 **Parameters**
 
-Â  - byte *buffer is a pointer to a buffer containing binary data.
+  - byte *buffer is a pointer to a buffer containing binary data.
 
-Â  - size_t bufferSize it the number of bytes binary data in the buffer.
+  - size_t bufferSize it the number of bytes binary data in the buffer.
 
 
 **Return value**
@@ -281,20 +366,20 @@ String webClient (String serverName, int serverPort, TIME_OUT_TYPE timeOutMillis
 
 **Parameter**
 
-Â  - String serverName is the name of (remote) web server.
+  - String serverName is the name of (remote) web server.
 
-Â  - int serverPort is the port number of (remote) web server.
+  - int serverPort is the port number of (remote) web server.
 
-Â  - TIME_OUT_TYPE timeOutMillis is the number of milliseconds webClient is going to wait for a reply before returning with error. Pass INFINITE if you donâ€™t intend to use time-out detection.
+  - TIME_OUT_TYPE timeOutMillis is the number of milliseconds webClient is going to wait for a reply before returning with error. Pass INFINITE if you don’t intend to use time-out detection.
 
-Â  - String httpRequest is a HTTP request to be passed to a (remote) web server. webClient will add the necessary ending "\r\n\r\n" to httpRequest itself so you donâ€™t need to include it in your request.
+  - String httpRequest is a HTTP request to be passed to a (remote) web server. webClient will add the necessary ending "\r\n\r\n" to httpRequest itself so you don’t need to include it in your request.
 
 
 **Return value**
 
-Â  - HTTP reply (including HTTP header) if succeeded
+  - HTTP reply (including HTTP header) if succeeded
 
-Â  - "" in case of error. You can check dmesg for error description.
+  - "" in case of error. You can check dmesg for error description.
 
 
 **Example**
@@ -322,7 +407,7 @@ void dmesg (String message);
 
 **Parameter**
 
-Â  - String message is an ESP32 server message to be added to the message queue. Queued messages can be displayed using dmesg telnet command.
+  - String message is an ESP32 server message to be added to the message queue. Queued messages can be displayed using dmesg telnet command.
 
 
 ## telnetServer class constructor
@@ -337,15 +422,15 @@ telnetServer (String (*telnetCommandHandler) (int argc, String argv [], telnetSe
 
 **Parameters**
 
-Â  - String (*telnetCommandHandler) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use telnetCommandHandler. Please see examples to learn how to use telnetCommandHandler function and telnetSessionParameters structure. Â 
+  - String (*telnetCommandHandler) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use telnetCommandHandler. Please see examples to learn how to use telnetCommandHandler function and telnetSessionParameters structure.  
 
-Â  - size_t stackSize is the stack size that each telnet session is going to use. 16 KB will usually do but if your telnetCommandHandler needs more increase this value until the server is stable. If you are not going to use stack consuming telnet commands like tree or vi stackSize can be much smaller. Â  
+  - size_t stackSize is the stack size that each telnet session is going to use. 16 KB will usually do but if your telnetCommandHandler needs more increase this value until the server is stable. If you are not going to use stack consuming telnet commands like tree or vi stackSize can be much smaller.   
 
-Â  - String serverIP is the IP address which telnetServer will be using. Pass "0.0.0.0" for all IP addresses available to telnetServer.
+  - String serverIP is the IP address which telnetServer will be using. Pass "0.0.0.0" for all IP addresses available to telnetServer.
 
-Â  - int serverPort is the port number telnetServer will be using. The default HTTP port is 23.
+  - int serverPort is the port number telnetServer will be using. The default HTTP port is 23.
 
-Â  - bool (*firewallCallback) (String connectingIP) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use firewallCallback. Please see examples to learn how to use firewallCallback function.
+  - bool (*firewallCallback) (String connectingIP) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use firewallCallback. Please see examples to learn how to use firewallCallback function.
 
 
 **Testing success**
@@ -381,16 +466,16 @@ All active telnet sessions will continue to run even after destructor returns, u
 **telnetSessionParameters**
 
 typedef struct {
-Â  String userName; Â  Â  Â  Â  Â  Â // the name of logged in user
-Â  String homeDir; Â  Â  Â  Â  Â  Â  // user's home directory determines the level of access rights
-Â  String workingDir; Â  Â  Â  Â  Â // user's current working directory
-Â  char *prompt; Â  Â  Â  Â  Â  Â  Â  // prompt character
-Â  TcpConnection *connection; Â // TcpConnection instance for lower level programming if needed
-Â  byte clientWindowCol1; Â  Â  Â // telnet client's window size
-Â  byte clientWindowCol2; Â  Â  Â // telnet client's window size
-Â  byte clientWindowRow1; Â  Â  Â // telnet client's window size
-Â  byte clientWindowRow2; Â  Â  Â // telnet client's window size
-Â  // feel free to add more
+  String userName;            // the name of logged in user
+  String homeDir;             // user's home directory determines the level of access rights
+  String workingDir;          // user's current working directory
+  char *prompt;               // prompt character
+  TcpConnection *connection;  // TcpConnection instance for lower level programming if needed
+  byte clientWindowCol1;      // telnet client's window size
+  byte clientWindowCol2;      // telnet client's window size
+  byte clientWindowRow1;      // telnet client's window size
+  byte clientWindowRow2;      // telnet client's window size
+  // feel free to add more
 } telnetSessionParameters;
 
 
@@ -409,11 +494,11 @@ ftpServer (String serverIP, int serverPort, bool (* firewallCallback) (String co
 
 **Parameters**
 
-Â  - String serverIP is the IP address which ftpServer will be using. Pass "0.0.0.0" for all IP addresses available to ftpServer.
+  - String serverIP is the IP address which ftpServer will be using. Pass "0.0.0.0" for all IP addresses available to ftpServer.
 
-Â  - int serverPort is the port number ftpServer will be using for control connection. The default FTP port is 21.
+  - int serverPort is the port number ftpServer will be using for control connection. The default FTP port is 21.
 
-Â  - bool (*firewallCallback) (String connectingIP) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use firewallCallback. Please see examples to learn how to use firewallCallback function.
+  - bool (*firewallCallback) (String connectingIP) is a pointer to the callback function provided by the calling program. Pass NULL if you are not going to use firewallCallback. Please see examples to learn how to use firewallCallback function.
 
 
 **Testing success**
@@ -451,8 +536,8 @@ All active FTP sessions will continue to run even after destructor returns, unti
 
 ```C++
 enum TIME_OUT_TYPE: unsigned long {
-Â  INFINITE = 0 Â // infinite time-out
-Â  Â  Â  Â  Â  Â  Â  Â  // everything else is time-out in milliseconds
+  INFINITE = 0  // infinite time-out
+                // everything else is time-out in milliseconds
 };
 ```
 
@@ -473,19 +558,19 @@ TcpServer (void (* connectionHandlerCallback) (TcpConnection *, void *), void *c
 
 **Parameters**
 
-Â  - void (* connectionHandlerCallback) (TcpConnection *, void *parameter) is a pointer to callback function provided by a calling program through which TCP connections would be managed.
+  - void (* connectionHandlerCallback) (TcpConnection *, void *parameter) is a pointer to callback function provided by a calling program through which TCP connections would be managed.
 
-Â  - void *connectionHandlerCallbackParamater is a reference to parameter that will be passed to connectionHandlerCallback function.
+  - void *connectionHandlerCallbackParamater is a reference to parameter that will be passed to connectionHandlerCallback function.
 
-Â  - size_t stackSize is the stack size that the newly created thread/task/process for each TCP connection is going to use.
+  - size_t stackSize is the stack size that the newly created thread/task/process for each TCP connection is going to use.
 
-Â  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before TCP connections get closed.
+  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before TCP connections get closed.
 
-Â  - String serverIP is the IP address server listener process is going to use, pass "0.0.0.0" for all available IP addresses.
+  - String serverIP is the IP address server listener process is going to use, pass "0.0.0.0" for all available IP addresses.
 
-Â  - int serverPort is the port number the listener process is going to use.
+  - int serverPort is the port number the listener process is going to use.
 
-Â  - bool (* firewallCallback) (String connectingIP) is a reference to a callback function that will be called when a new connection arrives. If firewallCallback returns false the connection will be rejected.
+  - bool (* firewallCallback) (String connectingIP) is a reference to a callback function that will be called when a new connection arrives. If firewallCallback returns false the connection will be rejected.
 
 
 **Testing success**
@@ -505,13 +590,13 @@ TcpServer (TIME_OUT_TYPE timeOutMillis, String serverIP, int serverPort, bool (*
 
 **Parameters**
 
-Â  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before TCP connections get closed.
+  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before TCP connections get closed.
 
-Â  - String serverIP is the IP address server listener process is going to use, pass "0.0.0.0" for all available IP addresses.
+  - String serverIP is the IP address server listener process is going to use, pass "0.0.0.0" for all available IP addresses.
 
-Â  - int serverPort is the port number the listener process is going to use.
+  - int serverPort is the port number the listener process is going to use.
 
-Â  - bool (* firewallCallback) (String connectingIP) is a reference to a callback function that will be called when a new connection arrives. If firewallCallback returns false the connection will be rejected.
+  - bool (* firewallCallback) (String connectingIP) is a reference to a callback function that will be called when a new connection arrives. If firewallCallback returns false the connection will be rejected.
 
 
 
@@ -571,17 +656,17 @@ TcpConnection (void (* connectionHandlerCallback) (TcpConnection *, void *), voi
 
 **Parameters**
 
-Â  - void (* connectionHandlerCallback) (TcpConnection *, void *parameter) is a pointer to callback function provided by a calling program through which a new TCP connection would be managed.
+  - void (* connectionHandlerCallback) (TcpConnection *, void *parameter) is a pointer to callback function provided by a calling program through which a new TCP connection would be managed.
 
-Â  - void *connectionHandlerCallbackParamater is a reference to parameter that will be passed to connectionHandlerCallback function.
+  - void *connectionHandlerCallbackParamater is a reference to parameter that will be passed to connectionHandlerCallback function.
 
-Â  - size_t stackSize is the stack size that the newly created thread/task/process is going to use to handle a new TCP connection.
+  - size_t stackSize is the stack size that the newly created thread/task/process is going to use to handle a new TCP connection.
 
-Â  - int socket is already open socket
+  - int socket is already open socket
 
-Â  - String otherSideIP is IP address of the other side of connection - it is just an information provided by calling program that can be used later
-Â 
-Â  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before a TCP connection gets closed.
+  - String otherSideIP is IP address of the other side of connection - it is just an information provided by calling program that can be used later
+ 
+  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before a TCP connection gets closed.
 
 
 **Testing success**
@@ -603,11 +688,11 @@ TcpConnection (int socket, String otherSideIP, TIME_OUT_TYPE timeOutMillis);
 
 **Parameters**
 
-Â  - int socket is already open socket
+  - int socket is already open socket
 
-Â  - String otherSideIP is IP address of the other side of connection - it is just an information provided by calling program that can be used later
-Â 
-Â  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before a TCP connection gets closed.
+  - String otherSideIP is IP address of the other side of connection - it is just an information provided by calling program that can be used later
+ 
+  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before a TCP connection gets closed.
 
 
 ## TcpConnection member functions and structures
@@ -651,9 +736,9 @@ Provides IP address the connecting program is using for TCP connection.
 
 ```C++
 enum AVAILABLE_TYPE {
-Â  NOT_AVAILABLE = 0, Â // no data is available to be read
-Â  AVAILABLE = 1, Â  Â  Â // data is available to be read
-Â  ERROR = 3 Â  Â  Â  Â  Â  // error in communication
+  NOT_AVAILABLE = 0,  // no data is available to be read
+  AVAILABLE = 1,      // data is available to be read
+  ERROR = 3           // error in communication
 };
 ```
 
@@ -710,11 +795,11 @@ TcpClient (String serverName, int serverPort, TIME_OUT_TYPE timeOutMillis)
 
 **Parameters**
 
-Â  - String serverName is a server name or IP address.
+  - String serverName is a server name or IP address.
 
-Â  - int serverPort is a server port number.
-Â 
-Â  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before a TCP connection gets closed.
+  - int serverPort is a server port number.
+ 
+  - TIME_OUT_TYPE timeOutMillis is the maximum inactive time before a TCP connection gets closed.
 
 
 **Testing success**
@@ -738,18 +823,18 @@ Provides a reference to established TcpConnection or NULL if failed.
 Before #include-ing "time_functions.h" the following definitions can be #defined:
 
 ```C++
-#define TIMEZONE Â  CET_TIMEZONE Â  // this is the default definition
+#define TIMEZONE   CET_TIMEZONE   // this is the default definition
 ```
 
-Â  - TIMEZONE tells ESP32 server how it should calculate local time from GMT. You can change the default setting to one of already supported time zones: KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
+  - TIMEZONE tells ESP32 server how it should calculate local time from GMT. You can change the default setting to one of already supported time zones: KAL_TIMEZONE, MSK_TIMEZONE, SAM_TIMEZONE, YEK_TIMEZONE, OMS_TIMEZONE, KRA_TIMEZONE, IRK_TIMEZONE, YAK_TIMEZONE, VLA_TIMEZONE, SRE_TIMEZONE, PET_TIMEZONE, JAPAN_TIMEZONE, CHINA_TIMEZONE, WET_TIMEZONE, ICELAND_TIMEZONE, CET_TIMEZONE, EET_TIMEZONE, FET_TIMEZONE, NEWFOUNDLAND_TIMEZONE, ATLANTIC_TIME_ZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, EASTERN_NO_DST_TIMEZONE, CENTRAL_TIMEZONE, CENTRAL_NO_DST_TIMEZONE, MOUNTAIN_TIMEZONE, MOUNTAIN_NO_DST_TIMEZONE, PACIFIC_TIMEZONE, ATLANTIC_NO_DST_TIMEZONE, EASTERN_TIMEZONE, CENTRAL_TIMEZONE, MOUNTAIN_TIMEZONE, PACIFIC_TIMEZONE, ALASKA_TIMEZNE, HAWAII_ALEUTIAN_TIMEZONE, HAWAII_ALEUTIAN_NO_DST_TIMEZONE, AMERICAN_SAMOA_TIMEZONE, BAKER_HOWLAND_ISLANDS_TIMEZONE, WAKE_ISLAND_TIMEZONE, CHAMORRO_TIMEZONE.
 
 ```C++
-#define DEFAULT_NTP_SERVER_1 Â  "1.si.pool.ntp.org" Â  // this is the default definition 
-#define DEFAULT_NTP_SERVER_2 Â  "2.si.pool.ntp.org" Â  // this is the default definition
-#define DEFAULT_NTP_SERVER_3 Â  "3.si.pool.ntp.org" Â  // this is the default definition
+#define DEFAULT_NTP_SERVER_1   "1.si.pool.ntp.org"   // this is the default definition 
+#define DEFAULT_NTP_SERVER_2   "2.si.pool.ntp.org"   // this is the default definition
+#define DEFAULT_NTP_SERVER_3   "3.si.pool.ntp.org"   // this is the default definition
 ```
 
-Â  - NTP_SERVER definitions tell ESP32 server where to get current time (GMT) from, when certain functions are being called (see startCronDaemonAndInitializeItAtFirstCall). You can change the default settings to NTP servers close to you. These #definitions will be written to /etc/ntp.conf file which ESP32 reads each time it starts up. 
+  - NTP_SERVER definitions tell ESP32 server where to get current time (GMT) from, when certain functions are being called (see startCronDaemon). You can change the default settings to NTP servers close to you. These #definitions will be written to /etc/ntp.conf file which ESP32 reads each time it starts up. 
 
 
 ## void setGmt (time_t);
@@ -768,7 +853,7 @@ void setGmt (time_t t);
 
 **Parameter**
 
-Â  - time_t t is the number of seconds that elapsed since midnight of January 1, 1970 (GMT).
+  - time_t t is the number of seconds that elapsed since midnight of January 1, 1970 (GMT).
 
 
 ## void setLocalTime (time_t);
@@ -788,7 +873,7 @@ void setLocalTime (time_t t);
 
 **Parameter**
 
-Â  - time_t t is the number of seconds that elapsed since midnight of January 1, 1970 (local time).
+  - time_t t is the number of seconds that elapsed since midnight of January 1, 1970 (local time).
 
 
 ## time_t getGmt ();
@@ -808,7 +893,7 @@ time_t getGmt ();
 
 **Return value**
 
-Â  - 0 if current time has not been set yet (by calling setGmt or setLocalTime)
+  - 0 if current time has not been set yet (by calling setGmt or setLocalTime)
 
   - GMT otherwise
 
@@ -830,8 +915,8 @@ time_t getLocalTime ();
 
 **Return value**
 
-Â  - 0 if current time has not been set yet (by calling setGmt or setLocalTime)
-Â  - local time otherwise
+  - 0 if current time has not been set yet (by calling setGmt or setLocalTime)
+  - local time otherwise
 
 
 ## time_t timeToLocalTime (time_t);
@@ -851,12 +936,12 @@ time_t timeToLocalTime (time_t t);
 
 **Parameter**
 
-Â  - time_t t is time (GMT) to be converted to local time.
+  - time_t t is time (GMT) to be converted to local time.
 
 
 **Return value**
 
-Â  - local time converted from GMT.
+  - local time converted from GMT.
 
 
 ## struct tm timeToStructTime (time_t);
@@ -876,12 +961,12 @@ struct tm timeToStructTime (time_t t);
 
 **Parameter**
 
-Â  - time_t t is the time to be converted to struct tm.
+  - time_t t is the time to be converted to struct tm.
 
 
 **Return value**
 
-Â  - struct_tm converted from time_t. 
+  - struct_tm converted from time_t. 
 
 
 ## String timeToString (time_t);
@@ -901,15 +986,15 @@ String timeToString (time_t t);
 
 **Parameter**
 
-Â  - time_t t is the time to be converted to String.
+  - time_t t is the time to be converted to String.
 
 
 **Return value**
 
-Â  - String in a form of YYYY/MM/DD hh:mm:ss (24 hour format). 
+  - String in a form of YYYY/MM/DD hh:mm:ss (24 hour format). 
 
 
-## String ntpDate (String); Â  
+## String ntpDate (String);   
 
 
 **Description**
@@ -926,13 +1011,13 @@ String ntpDate (String ntpServer);
 
 **Parameter**
 
-Â  - String ntpServer is the name of NTP server by which ESP32 built-in clock is to be synchronized.
+  - String ntpServer is the name of NTP server by which ESP32 built-in clock is to be synchronized.
 
 
 **Return value**
 
-Â  - "" if synchronization succeeded
-Â  - error message if not
+  - "" if synchronization succeeded
+  - error message if not
 
 
 ## String ntpDate ();
@@ -940,7 +1025,7 @@ String ntpDate (String ntpServer);
 
 **Description**
 
-ntpDate synchronizes ESP32 built-in clock with one of NTP servers specified in /etc/ntp.confÂ configuration file. ESP32 must have an internet connection before ntpDate is called. File system must be mounted and /etc/ntp.confÂ configured. If this is not the case, then ntpDate will try the default NTP_SERVER #definitions. This function is also called internally by ntpdate telnet command and cronDaemon.
+ntpDate synchronizes ESP32 built-in clock with one of NTP servers specified in /etc/ntp.conf configuration file. ESP32 must have an internet connection before ntpDate is called. File system must be mounted and /etc/ntp.conf configured. If this is not the case, then ntpDate will try the default NTP_SERVER #definitions. This function is also called internally by ntpdate telnet command and cronDaemon.
 
 
 **Declaration**
@@ -952,34 +1037,34 @@ String ntpDate ();
 
 **Return value**
 
-Â  - â€œâ€ if synchronization succeeded
-Â  - error message if not
+  - “” if synchronization succeeded
+  - error message if not
 
 
-## startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t);
+## startCronDaemon (void (* cronHandler) (String&), size_t);
 
 
 **Description**
 
-startCronDaemonAndInitializeItAtFirstCall starts special task or process called cronDaemon that:
+startCronDaemon starts special task or process called cronDaemon that:
 
-Â  - Updates internal ESP32 clock with NTP server(s) once a day.
+  - Updates internal ESP32 clock with NTP server(s) once a day.
 
-Â  - constantly checks the content of cron table inside ESP32 server memory and calls cornHandler function when the time is right. cronDaemon will read its configuration from /etc/ntp.conf and /etc/crontab files when ESP32 starts up. If the files do not exist yet it will create new ones from compile time #definitions with default values.
+  - constantly checks the content of cron table inside ESP32 server memory and calls cornHandler function when the time is right. cronDaemon will read its configuration from /etc/ntp.conf and /etc/crontab files when ESP32 starts up. If the files do not exist yet it will create new ones from compile time #definitions with default values.
 
 
 **Declaration**
 
 ```C++
-void startCronDaemonAndInitializeItAtFirstCall (void (* cronHandler) (String&), size_t cronStack = (3 * 1024));
+void startCronDaemon (void (* cronHandler) (String&), size_t cronStack = (3 * 1024));
 ```
 
 
 **Parameters**
 
-Â  - void (* cronHandler) (String&) is a callback function that cronDaemon will call as defined by cron table. Cron table resides in ESP32 memory and is filled with the content of /etc/crontab file each time ESP32 starts up. Beside this it can also be managed through cronTabAdd and cronTabDel functions. If you are not going to use a cron table then this parameter can be NULL.
+  - void (* cronHandler) (String&) is a callback function that cronDaemon will call as defined by cron table. Cron table resides in ESP32 memory and is filled with the content of /etc/crontab file each time ESP32 starts up. Beside this it can also be managed through cronTabAdd and cronTabDel functions. If you are not going to use a cron table then this parameter can be NULL.
 
-Â  - size_t cronStack is stack size cronDaemon will be using. cronDaemon runs as separate thread/task/process so it needs its own stack. 3 KB is only enough for daily time synchronizations with NTP servers. If you are going to use cronHandler you better increase it to 8 KB. If your cronHandler is stack-hungry you may have to add more stack.
+  - size_t cronStack is stack size cronDaemon will be using. cronDaemon runs as separate thread/task/process so it needs its own stack. 3 KB is only enough for daily time synchronizations with NTP servers. If you are going to use cronHandler you better increase it to 8 KB. If your cronHandler is stack-hungry you may have to add more stack.
 
 
 ## bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, String, bool);
@@ -999,28 +1084,28 @@ bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint
 
 **Parameters**
 
-Â  - uint8_t second defines the second (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t second defines the second (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-Â  - uint8_t minute defines the minute (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t minute defines the minute (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-Â  - uint8_t hour defines the hour (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t hour defines the hour (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-Â  - uint8_t day defines the day of month (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t day defines the day of month (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-Â  - uint8_t month defines the month of year (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t month defines the month of year (local time) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-Â  - uint8_t day_of_week defines the day of week (local time, Sunday = 1, â€¦) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
+  - uint8_t day_of_week defines the day of week (local time, Sunday = 1, …) when cronHandler will be called with cronCommand parameter. If it is not important set it to ANY.
 
-Â  - String cronCommand is the croncommand that is going to be passed to cronHandler.
+  - String cronCommand is the croncommand that is going to be passed to cronHandler.
 
-Â  - bool readFromFile = false is used internally, normally it should be left false.
+  - bool readFromFile = false is used internally, normally it should be left false.
 
 
 **Return value**
 
-Â  - true if succeeded
+  - true if succeeded
 
-Â  - false if there is no more space in cron table. Cron table can include up to 32 entries, including those that are uploaded from /etc/crontab file during ESP32 start up.
+  - false if there is no more space in cron table. Cron table can include up to 32 entries, including those that are uploaded from /etc/crontab file during ESP32 start up.
 
 
 ## bool cronTabAdd (String, bool);
@@ -1039,14 +1124,14 @@ bool cronTabAdd (String cronTabLine, bool readFromFile = false);
 
 **Parameters**
 
-Â  - String cronTabLine contains definition cron command and when it should be called in text format. This is the same format as in /etc/crontab file: 6 numbers and cron command text. The numbers correspond to second, minute, hour, day of month, month of year, day of week when cronHandler will be called with cronCommand parameter. If it is not important set it to *.
+  - String cronTabLine contains definition cron command and when it should be called in text format. This is the same format as in /etc/crontab file: 6 numbers and cron command text. The numbers correspond to second, minute, hour, day of month, month of year, day of week when cronHandler will be called with cronCommand parameter. If it is not important set it to *.
 
-Â  - bool readFromFile = false is used internally, normally it should be left false.
+  - bool readFromFile = false is used internally, normally it should be left false.
 
 
 **Return value**
 
-Â  - true if succeeded
+  - true if succeeded
 
   - false if there is no more space in cron table. Cron table can include up to 32 entries, including those that are uploaded from /etc/crontab file during ESP32 start up.
 
@@ -1068,7 +1153,7 @@ int cronTabDel (String cronCommand);
 
 **Parameters**
 
-Â  - String cronCommand contains the nme of the command to be deleted from cron table.
+  - String cronCommand contains the nme of the command to be deleted from cron table.
 
 
 **Return value**
@@ -1096,28 +1181,28 @@ String sendMail (String message = "", String subject = "", String to = "", Strin
 
 **Parameters**
 
-Â  - String message is the text in email body. It can be plain text, UTF-8 and HTML. 
+  - String message is the text in email body. It can be plain text, UTF-8 and HTML. 
 
-Â  - String subject is the text in email Subject field.
+  - String subject is the text in email Subject field.
 
-Â  - String to are recipients' email addresses. This parameter is actualy a "to" field of SMTP protocol. Â  Â 
+  - String to are recipients' email addresses. This parameter is actualy a "to" field of SMTP protocol.    
 
-Â  - String from is usually your email address. This field is actualy a "from" field of SMTP protocol. 
+  - String from is usually your email address. This field is actualy a "from" field of SMTP protocol. 
 
-Â  - String password is your SMTP server password.
+  - String password is your SMTP server password.
 
-Â  - String userName is your SMTP server user name.
+  - String userName is your SMTP server user name.
 
-Â  - int smtpPort is your SMTP server port number. Defuult SMTP port is 25. 
+  - int smtpPort is your SMTP server port number. Defuult SMTP port is 25. 
 
-Â  - String smtpServer is your SMTP server name.
+  - String smtpServer is your SMTP server name.
 
 
 **Return value**
 
-Â  - success message from SMTP server if succeeded. SMTP success messages start with code 250.
+  - success message from SMTP server if succeeded. SMTP success messages start with code 250.
 
-Â  - error message if failed
+  - error message if failed
 
 
 ***Note***
@@ -1142,32 +1227,32 @@ use "help" to display available commands.
 #vi etc/mail/sendmail.cf
 
 ---+--------------------------------------------------------------------------------------------- Save: Ctrl-S, Exit: Ctrl-X
-Â  1|# This configuration file contains default values for sendMail function. 
-Â  2|# You can proivide all, some or none default values. 
-Â  3|
-Â  4|# SMTP server name (also -S field of sendmail telnet command)
-Â  5|smtpServer Â  smtp.siol.net
-Â  6|
-Â  7|# SMTP port (also -P field of sendmail telnet command, Â default SMTP port is 25)
-Â  8|smtpPort Â  Â  25
-Â  9|
-Â 10|# your user name for SMTP server (also -u field of sendmail telnet command)
-Â 11|userName Â  Â  yourSmtpServerUserName
-Â 12|
-Â 13|# your password for SMTP server (also -p field of sendmail telnet command)
-Â 14|password Â  Â  yourSmtpServerPassword
-Â 15|
-Â 16|# From field of SMTP protocol usually contains your email address (also -f field of sendmail telnet command)
-Â 17|from Â  Â  Â  Â  "My ESP32 Server"<my.name@somewhere.net>
-Â 18|
-Â 19|# To field of SMTP protocol (also -t field of sendmail telnet command)
-Â 20|to Â  Â  Â  Â  Â  "me"<my.name@somewhere.net>, "other"<someone.else@somewhere.com>
-Â 21|
-Â 22|# Subject field of SMTP profocol (also -s field of sendmail telnet command)
-Â 23|subject Â  Â  Â Test
-Â 24|
-Â 25|# message body text (also -m field of sendmail telnet command)
-Â 26|message Â  Â  Â This is just a test message.
-Â 27|
+  1|# This configuration file contains default values for sendMail function. 
+  2|# You can proivide all, some or none default values. 
+  3|
+  4|# SMTP server name (also -S field of sendmail telnet command)
+  5|smtpServer   smtp.siol.net
+  6|
+  7|# SMTP port (also -P field of sendmail telnet command,  default SMTP port is 25)
+  8|smtpPort     25
+  9|
+ 10|# your user name for SMTP server (also -u field of sendmail telnet command)
+ 11|userName     yourSmtpServerUserName
+ 12|
+ 13|# your password for SMTP server (also -p field of sendmail telnet command)
+ 14|password     yourSmtpServerPassword
+ 15|
+ 16|# From field of SMTP protocol usually contains your email address (also -f field of sendmail telnet command)
+ 17|from         "My ESP32 Server"<my.name@somewhere.net>
+ 18|
+ 19|# To field of SMTP protocol (also -t field of sendmail telnet command)
+ 20|to           "me"<my.name@somewhere.net>, "other"<someone.else@somewhere.com>
+ 21|
+ 22|# Subject field of SMTP profocol (also -s field of sendmail telnet command)
+ 23|subject      Test
+ 24|
+ 25|# message body text (also -m field of sendmail telnet command)
+ 26|message      This is just a test message.
+ 27|
 ---+-------------------------------------------------------------------------------------------------------------------------
 ```

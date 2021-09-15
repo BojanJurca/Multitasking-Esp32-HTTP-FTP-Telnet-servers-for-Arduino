@@ -52,9 +52,9 @@ void setup () {
   // FFat.format ();
   mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
 
-  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+  initializeUsers ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
 
-  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+  startWiFi ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
   
   // start FTP server
   ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",              // start FTP server on all available ip addresses

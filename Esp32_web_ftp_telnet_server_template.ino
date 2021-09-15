@@ -6,26 +6,10 @@
  
     File contains a working template for some operating system functionalities that can support your projects.
  
-   Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
+    Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
     
-   History:
-            - first release, 
-              December 5, 2018, Bojan Jurca
-            - added SPIFFSsafeDelay () to assure safe muti-threading while using fileSystem functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              April 13, 2019, Bojan Jurca
-            - telnetCommandHandler parameters are now easier to access 
-              September 4, Bojan Jurca   
-            - elimination of compiler warnings and some bugst
-              Jun 10, 2020, Bojan Jurca
-            - port from SPIFFS to fileSystem, adjustment for Arduino 1.8.13,
-              improvements of web, FTP and telnet server,
-              simplification of this template to make it more comprehensive and easier to start working with 
-              October 10, 2020, Bojan Jurca
-            - web login/logout example
-              February 3, 2021, Bojan Jurca  
-            - code review in order to make it more comprehensive
-              July 27, 2021, Bojan Jurca            
-             
+    September, 13, 2021, Bojan Jurca
+                 
  */
 
 // Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemes (Tools | Partition scheme)!
@@ -279,9 +263,9 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
 
               // ----- firewall example - if you don't need firewall just delete this function and pass NULL to the servers instead of its address -----
           
-              bool firewall (String IP) {                           // firewall callback function, return true if IP is accepted or false if not - must be reentrant!
-                if (IP == "10.0.0.2") return false;                 // block 10.0.0.2 (for the purpose of this example) 
-                else                  return true;                  // ... but let every other client through
+              bool firewall (String connectingIP) {                 // firewall callback function, return true if IP is accepted or false if not - must be reentrant!
+                if (connectingIP == "10.0.0.2") return false;       // block 10.0.0.2 (for the purpose of this example) 
+                else                            return true;        // ... but let every other client through
               }
 
 
@@ -315,19 +299,19 @@ void setup () {
 
   // deleteFile ("/etc/ntp.conf");                                    // contains ntp server names form time sync - deleting this file would cause creating default one
   // deleteFile ("/etc/crontab");                                     // contains cheduled tasks                  - deleting this file would cause creating empty one
-  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
+  startCronDaemon (cronHandler, 8 * 1024);                            // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
                                                                       // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
                                                                       // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
   // deleteFile ("/etc/passwd");                                      // contains users' accounts information     - deleting this file would cause creating default one
   // deleteFile ("/etc/shadow");                                      // contains users' passwords                - deleting this file would cause creating default one
-  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+  initializeUsers ();                                                 // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
 
   // deleteFile ("/network/interfaces");                              // contation STA(tion) configuration        - deleting this file would cause creating default one
   // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");          // contation STA(tion) credentials          - deleting this file would cause creating default one
   // deleteFile ("/etc/dhcpcd.conf");                                 // contains A(ccess) P(oint) configuration  - deleting this file would cause creating default one
   // deleteFile ("/etc/hostapd/hostapd.conf");                        // contains A(ccess) P(oint) credentials    - deleting this file would cause creating default one
-  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+  startWiFi ();                                                       // starts WiFi according to configuration files, creates configuration files if they don't exist
 
   // start web server 
   httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
@@ -375,8 +359,6 @@ void setup () {
                 example08_time ();                      // example 08
                 Serial.printf ("[%10lu] [example 09] started.\n", millis ());
                 example09_makeRestCall ();              // example 09
-                Serial.printf ("[%10lu] [example 11] started.\n", millis ());
-                example11_morseEchoServer ();           // example 11
                 Serial.printf ("[%10lu] [examples] finished.\n", millis ());
                 vTaskDelete (NULL); // end this thread
               }, "examples", 4069, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10lu] [examples] couldn't start examples\n", millis ());

@@ -1,3 +1,4 @@
 New in 1.29 (development)
 
   - SMTP client (sendMail function) 
+  - some functions are renamed

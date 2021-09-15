@@ -11,7 +11,7 @@ It is more or less about user interface:
 ![Screenshot](presentation.gif)
 
 
-In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, â€¦) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
+In case of Web user interface all you need to do is to upload (with FTP) .html (.png, .jpg, …) files into your ESP32 /var/www/html directory and/or modify httpRequestHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see examples below).
 
 In case of Telnet user interface all you need to do is to modify telnetCommandHandler function that already exists in Esp32_web_ftp_telnet_server_template.ino according to your needs (see example below).
 
@@ -19,11 +19,11 @@ You can go directly to Setup instructions and examples now or continue reading t
 
 ## Features
 
-**webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies â€“ see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
+**webServer** can handle HTTP requests in two different ways. As a programmed response to some requests (typically small replies – see examples) or by sending .html files that have been previously uploaded into /var/www/html directory. Features:
 
    - HTTP protocol,
    - Cookies
-   - WS protocol â€“ only basic support for WebSockets is included so far,
+   - WS protocol – only basic support for WebSockets is included so far,
    - webClient function is included for making simple HTTP requests from ESP32 to other servers,
    - threaded web server sessions,
    - time-out set to 1,5 seconds for HTTP protocol and 5 minutes for WS protocol to free up limited ESP32 resources used by inactive sessions,
@@ -118,7 +118,7 @@ Other features:
 
 Features:
 
-   - sendMail function and sendmail telnet command. Default values for sendMail function and sendmail telnet command can be provided in /etc/mail/sendmail.cf file.
+   - sendMail function and sendmail telnet command. Default values for sendMail function and sendmail telnet command can be provided in /etc/mail/sendmail.cf file. Plain text, UTF-8 and HTML are supported. 
 
 
 -----> Please see [Reference manual](Reference_manual.md) for more information.
@@ -209,7 +209,7 @@ By default, TIMEZONE is #define-d as: #define TIMEZONE CET_TIMEZONE. Time_functi
 
 Doing this the following will happen:
 
-  - ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
+  - ESP32 flash memory will be formatted with FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.
   - network configuration files will be created with the following settings:
   - your ESP32 will be configured to use DHCP in STAtion mode (with DEFAULT_STA_SSID / DEFAULT_STA_PASSWORD #definitions),
   - your ESP32 AccessPoint SSID will be MyESP32Server (with DEFAULT_AP_PASSWORD #definition),
@@ -389,7 +389,7 @@ We do not have C++ compiler available in browser, but Javascript will do the job
 
 **Example 03 - HTML page interacting with ESP32**
 
-We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional â€“ client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism except for the use of PUT method instead of GET in REST calls (the latter is only the matter of understanding; GET method would do the job just as well).
+We had only one-way server-client (ESP32-HTML) communication so far. It was used to initialize/populate HTML page. However, the communication can also be bi-directional – client (HTML page) telling the server (ESP32) what to do. We will use the same mechanism except for the use of PUT method instead of GET in REST calls (the latter is only the matter of understanding; GET method would do the job just as well).
 
 Server will have to handle two additional cases:
 
@@ -749,115 +749,6 @@ On the browser side Javascript program could look something like example10.html:
     </script>
   </body>
 </html>
-```
-
-
-## Writing your own server using TCP protocol
-
-**Example 11 - Morse server**
-
-In example 11 weâ€™ll create a Morse echo server with the use of TcpServer instance. Whenever two computers communicate with each other, they have to follow a protocol of communication. Morse echo server protocol is very simple. The server will read everything the client sends, convert it into Morse code and send reply back to the client.
-Morse echo server will only listen on port 24 for 30 seconds then it will shut down and free the resources.
-While starting and stopping the server is quite straightforward, more attention must be put to routine that handles the connection. Make sure it is reentrant for it can run in many threads simultaneously.
-
-```C++
-// start new TCP server
-TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler, // function that is going to handle the connections
-                                     NULL,      // no additional parameter will be passed to morseEchoServerConnectionHandler function
-                                     4096,      // 4 KB stack for morseEchoServerConnectionHandler is usually enough
-                                     180000,    // time-out - close connection if it is inactive for more than 3 minutes
-                                     "0.0.0.0", // serverIP, 0.0.0.0 means that the server will accept connections on all available IP addresses
-                                     24,        // server port number, 
-                                     NULL);     // don't use firewall in this example
-// check success
-if (myServer->started ()) {
-  Serial.printf ("[example 11] Morse echo server started, try \"telnet <server IP> 24\" to try it\n");
-
-  // let the server run for 30 seconds - this much time you have to connect to it to test how it works
-  delay (30000);
-
-  // shut down the server - is any connection is still active it will continue to run anyway
-  delete (myServer);
-  Serial.printf ("[example 11] Morse echo server stopped, already active connections will continue to run anyway\n");
-} else {
-  Serial.printf ("[example 11] unable to start Morse echo server\n");
-}
-
-void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[%10lu] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ());
-  
-  char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
-  char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
-  int bytesToSend;
-  // construct Morse table. Make it static so it won't use the stack
-  static const char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
-                                   "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
-                                   "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
-                                   ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
-                                   "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
-                                   "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
-                                   ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
-                                   "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
-                                   "--.. "};                                         // Z
-  unsigned char c;
-  int index;  
-  
-  // send welcome reply first as soon as new connection arrives - in a readable form
-  sprintf (outputBuffer, "Type anything except Ctrl-C - this would end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
-  // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
-  // to test this example it is a good idea to communicate with it in the way it understands
-  bytesToSend = strlen (outputBuffer);
-  if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
-    *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-    goto endThisConnection;
-  }
-  *outputBuffer = 0; // mark outputBuffer as empty
-  
-  // Read and process input stream in endless loop, detect "quit" substring. 
-  // If "quit" substring is present then end this connection.
-  // If 0 bytes arrive then the client has ended the connection or there are problems in communication.
-  while (int received = connection->recvData (inputBuffer, sizeof (inputBuffer))) {
-    for (int i = 0; i < received; i ++) {
-      // calculate index of morse table entry
-      c = inputBuffer [i];
-      if (c == 3) goto endThisConnection; // Ctrl-C
-      index = 11;                                     // no character in morse table
-      if (c == ' ') index = 10;                       // space in morse table
-      else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
-      else if (c >= 'a' && c <= 'z') index = c - 80;  // letter converted to upper case in morse table
-
-      // fill outputBuffer if there is still some space left otherwise empty it
-      if (strlen (outputBuffer) + 7 > sizeof (outputBuffer)) {
-        bytesToSend = strlen (outputBuffer);
-        if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
-          *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-          goto endThisConnection;
-        }
-        strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
-      } else {
-        strcat (outputBuffer, morse [index]); // append morse letter to outputBuffer
-      }
-
-    } // for loop
-    bytesToSend = strlen (outputBuffer);
-    if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
-      *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-      goto endThisConnection;
-    }    
-    *outputBuffer = 0; // mark outputBuffer as empty
-  } // while loop
-
-endThisConnection: // first check if there is still some data in outputBuffer and then just let the function return 
-  if (*outputBuffer) {
-    bytesToSend = strlen (outputBuffer);
-    if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-  }
-  Serial.printf ("[%10lu] [example 11] connection has just ended\n", millis ());
-}
 ```
 
 

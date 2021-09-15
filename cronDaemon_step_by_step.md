@@ -55,11 +55,11 @@ void setup () {
   // FFat.format ();
   mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
 
-  startCronDaemonAndInitializeItAtFirstCall (NULL, 3 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
+  startCronDaemon (NULL, 3 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
                                                                       // creates empty /etc/crontab, reads it at start up and executes cronHandler when the time is right
                                                                       // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
-  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+  startWiFi ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
 
   // add your own code as needed ...
   
@@ -163,13 +163,13 @@ void setup () {
   // FFat.format ();
   mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
 
-  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
+  startCronDaemon (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
                                                                       // creates empty /etc/crontab, reads it at start up and executes cronHandler when the time is right
                                                                       // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
-  initializeUsersAtFirstCall ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
+  initializeUsers ();                                      // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
 
-  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+  startWiFi ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
 
 
   // start telnet server
@@ -306,11 +306,11 @@ void setup () {
   // FFat.format ();
   mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
 
-  startCronDaemonAndInitializeItAtFirstCall (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
+  startCronDaemon (cronHandler, 8 * 1024);  // creates /etc/ntp.conf with default NTP server names and synchronize ESP32 time with them once a day
                                                                       // creates empty /etc/crontab, reads it at start up and executes cronHandler when the time is right
                                                                       // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
-  startNetworkAndInitializeItAtFirstCall ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
+  startWiFi ();                          // starts WiFi according to configuration files, creates configuration files if they don't exist
 
 
   // add two cron commands to cron table

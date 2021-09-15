@@ -4,13 +4,8 @@
   
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    History:
-            - first release, 
-              April 14, 2019, Bojan Jurca
-            - added WebSocket example,
-              May, 20, 2019, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca            
+    September, 15, 2021, Bojan Jurca
+         
  */
 
 
@@ -86,114 +81,4 @@ errorInCommunication:
                                     break;
     }
   }
-}
-
-
-// Example 11 - a simple echo server except that it echos Morse code back to the client
-    
-void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameter); // connection handler callback function
-
-void example11_morseEchoServer () {
-  if (getWiFiMode () == WIFI_OFF) {
-    Serial.printf ("[%10lu] [example 11] Could not start Morse server since there is no network.\n", millis ());
-    return;
-  }
-  
-  // start new TCP server
-  TcpServer *myServer = new TcpServer (morseEchoServerConnectionHandler,  // function that is going to handle the connections
-                                       NULL,                              // no additional parameter will be passed to morseEchoServerConnectionHandler function
-                                       4096,                              // 4 KB stack for morseEchoServerConnectionHandler is usually enough
-                                       (TIME_OUT_TYPE) 180000,            // time-out - close connection if it is inactive for more than 3 minutes
-                                       "0.0.0.0",                         // serverIP, 0.0.0.0 means that the server will accept connections on all available IP addresses
-                                       24,                                // server port number, 
-                                       NULL);                             // don't use firewall in this example
-  // check success
-  if (myServer->started ()) {
-    Serial.printf ("[%10lu] [example 11] Morse echo server started, type telnet serverIP 24 to try it\n", millis ());
-  
-    // let the server run for 30 seconds - this much time you have to connect to it to test how it works
-    delay (30000);
-  
-    // shut down the server - is any connection is still active it will continue to run anyway
-    delete (myServer);
-    Serial.printf ("[%10lu] [example 11] Morse echo server stopped, already active connections will continue to run anyway\n", millis ());
-  } else {
-    Serial.printf ("[%10lu] [example 11] unable to start Morse echo server\n", millis ());
-  }
-}
-
-void morseEchoServerConnectionHandler (TcpConnection *connection, void *parameterNotUsed) {  // connection handler callback function
-  Serial.printf ("[%10lu] [example 11] new connection arrived from %s\n", millis (), connection->getOtherSideIP ().c_str ());
-  
-  char inputBuffer [256] = {0}; // reserve some stack memory for incomming packets
-  char outputBuffer [256] = {0}; // reserve some stack memory for output buffer 
-  int bytesToSend;
-  // construct Morse table. Make it static so it won't use the stack
-  static const char *morse [43] = {"----- ", ".---- ", "..--- ", "...-- ", "....- ", // 0, 1, 2, 3, 4
-                                   "..... ", "-.... ", "--... ", "---.. ", "----. ", // 5, 6, 7, 8, 9
-                                   "   ", "", "", "", "", "", "",                    // space and some characters not in Morse table
-                                   ".- ", "-... ", "-.-. ", "-.. ", ". ",            // A, B, C, D, E
-                                   "..-. ", "--. ", ".... ", ".. ", ".--- ",         // F, G, H, I, J
-                                   "-.- ", ".-.. ", "-- ", "-. ", "--- ",            // K, L, M, N, O
-                                   ".--. ", "--.- ", ".-. ", "... ", "- ",           // P, Q, R, S, T
-                                   "..- ", "...- ", ".-- ", "-..- ", "-.-- ",        // U, V, W, X, Y
-                                   "--.. "};                                         // Z
-  unsigned char c;
-  int index;  
-  
-  // send welcome reply first as soon as new connection arrives - in a readable form
-  sprintf (outputBuffer, "Type anything except Ctrl-C - this would end the connection.\xff\xfe\x01\r\n");  // IAC DONT ECHO
-  // IAC DONT ECHO is not really necessary. It is a part of telnet protocol. Since we'll be using a telnet client
-  // to test this example it is a good idea to communicate with it in the way it understands
-  bytesToSend = strlen (outputBuffer);
-  if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
-    *outputBuffer = 0; // mark outputBuffer as empty
-    Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-    goto endThisConnection;
-  }
-  *outputBuffer = 0; // mark outputBuffer as empty
-  
-  // Read and process input stream in endless loop, detect "quit" substring. 
-  // If "quit" substring is present then end this connection.
-  // If 0 bytes arrive then the client has ended the connection or there are problems in communication.
-  while (int received = connection->recvData (inputBuffer, sizeof (inputBuffer))) {
-    for (int i = 0; i < received; i ++) {
-      // calculate index of morse table entry
-      c = inputBuffer [i];
-      if (c == 3) goto endThisConnection; // Ctrl-C
-      index = 11;                                     // no character in morse table
-      if (c == ' ') index = 10;                       // space in morse table
-      else if (c >= '0' && c <= 'Z') index = c - '0'; // letter in morse table
-      else if (c >= 'a' && c <= 'z') index = c - 80;  // letter converted to upper case in morse table
-
-      // fill outputBuffer if there is still some space left otherwise empty it
-      if (strlen (outputBuffer) + 7 > sizeof (outputBuffer)) {
-        bytesToSend = strlen (outputBuffer);
-        if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
-          *outputBuffer = 0; // mark outputBuffer as empty
-          Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-          goto endThisConnection;
-        }
-        strcpy (outputBuffer, morse [index]); // start filling outputBuffer with morse letter
-      } else {
-        strcat (outputBuffer, morse [index]); // append morse letter to outputBuffer
-      }
-
-    } // for loop
-    bytesToSend = strlen (outputBuffer);
-    if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) {
-      *outputBuffer = 0; // mark outputBuffer as empty
-      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-      goto endThisConnection;
-    }    
-    *outputBuffer = 0; // mark outputBuffer as empty
-  } // while loop
-
-endThisConnection: // first check if there is still some data in outputBuffer and then just let the function return 
-  if (*outputBuffer) {
-    bytesToSend = strlen (outputBuffer);
-    if (connection->sendData (outputBuffer, bytesToSend) != bytesToSend) 
-      Serial.printf ("[%10lu] [example 11] error while sending response\n", millis ());
-  }
-  Serial.printf ("[%10lu] [example 11] connection has just ended\n", millis ());
 }

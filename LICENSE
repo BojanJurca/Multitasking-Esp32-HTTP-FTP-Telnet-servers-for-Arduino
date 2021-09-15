@@ -21,7 +21,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 
-Ping command used here was taken and modified from https://github.com/pbecchi/ESP32_ping, with the following licence:
+Ping command used here was taken and slightly modified from https://github.com/pbecchi/ESP32_ping, with the following licence:
 
 /*
 * ESP32 Ping library
@@ -80,4 +80,22 @@ Ping command used here was taken and modified from https://github.com/pbecchi/ES
 *
 * This file is part of the lwIP TCP/IP stack.
 *
+*/
+
+
+Sun rise/set calculation used here was taken and slightly modified from https://github.com/troglobit/sun/blob/master/sunriset.c
+
+/*
+
+SUNRISET.C - computes Sun rise/set times, start/end of twilight, and
+             the length of the day at any date and latitude
+
+Written as DAYLEN.C, 1989-08-16
+
+Modified to SUNRISET.C, 1992-12-01
+
+(c) Paul Schlyter, 1989, 1992
+
+Released to the public domain by Paul Schlyter, December 1992
+
 */
