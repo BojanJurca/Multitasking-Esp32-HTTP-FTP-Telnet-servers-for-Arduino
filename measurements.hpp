@@ -6,11 +6,9 @@
   
     Measurements.hpp include circular queue for storing measurements data set.
   
-    History:
-            - first release, October 31, 2018, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca        
- */
+    Jun 10, 2020, Bojan Jurca
+
+*/
 
 
 #ifndef __MEASUREMENTS__

@@ -8,90 +8,68 @@
  
     Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
     
-    September, 13, 2021, Bojan Jurca
+    September, 19, 2021, Bojan Jurca
                  
  */
 
 // Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemes (Tools | Partition scheme)!
 
-#include <WiFi.h>
 
+#include <WiFi.h>
 
 // define how your ESP32 server will present itself to the network and what the output of some telnet comands (like uname) would be
 
 #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
 #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
 
-
 // FAT file system is needed for full functionality: all configuration files are stored here as well and .html and other files
-
 #include "./servers/file_system.h"
 
-
 // define how your ESP32 server is going to connect to WiFi network - these are just default settings, you can edit configuration files later
-
 #define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h)
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
-#define DEFAULT_AP_SSID           HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
+#define DEFAULT_AP_SSID           "" // HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
 #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
 #include "./servers/network.h"
 
-
 // define how your ESP32 server is going to handle time: NTP servers where it will get GMT from and how local time will be calculated from GMT
-// if you want to learn more about timing please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/cronDaemon_step_by_step.md
-
 #define DEFAULT_NTP_SERVER_1          "1.si.pool.ntp.org"       // define default NTP severs ESP32 will synchronize its time with
 #define DEFAULT_NTP_SERVER_2          "2.si.pool.ntp.org"
 #define DEFAULT_NTP_SERVER_3          "3.si.pool.ntp.org"
-
 // define TIMEZONE  KAL_TIMEZONE                                // define time zone you are in (see time_functions.h)
 // ...
 // #define TIMEZONE  EASTERN_TIMEZONE
 // (default) #define TIMEZONE  CET_TIMEZONE               
 #include "./servers/time_functions.h"     
 
-
 // define how your ESP32 server is going to handle users
-// if you want to learn more about user management please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/User_management_step_by_step.md
-
 // #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
 #include "./servers/user_management.h"
 
-
 // include code for 3 servers and 1 client
-
 #include "./servers/webServer.hpp"    // if you want to learn more about web server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Web_server_step_by_step.md
 #include "./servers/ftpServer.hpp"    // if you want to learn more about FTP server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/FTP_server_step_by_step.md
 #include "./servers/telnetServer.hpp" // if you want to learn more about telnet server please read: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template/blob/master/Telnet_server_step_by_step.md
 #include "./servers/smtpClient.h"     // include sendMail function
 
-
               // ----- measurements are just for demonstration - delete this code if it is not needed -----
-
               #include "measurements.hpp"
               measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
               measurements httpRequestCount (60);         // measure how many web connections arrive each minute
-              // ...
-              #include "examples.h" // example 08, example 09, example 10, example 11
 
-
+              #define LED_BUILTIN 2                       // built-in led blinking is used in examples 01, 03 and 04
+ 
 // ----- HTTP request handler example - if you don't want to handle HTTP requests just delete this function and pass NULL to httpSrv instead of its address -----
 //       normally httpRequest is HTTP request, function returns a reply in HTML, json, ... formats or "" if request is unhandeled by httpRequestHandler
 //       httpRequestHandler is supposed to be used with smaller replies,
 //       if you want to reply with larger pages you may consider FTP-ing .html files onto the file system (into /var/www/html/ directory)
-
 String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { // - must be reentrant!
 
-  // debug: Serial.print (httpRequest);
-  // debug: Serial.println (wsp->getHttpRequestHeaderField ("Cookie"));
-  // debug: Serial.println (wsp->getHttpRequestCookie ("sessionToken"));
-  
-
               // ----- examples - delete all or parts of this code if it is not needed -----
-
               httpRequestCount.increaseCounter ();                            // gether some statistics
+
 
               // variables used by example 05
               static String niceSwitch1 = "false";  
@@ -99,20 +77,19 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
               static String niceRadio5 = "fm";
 
               // ----- handle HTTP protocol requests -----
-              
                    if (httpRequest.substring (0, 20) == "GET /example01.html ")       { // used by example 01
-                                                                                        return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (2) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
+                                                                                        return String ("<HTML>Example 01 - dynamic HTML page<br><br><hr />") + (digitalRead (LED_BUILTIN) ? "Led is on." : "Led is off.") + String ("<hr /></HTML>");
                                                                                       }
               else if (httpRequest.substring (0, 16) == "GET /builtInLed ")           { // used by example 02, example 03, example 04, index.html
                                                                                       getBuiltInLed:
-                                                                                        return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + (digitalRead (2) ? String ("on") : String ("off")) + "\"}\r\n";
+                                                                                        return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + (digitalRead (LED_BUILTIN) ? String ("on") : String ("off")) + "\"}\r\n";
                                                                                       }                                                                    
               else if (httpRequest.substring (0, 19) == "PUT /builtInLed/on ")        { // used by example 03, example 04
-                                                                                        digitalWrite (2, HIGH);
+                                                                                        digitalWrite (LED_BUILTIN, HIGH);
                                                                                         goto getBuiltInLed;
                                                                                       }
               else if (httpRequest.substring (0, 20) == "PUT /builtInLed/off ")       { // used by example 03, example 04, index.html
-                                                                                        digitalWrite (2, LOW);
+                                                                                        digitalWrite (LED_BUILTIN, LOW);
                                                                                         goto getBuiltInLed;
                                                                                       }
               else if (httpRequest.substring (0, 12) == "GET /upTime ")               { // used by index.html
@@ -169,63 +146,23 @@ String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters
                                                                                         Serial.printf ("[Got request from web browser for niceRadio5]: %s\n", niceRadio5.c_str ());
                                                                                         goto returnNiceRadio5Value; // return success (or possible failure) back to the client
                                                                                       }
-              else if (httpRequest.substring (0, 25) == "PUT /niceButton6/pressed ")  { // used by example 05.html                                                                                        Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
+              else if (httpRequest.substring (0, 25) == "PUT /niceButton6/pressed ")  { // used by example 05.html
+                                                                                        Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
                                                                                         return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                       }
-              // ----- example 07: cookies
-              else if (httpRequest.substring (0, 20) == "GET /example07.html ")       { // used by example 07
-                                                                                        String refreshCounter = wsp->getHttpRequestCookie ("refreshCounter");           // get cookie that browser sent in HTTP request
-                                                                                        if (refreshCounter == "") refreshCounter = "0";
-                                                                                        refreshCounter = String (refreshCounter.toInt () + 1);
-                                                                                        wsp->setHttpResponseCookie ("refreshCounter", refreshCounter, getGmt () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
-                                                                                        return String ("<HTML>Example 07<br><br>This page has been refreshed " + refreshCounter + " times. Click refresh to see more.</HTML>");
-                                                                                      }
-              // ----- a very basic login - logout mechanism, that could be improoved in many ways -----
-              else if (httpRequest.substring (0, 11) == "GET /login/")                { // GET /login/userName%20password - called from login.html when "Login" button is pressed 
-                                                                                        String userName = between (httpRequest, "/login/", "%20");        // get user name from URL
-                                                                                        String password = between (httpRequest, "%20", " ");              // get password from URL
-                                                                                        if (checkUserNameAndPassword (userName, password)) {              // check if they are OK
-                                                                                          wsp->setHttpResponseCookie ("sessionToken", "98376235");        // create (simple, demonstration) sessionToken cookie, path and expiration time (in GMT) can also be set
-                                                                                          wsp->setHttpResponseCookie ("userName", userName);              // save user name in a cookie for later use
-                                                                                          return "loggedIn";                                              // notify login.html about success  
-                                                                                        } else {
-                                                                                          wsp->setHttpResponseCookie ("sessionToken", "");                // delete sessionToken cookie if it exists
-                                                                                          wsp->setHttpResponseCookie ("userName", "");                    // delete userName cookie if it exists
-                                                                                          return "Wrong user name or password.";                          // notify login.html about failure
-                                                                                        }
-                                                                                      }
-              else if (httpRequest.substring (0, 12) == "PUT /logout ")               { // called from logout.html when "Logout" button is pressed 
-                                                                                          if (wsp->getHttpRequestCookie ("sessionToken") == "98376235") { // if logged in
-                                                                                            wsp->setHttpResponseCookie ("sessionToken", "");              // delete sessionToken cookie if it exists
-                                                                                            wsp->setHttpResponseCookie ("userName", "");                  // delete userName cookie if it exists
-                                                                                          }
-                                                                                          return "LoggedOut.";                                            // notify logout.html
-                                                                                      }
-              else if (httpRequest.substring (0, 17) == "GET /logout.html ")          { // logout.html may only be accessed if user is logged in
-                                                                                        if (wsp->getHttpRequestCookie ("sessionToken") == "98376235")     // check if browser has a valid sessionToken cookie
-                                                                                          return "";                                                      // if yes, return "" so web server will continue with transmission of logout.html file
-                                                                                         wsp->httpResponseStatus = "307 temporary redirect";              // if no, redirect browser to login.html
-                                                                                         wsp->setHttpResponseHeaderField ("Location", "http://" + wsp->getHttpRequestHeaderField ("Host") + "/login.html");
-                                                                                         return "Not logged in.";
-                                                                                       }
 
   return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning "" reply
 }
 
-
 // ----- WebSocket request handler example - if you don't want to handle WebSocket requests just delete this function and pass NULL to httpSrv instead of its address -----
 
               // ----- oscilloscope - delete this code if it is not needed -----
-
               #include "./servers/oscilloscope.h"
 
 void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be reentrant!
 
-
               // ----- example WebSockets & Oscilloscope - delete this code if it is not needed -----
-
                    if (wsRequest.substring (0, 21) == "GET /runOscilloscope ")      runOscilloscope (webSocket);      // used by oscilloscope.html
-              else if (wsRequest.substring (0, 26) == "GET /example10_WebSockets ") example10_webSockets (webSocket); // used by example10.html
               else if (wsRequest.substring (0, 16) == "GET /rssiReader ") {                                           // data streaming used by index.html
                                                                             char c;
                                                                             do {
@@ -237,17 +174,12 @@ void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { // - must be r
                                                                           }
 }
 
-
 // ----- telnet command handler example - if you don't want to handle telnet commands yourself just delete this function and pass NULL to telnetSrv instead of its address -----
-
 String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { // - must be reentrant!
-
               
               // ----- example 06 - delete this code if it is not needed -----
-
-              #define LED_BUILTIN 2                                 
                       if (argc == 2 && argv [0] == "led" && argv [1] == "state") {                    // led state telnet command
-                        return "Led is " + (digitalRead (LED_BUILTIN) ? String ("on.") : String ("off."));
+                        return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
               } else if (argc == 3 && argv [0] == "turn" && argv [1] == "led" && argv [2] == "on") {  // turn led on telnet  command
                         digitalWrite (LED_BUILTIN, HIGH);
                         return "Led is on.";
@@ -256,38 +188,36 @@ String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessi
                         return "Led is off.";
               }
 
-
   return ""; // telnetCommand has not been handled by telnetCommandHandler - tell telnetServer to handle it internally by returning "" reply
 }
 
-
-              // ----- firewall example - if you don't need firewall just delete this function and pass NULL to the servers instead of its address -----
-          
+              // ----- firewall example - if you don't need firewall just delete this function and pass NULL to the servers instead of its address -----          
               bool firewall (String connectingIP) {                 // firewall callback function, return true if IP is accepted or false if not - must be reentrant!
                 if (connectingIP == "10.0.0.2") return false;       // block 10.0.0.2 (for the purpose of this example) 
                 else                            return true;        // ... but let every other client through
               }
 
-
 // ----- cron command handler example - if you don't want to handle cron tasks just delete this function and pass NULL to startCronDaemon... instead of its address -----
-
 void cronHandler (String& cronCommand) {
-  // debug: Serial.printf ("[%10lu] [cronDaemon] %s\n", millis (), cronCommand.c_str ());    
 
-          // handle your cron commands/events here
+          // ----- examples: handle your cron commands/events here - delete this code if it is not needed -----
           
           if (cronCommand == "gotTime") { // triggers only once - when ESP32 reads time from NTP servers for the first time
-
             time_t t = getLocalTime ();
             struct tm st = timeToStructTime (t);
             Serial.println ("Got time at " + timeToString (t) + " (local time), do whatever needs to be done the first time the time is known.");
-
-          } else if (cronCommand == "newYear'sGreetingsToProgrammer") { // triggers at the beginning of each year
+          } 
           
+          if (cronCommand == "newYear'sGreetingsToProgrammer") { // triggers at the beginning of each year
                 Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
-
           }
-         
+
+          if (cronCommand == "onMinute") { // triggers each minute
+            struct tm st = timeToStructTime (getLocalTime ()); 
+            freeHeap.addMeasurement (st.tm_min, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB 
+            httpRequestCount.addCounterToMeasurements (st.tm_min);          // take sample of number of web connections that arrived last minute
+          }
+
 }
 
 
@@ -297,20 +227,20 @@ void setup () {
   // FFat.format ();
   mountFileSystem (true);                                             // this is the first thing to do - all configuration files are on file system
 
-  // deleteFile ("/etc/ntp.conf");                                    // contains ntp server names form time sync - deleting this file would cause creating default one
-  // deleteFile ("/etc/crontab");                                     // contains cheduled tasks                  - deleting this file would cause creating empty one
+  // deleteFile ("/etc/ntp.conf");                                    // contains ntp server names for time sync - deleting this file would cause creating default one
+  // deleteFile ("/etc/crontab");                                     // contains cheduled tasks                 - deleting this file would cause creating empty one
   startCronDaemon (cronHandler, 8 * 1024);                            // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
                                                                       // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
                                                                       // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
-  // deleteFile ("/etc/passwd");                                      // contains users' accounts information     - deleting this file would cause creating default one
-  // deleteFile ("/etc/shadow");                                      // contains users' passwords                - deleting this file would cause creating default one
+  // deleteFile ("/etc/passwd");                                      // contains users' accounts information    - deleting this file would cause creating default one
+  // deleteFile ("/etc/shadow");                                      // contains users' passwords               - deleting this file would cause creating default one
   initializeUsers ();                                                 // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist
 
-  // deleteFile ("/network/interfaces");                              // contation STA(tion) configuration        - deleting this file would cause creating default one
-  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");          // contation STA(tion) credentials          - deleting this file would cause creating default one
-  // deleteFile ("/etc/dhcpcd.conf");                                 // contains A(ccess) P(oint) configuration  - deleting this file would cause creating default one
-  // deleteFile ("/etc/hostapd/hostapd.conf");                        // contains A(ccess) P(oint) credentials    - deleting this file would cause creating default one
+  // deleteFile ("/network/interfaces");                              // contation STA(tion) configuration       - deleting this file would cause creating default one
+  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");          // contation STA(tion) credentials         - deleting this file would cause creating default one
+  // deleteFile ("/etc/dhcpcd.conf");                                 // contains A(ccess) P(oint) configuration - deleting this file would cause creating default one
+  // deleteFile ("/etc/hostapd/hostapd.conf");                        // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
   startWiFi ();                                                       // starts WiFi according to configuration files, creates configuration files if they don't exist
 
   // start web server 
@@ -336,40 +266,27 @@ void setup () {
                                               NULL);                  // use firewall callback function for telnet server (replace with NULL if not needed)
   if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) dmesg ("[telnetServer] did not start.");
 
-  // ----- add your own code here -----
-  
-
               // ----- some examples - delete this code if it is not needed -----
 
               // crontab examples: you can add entries in crontab from code or you can write them into /etc/crontab file,
               // fromat is in both cases the same: second minute hour day month day_of_week command
-
               cronTabAdd ("* * * * * * gotTime");  // triggers only once - when ESP32 reads time from NTP servers for the first time
               cronTabAdd ("0 0 0 1 1 * newYear'sGreetingsToProgrammer");  // triggers at the beginning of each year
+              cronTabAdd ("0 * * * * * onMinute");  // triggers each minute at 0 seconds
 
               // other examples:
-              
               #define LED_BUILTIN 2                     // built-in led blinking is used in examples 01, 03 and 04
               pinMode (LED_BUILTIN, OUTPUT);         
               digitalWrite (LED_BUILTIN, LOW);
 
-              if (pdPASS != xTaskCreate ([] (void *) {  // start some of examples in separate thread
-                delay (5000);
-                Serial.printf ("[%10lu] [example 08] started.\n", millis ());
-                example08_time ();                      // example 08
-                Serial.printf ("[%10lu] [example 09] started.\n", millis ());
-                example09_makeRestCall ();              // example 09
-                Serial.printf ("[%10lu] [examples] finished.\n", millis ());
-                vTaskDelete (NULL); // end this thread
-              }, "examples", 4069, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10lu] [examples] couldn't start examples\n", millis ());
-
+  // ----- add your own code here -----
+  
 }
 
 void loop () {
-
            
               // ----- example: the use of time functions - delete this code if it is not needed -----
-              
+                            
               time_t l = timeToLocalTime (getGmt ()); // alternatively you can use: time_t l = getLocalTime ();
               if (l) { // if the time is set                        
                 static bool messageAlreadyDispalyed = false;
@@ -379,16 +296,6 @@ void loop () {
                 }
               }
             
-              // ----- example: do some measurements each minute - delete this code if it is not needed -----
-              
-              static unsigned long lastMeasurementTime = -60000; 
-              static int lastScale = -1;
-              if (millis () - lastMeasurementTime > 60000) {
-                lastMeasurementTime = millis ();
-                lastScale = (lastScale + 1) % 60;
-                freeHeap.addMeasurement (lastScale, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB 
-                httpRequestCount.addCounterToMeasurements (lastScale);          // take sample of number of web connections that arrived last minute
-                Serial.printf ("[%10lu] [%s] free heap: %6i bytes.\n", millis (), __func__, ESP.getFreeHeap ());
-              }
+  // ----- add your own code here -----
                 
 }

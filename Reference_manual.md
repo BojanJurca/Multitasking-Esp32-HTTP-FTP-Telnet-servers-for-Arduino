@@ -3,7 +3,7 @@
 
 ## startWiFi () function
 
-startWiFi reads WiFi configuration parameters from files: /network/interfaces, /etc/wpa_supplicant/wpa_supplicant.conf, /etc/dhcpcd.conf and /etc/hostapd/hostapd.conf and starts WiFi accordingly. These files are pretty much the same as it is normal in Linux and can be edited by vi telnet command. If the file system is not mounted then it just take network configuration parameters from #definitions: DEFAULT_STA_SSID, DEFAULT_STA_PASSWORD, DEFAULT_AP_SSID (#define it as "" if you don't want AP), DEFAULT_AP_PASSWORD (at least 8 charCTERS), HOSTNAME, DEFAULT_STA_IP, DEFAULT_STA_SUBNET_MASK, DEFAULT_STA_GATEWAY, DEFAULT_STA_DNS_1, DEFAULT_STA_DNS_2, DEFAULT_AP_IP, DEFAULT_AP_SUBNET_MASK. When being called the first time after the file system is formatted it creates configuration files with default #definitions.
+startWiFi reads WiFi configuration parameters from files: /network/interfaces, /etc/wpa_supplicant/wpa_supplicant.conf, /etc/dhcpcd.conf and /etc/hostapd/hostapd.conf and starts WiFi accordingly. These files are pretty much the same as it is normal in Linux and can be edited by vi telnet command. If the file system is not mounted then it just take network configuration parameters from #definitions: DEFAULT_STA_SSID, DEFAULT_STA_PASSWORD, DEFAULT_AP_SSID (#define it as "" if you don't want AP), DEFAULT_AP_PASSWORD (at least 8 characters), HOSTNAME, DEFAULT_STA_IP, DEFAULT_STA_SUBNET_MASK, DEFAULT_STA_GATEWAY, DEFAULT_STA_DNS_1, DEFAULT_STA_DNS_2, DEFAULT_AP_IP, DEFAULT_AP_SUBNET_MASK. When being called the first time after the file system is formatted it creates configuration files with default #definitions.
 
 **Declaration**
 
@@ -31,14 +31,14 @@ ping function pings target with ping packets and waits for the replies. ping fun
 **Declaration**
 
 ```C++
-uint32_t ping (String targetName, int pingCount = 1, int pingInterval = 1, int pingSize = 32, int timeOut = 1, TcpConnection *telnetConnection = NULL);
+uint32_t ping (String targetName, int pingCount = 4, int pingInterval = 1, int pingSize = 32, int timeOut = 1, TcpConnection *telnetConnection = NULL);
 ```
 
 **Parameters**
 
   - String targetName is target device name or IP number to be pinged.
 
-  - int pingCount = 1 is the number of ping packets to be sent.
+  - int pingCount = 4 is the number of ping packets to be sent.
 
   - int pingInterval = 1 is the number of seconds between ping packets.  
 
