@@ -7,25 +7,8 @@
     Real_time_clock synchronizes its time with NTP server accessible from internet once a day. Internet connection is 
     necessary for real_time_clock to work.
 
-    History:
-            - first release, 
-              November 14, 2018, Bojan Jurca
-            - changed delay () to SPIFFSsafeDelay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              April 13, 2019, Bojan Jurca          
-            - added support for all Europe time zones
-              April 22, 2019, Bojan Jurca
-            - added support for USA time zones 
-              September 30, 2019, Bojan Jurca
-            - added support for Japan, China and Canada time zones  
-              October 8, 2019, Bojan Jurca
-            - added support for ESP8266 and Russia time zones
-              October 14, 2019, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca     
-            - Arduino 1.8.13 supported some features (strftime, settimeofday) that have not been supoprted on ESP8266 earier, 
-             (but they have been supported on ESP32). These features need no longer beeing implemented in ESP8266 part of this module any more,
-             added cronDaemon, added support of /etc/ntp.conf and /etc/crontab configuration files, conversion of real_time_clock class into C functions
-             October 4, 2020, Bojan Jurca   
+    October 4, 2020, Bojan Jurca
+    
 */
 
 #ifndef __TIME_FUNCTIONS__
@@ -122,9 +105,8 @@
   RTC_DATA_ATTR bool __timeHasBeenSet__ = false;
   RTC_DATA_ATTR time_t __startupTime__ = 0;
 
-
-  portMUX_TYPE __csTime__ = portMUX_INITIALIZER_UNLOCKED;           // control real_time_clock critical sections in multi-threaded environment
-
+  static SemaphoreHandle_t __timeSemaphore__= xSemaphoreCreateMutex (); // control real_time_clock critical sections in multi-threaded environment 
+  
   String __ntpServer1__ = DEFAULT_NTP_SERVER_1;
   String __ntpServer2__ = DEFAULT_NTP_SERVER_2;
   String __ntpServer3__ = DEFAULT_NTP_SERVER_3;  
@@ -198,7 +180,7 @@
     return "NTP servers are not available.";
   }
   
-  portMUX_TYPE csCron = portMUX_INITIALIZER_UNLOCKED;
+  static SemaphoreHandle_t __cronSemaphore__= xSemaphoreCreateMutex (); 
 
   #define ANY 255
   
@@ -220,10 +202,10 @@
   
   bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, String cronCommand, bool readFromFile = false) {
     bool b = false;    
-    portENTER_CRITICAL (&csCron);
+    xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
       if (__cronTabEntries__ < MAX_CRONTAB_ENTRIES - 1) __cronEntry__ [__cronTabEntries__ ++] = {readFromFile, false, second, minute, hour, day, month, day_of_week, cronCommand, 0};
       b = true;
-    portEXIT_CRITICAL (&csCron);
+    xSemaphoreGive (__cronSemaphore__);
     if (b) return true;
     dmesg ("[cronDaemon] can't add " + cronCommand + ", cron table is full.");
     return false;
@@ -248,7 +230,7 @@
     
   int cronTabDel (String cronCommand) { // returns the number of cron commands being deleted
     int cnt = 0;
-    portENTER_CRITICAL (&csCron);
+    xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
       int i = 0;
       while (i < __cronTabEntries__) {
         if (__cronEntry__ [i].cronCommand == cronCommand) {        
@@ -259,14 +241,14 @@
           i ++;
         }
       }
-    portEXIT_CRITICAL (&csCron);
+    xSemaphoreGive (__cronSemaphore__);
     if (!cnt) dmesg ("[cronDaemon] there are no " + cronCommand + " commands to delete from cron table.");
     return cnt;
   }
 
   String cronTab () { // returns crontab content as a string
     String s = "";
-    portENTER_CRITICAL (&csCron);
+    xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
       if (!__cronTabEntries__) {
         s = "crontab is empty.";
       } else {
@@ -284,7 +266,7 @@
           s += __cronEntry__ [i].cronCommand;
         }
       }
-    portEXIT_CRITICAL (&csCron);
+    xSemaphoreGive (__cronSemaphore__);
     return s;    
   }
 
@@ -297,13 +279,13 @@
     } while (!getGmt ());
 
     void (* cronHandler) (String&) = (void (*) (String&)) ptrCronHandler;  
-    unsigned long lastSyncMillis = millis ();
+    unsigned long lastSyncMillis = millis (); 
 
     while (true) {
       delay (10);
 
       // 1. synchronize time with NTP servers
-      if (millis () - lastSyncMillis > 86400000) { ntpDate (); lastSyncMillis = millis (); } 
+      if (millis () - lastSyncMillis >= 86400000) { ntpDate (); lastSyncMillis = millis (); } 
 
       // 2. execute cron commands from cron table
       time_t now = getLocalTime ();
@@ -314,9 +296,9 @@
         struct tm slt = timeToStructTime (l);
         //scan through cron entries and find commands that needs to be executed (at time l)
         String commands = "\n";
-        portENTER_CRITICAL (&csCron);
+        xSemaphoreTake (__cronSemaphore__, portMAX_DELAY);
           for (int i = 0; i < __cronTabEntries__; i ++) {
-            // check if time condition is met for entry i and chabge state of the entry accordigly
+            // check if time condition is met for entry i and change state of the entry accordigly
             if ( (__cronEntry__ [i].second == ANY || __cronEntry__ [i].second == slt.tm_sec) && 
                  (__cronEntry__ [i].minute == ANY || __cronEntry__ [i].minute == slt.tm_min) &&
                  (__cronEntry__ [i].hour == ANY || __cronEntry__ [i].hour == slt.tm_hour) &&
@@ -337,7 +319,7 @@
   
             }
           }          
-        portEXIT_CRITICAL (&csCron);
+        xSemaphoreGive (__cronSemaphore__);
         // execute the commands
         // debug: Serial.printf ("[%10lu] [cronDaemon] to be executed at %s: >>>%s<<<\n", millis (), timeToString (l).c_str (), commands.c_str ());  
         int i = 1;
@@ -442,10 +424,11 @@
     settimeofday (&newTime, NULL); 
 
     if (__timeHasBeenSet__) {
-      dmesg ("[time] time corrected for " + String (newTime.tv_sec - oldTime.tv_sec) + " s to " + timeToString (timeToLocalTime (t))); 
+      // dmesg ("[time] time corrected for " + String (newTime.tv_sec - oldTime.tv_sec) + " s to " + timeToString (timeToLocalTime (t))); 
+      dmesg ("[time] time corrected from " + timeToString (timeToLocalTime (oldTime.tv_sec)) + " to " + timeToString (timeToLocalTime (t))); 
     } else {
       __timeHasBeenSet__ = true;
-      dmesg ("[time] time set to " + timeToString (timeToLocalTime (t))  + "."); 
+      dmesg ("[time] time set to " + timeToString (timeToLocalTime (t))); 
     }
   }
 
@@ -631,9 +614,9 @@
   #endif
 
   struct tm timeToStructTime (time_t t) { 
-    portENTER_CRITICAL (&__csTime__); // gmtime (&time_t) returns pointer to static structure which may be a problem in multi-threaded environment
+    xSemaphoreTake (__timeSemaphore__, portMAX_DELAY); // gmtime (&time_t) returns pointer to static structure which may be a problem in multi-threaded environment
       struct tm timeStr = *gmtime (&t);
-    portEXIT_CRITICAL (&__csTime__);
+    xSemaphoreGive (__timeSemaphore__);
     return timeStr;                                         
   }
 

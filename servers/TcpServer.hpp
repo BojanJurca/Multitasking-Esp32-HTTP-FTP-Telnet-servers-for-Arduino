@@ -54,7 +54,7 @@
   
 
   // control TcpServer critical sections
-  portMUX_TYPE csTcpConnectionInternalStructure = portMUX_INITIALIZER_UNLOCKED;
+  static SemaphoreHandle_t __TcpServerSemaphore__ = xSemaphoreCreateMutex (); 
   
 
   /*
@@ -149,10 +149,10 @@
   
       void closeConnection () {
         int connectionSocket;
-        portENTER_CRITICAL (&csTcpConnectionInternalStructure);
+        xSemaphoreTake (__TcpServerSemaphore__, portMAX_DELAY);
           connectionSocket = __socket__;
           __socket__ = -1;
-        portEXIT_CRITICAL (&csTcpConnectionInternalStructure);
+        xSemaphoreGive (__TcpServerSemaphore__);
         if (connectionSocket != -1) close (connectionSocket); // can't close socket inside critical section, close it now
       }
   

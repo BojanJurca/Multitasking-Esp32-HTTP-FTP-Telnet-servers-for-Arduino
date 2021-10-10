@@ -4,19 +4,8 @@
   
    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-   History:
-            - first release, 
-              November 15, 2018, Bojan Jurca
-            - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              April 13, 2019, Bojan Jurca
-            - added functions __readFileWithoutSemaphore__ and __writeFileWithoutSemaphore__
-              September 8, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca
-            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
-              October 10, 2020, Bojan Jurca
-            - code review in order to make it more comprehensive
-              July, 5, 2021, Bojan Jurca
+   July, 5, 2021, Bojan Jurca
+    
 */
 
 

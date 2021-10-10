@@ -5,10 +5,9 @@
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
     smtpClient is built upon non-threadet TCP client.
-   
-    History:
-            - first release, 
-              August 12, 2021, Bojan Jurca
+
+    August, 12, 2021, Bojan Jurca
+
  */
 
 

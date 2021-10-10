@@ -13,35 +13,9 @@
       /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses 
       /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
   
-   History:
-            - first release, 
-              November 16, 2018, Bojan Jurca
-            - added ifconfig, arp 
-              December 9, 2018, Bojan Jurca
-            - added iw
-              December 11, 2018, Bojan Jurca
-            - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              simplified installation
-              April 13, 2019, Bojan Jurca
-            - arp command improvement - now a pointer to arp table is obtained during initialization - more likely to be successful
-              April 21, 2019, Bojan Jurca
-            - added network event logging, 
-              the use of dmesg 
-              September 14, 2019, Bojan Jurca
-            - putting wlan numbers in order,  
-              automatic reconnection to router,
-              bug fixes
-              October 13, Bojan Jurca
-            - simplifyed entry of default parameters,
-              simplifyed format of configuration files 
-              December 1, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca
-            - added DNS servers to static STA IP configuration
-              March 5, 2021, Bojan Jurca
-            - code review in order to make it more comprehensive
-              July, 6, 2021, Bojan Jurca
- */
+    September, 9, 2021, Bojan Jurca
+    
+*/
 
 
 #ifndef __NETWORK__
@@ -857,7 +831,7 @@
     
     // Create socket
     if ((s = socket (AF_INET, SOCK_RAW, IP_PROTO_ICMP)) < 0) {
-      if (telnetConnection) telnetConnection->sendData ("Error creating socket."); 
+      if (telnetConnection) telnetConnection->sendData ( (char *) "Error creating socket."); 
       return 0;
     }
     

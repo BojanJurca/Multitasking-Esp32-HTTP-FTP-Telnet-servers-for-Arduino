@@ -57,17 +57,17 @@ void setup () {
 
   // deleteFile ("/etc/ntp.conf");
   // deleteFile ("/etc/crontab");
-  startCronDaemonAndInitializeItAtFirstCall (NULL, 8 * 1024); 
+  startCronDaemon (NULL, 8 * 1024); 
 
   // deleteFile ("/etc/passwd");
   // deleteFile ("/etc/shadow");
-  initializeUsersAtFirstCall ();
+  initializeUsers ();
 
   // deleteFile ("/network/interfaces");
   // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");
   // deleteFile ("/etc/dhcpcd.conf");
   // deleteFile ("/etc/hostapd/hostapd.conf");
-  startNetworkAndInitializeItAtFirstCall ();
+  startWiFi ();
 
   // start telnet server
   //telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, 16 * 1024, "0.0.0.0", 23, firewall);

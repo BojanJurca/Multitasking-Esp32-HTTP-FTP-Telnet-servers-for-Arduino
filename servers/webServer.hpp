@@ -11,32 +11,10 @@
     request. If not the connectionHandler will try to resolve it by checking file system for a proper .html file
     or it will respond with reply 404 - page not found.
   
-   History:
-            - first release, 
-              November 19, 2018, Bojan Jurca
-            - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              April 13, 2019, Bojan Jurca 
-            - added webClient function,
-              added basic support for web sockets
-              May, 19, 2019, Bojan Jurca
-            - the use of dmesg
-              September 14, 2019, Bojan Jurca
-            - added webClientCallMAC function
-              September, 27, Bojan Jurca
-            - separation of httpHandler and wsHandler
-              October 30, 2019, Bojan Jurca
-            - webServer is now inherited from TcpServer and renamed to httpServer
-              February 27, 2020, Bojan Jurca 
-            - elimination of compiler warnings and some bugs
-              Jun 11, 2020, Bojan Jurca            
-            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13,
-              support for keep-alive directive
-              October 10, 2020, Bojan Jurca
-            - support for HTTP request and response header fields and cookies
-              February 3, 2021, Bojan Jurca
-            - MIME types
-              March 2, Bojan Jurca
- */
+    September, 18, 2021, Bojan Jurca
+
+*/
+
 
 #ifndef __WEB_SERVER__
   #define __WEB_SERVER__
@@ -601,11 +579,12 @@ readingPayload:
               File f = FFat.open (fileName.c_str (), FILE_READ);           
               if (f) {
                 if (!f.isDirectory ()) {
-                  char *buff = (char *) malloc (2048); // get 2 KB of memory from heap
+                  #define BUFF_SIZE 2048
+                  char *buff = (char *) malloc (BUFF_SIZE); // get 2 KB of memory from heap
                   if (buff) {
                     String httpHeader = "HTTP/1.1 " + wsp->httpResponseStatus + "\r\n" + wsp->httpResponseHeaderFields + "Content-Length:" + String (f.size ()) + "\r\n\r\n";
                     // debug: Serial.printf ("[" + __class__ + " debug] %s", httpHeader.c_str ());
-                    if (httpHeader.length () > 2046) { // there should normally be enough space, but check anyway
+                    if (httpHeader.length () > BUFF_SIZE - 2) { // there should normally be enough space, but check anyway
                       f.close ();
                       return "HTTP/1.1 500 Internal server error\r\nContent-Length:29\r\n\r\nError: HTTP header too large."; 
                     }
@@ -613,7 +592,7 @@ readingPayload:
                     int i = strlen (buff);
                     while (f.available ()) {
                       *(buff + i++) = f.read ();
-                      if (i == 2048) { wsp->connection->sendData ((char *) buff, 2048); i = 0; }
+                      if (i == BUFF_SIZE) { wsp->connection->sendData ((char *) buff, BUFF_SIZE); i = 0; }
                     }
                     if (i) { wsp->connection->sendData (buff, i); }
                     free (buff);
@@ -638,7 +617,8 @@ readingPayload:
 */
 
   String webClient (String serverName, int serverPort, TIME_OUT_TYPE timeOutMillis, String httpRequest) {
-    char *buffer = (char *) malloc (2048); // reserve some space from heap to hold blocks of response
+    #define BUFF_SIZE 2048
+    char *buffer = (char *) malloc (BUFF_SIZE); // reserve some space from heap to hold blocks of response
     if (!buffer) { dmesg ("[webClient] could not get enough heap memory."); return ""; }
     *buffer = 0;
     
@@ -655,34 +635,41 @@ readingPayload:
       // if the response is short enough it will normally arrive in one data block although
       // TCP does not guarantee that it would
       int receivedTotal = 0;
-      while (int received = nonThreadedTcpConnection->recvData (buffer, sizeof (buffer) - 1)) {
+      while (int received = nonThreadedTcpConnection->recvData (buffer, BUFF_SIZE - 1)) {
         receivedTotal += received;
         buffer [received] = 0; // mark the end of the string we have just read
         retVal += String (buffer);
-        // Serial.printf ("[%10lu] [webClient] received %i bytes.\n", millis (), received);
+        // DEBUG: Serial.printf ("[%10lu] [webClient] received %i bytes.\n", millis (), received);
+      }
+      if (receivedTotal) {
         // search buffer for content-lenght: to check if the whole reply has arrived against receivedTotal
         char *s = (char *) retVal.c_str ();
         char *c = stristr (s, (char *) "CONTENT-LENGTH:");
         if (c) {
           unsigned long ul;
           if (sscanf (c + 15, "%lu", &ul) == 1) {
-            // Serial.printf ("[%10lu] [webClient] content-length %lu, receivedTotal %i.\n", millis (), ul, receivedTotal);
-            if ((c = strstr (c + 15, "\r\n\r\n"))) 
+            // DEBUG: Serial.printf ("[%10lu] [webClient] content-length %lu, receivedTotal %i.\n", millis (), ul, receivedTotal);
+            if ((c = strstr (c + 15, "\r\n\r\n"))) {
               if (receivedTotal == ul + c - s + 4) {
-                // Serial.printf ("[%10lu] [webClient] whole HTTP response of content-length %lu bytes and total length of %u bytes has arrived.\n", millis (), ul, retVal.length ());
+                // DEBUG: Serial.printf ("[%10lu] [webClient] whole HTTP response of content-length %lu bytes and total length of %u bytes has arrived.\n", millis (), ul, retVal.length ());
                 free (buffer);
                 return retVal; // the response is complete
+              } else {
+                dmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
+                retVal = "";
               }
+            }
           }
-        }
+        } // else  'content-lenght' not found in the reply, assume it is OK
+      } else {
+        dmesg ("[webClient] time-out, httpRequest = " + httpRequest);
       }
-      if (receivedTotal) dmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
-      else               dmesg ("[webClient] time-out, httpRequest = " + httpRequest);
+      // DEBUG: Serial.println (retVal);
     } else {
       dmesg ("[webClient] unable to connect to " + serverName + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
     }     
     free (buffer);
-    return ""; // response arrived, it may even be OK but it doesn't match content-length field
+    return retVal;
   }
  
 #endif

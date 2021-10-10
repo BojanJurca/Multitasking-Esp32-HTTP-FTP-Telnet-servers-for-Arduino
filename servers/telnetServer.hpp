@@ -9,38 +9,9 @@
     A connectionHandler handles some telnet commands by itself but the calling program can provide its own callback
     function. In this case connectionHandler will first ask callback function wheather is it going to handle the telnet 
     request. If not, the connectionHandler will try to process it.
-  
-    History:
-            - first release, 
-              November 29, 2018, Bojan Jurca
-            - added ifconfig and arp commands, 
-              December 9, 2018, Bojan Jurca
-            - added iw (dev wlan1 station dump) command, 
-              December 11, 2018, Bojan Jurca          
-            - added fileSystemSemaphore and delay () to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              April 13, 2019, Bojan Jurca
-            - telnetCommandHandler parameters are now easyer to access, improved user management,
-              September 4th, Bojan Jurca     
-            - added dmesg (--follow) command,
-              September 14, 2019, Bojan Jurca        
-            - added free command,
-              October 2, 2019, Bojan Jurca
-            - added mkfs command, replaced gmtime () function that returns ponter to static structure with reentrant solution
-              October 29, 2019, Bojan Jurca
-            - added uname and telnet commands
-              November 10, 2019, Bojan Jurca
-            - added curl command
-              December 22, 2019, Bojan Jurca
-            - telnetServer is now inherited from TcpServer
-              February 27, 2020, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 11, 2020, Bojan Jurca 
-            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13, added telnet commands (pwd, cd, mkdir, rmdir, clear, vi, ...)
-              October 10, 2020, Bojan Jurca
-            - code review in order to make it more comprehensive
-              May, 11, 2021, Bojan Jurca
-            - added sendmail command
-              August, 12, 2021, Bojan Jurca 
+    
+    September, 9, 2021, Bojan Jurca
+    
 */
 
 
@@ -126,17 +97,17 @@
                                                                            }; // there are always at least 4 messages in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
   byte __dmesgBeginning__ = 0; // first used location
   byte __dmesgEnd__ = 4;       // the location next to be used
-  portMUX_TYPE __csDmesg__ = portMUX_INITIALIZER_UNLOCKED;
-
+  static SemaphoreHandle_t __dmesgSemaphore__= xSemaphoreCreateMutex (); 
+  
   // adds message into dmesg circular queue
   void telnetDmesg (String message) {
-    portENTER_CRITICAL (&__csDmesg__); 
+    Serial.printf ("[%10lu] [telnetServer] dmesg: %s\n", millis (), message.c_str ());
+    xSemaphoreTake (__dmesgSemaphore__, portMAX_DELAY);
     __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
     __dmesgCircularQueue__ [__dmesgEnd__].time = getGmt ();
     __dmesgCircularQueue__ [__dmesgEnd__].message = message;
     if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
-    portEXIT_CRITICAL (&__csDmesg__);
-    Serial.printf ("[%10lu] %s\n", millis (), message.c_str ());
+    xSemaphoreGive (__dmesgSemaphore__);
   }
 
   #define dmesg telnetDmesg
@@ -231,15 +202,13 @@
                         {
                           __externalTelnetCommandHandler__ = telnetCommandHandler;
 
-                          if (started ()) dmesg ("[" + __class__ + "] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                          else            dmesg ("[" + __class__ + "] couldn't start.");
+                          if (started ()) dmesg ("[telnetServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                          else            dmesg ("[telnetServer] couldn't start.");
                         }
 
-      ~telnetServer ()  { if (started ()) dmesg ("[" + __class__ + "] stopped."); }
+      ~telnetServer ()  { if (started ()) dmesg ("[telnetServer] stopped."); }
       
     private:
-
-      String __class__ = "telnetServer";    
 
       String (* __externalTelnetCommandHandler__) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) = NULL; // telnet command handler supplied by calling program 
 
@@ -260,7 +229,7 @@
           tsp = {"root", "", "", (char *) "\r\n# ", connection, 0, 0, 0, 0};
           tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);     
           // tell the client to go into character mode, not to echo an send its window size, then say hello 
-          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + connection->getOtherSideIP () + "!\r\nuser: "); 
+          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + connection->getOtherSideIP ()); 
           dmesg ("[telnetServer] " + tsp.userName + " logged in.");
           connection->sendData ("\r\n\nWelcome " + tsp.userName + ",\r\nyour home directory is " + tsp.homeDir + ",\r\nuse \"help\" to display available commands.\r\n" + tsp.prompt);
         
@@ -777,7 +746,7 @@
 
       inline String __dmesg__ (bool follow, bool trueTime, telnetSessionParameters *tsp) __attribute__((always_inline)) { // displays dmesg circular queue over telnet connection
         // make a copy of all messages in circular queue in critical section
-        portENTER_CRITICAL (&__csDmesg__);  
+        xSemaphoreTake (__dmesgSemaphore__, portMAX_DELAY);
         byte i = __dmesgBeginning__;
         String s = "";
         do {
@@ -791,7 +760,7 @@
           }
           s += String (c) + __dmesgCircularQueue__ [i].message;
         } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
-        portEXIT_CRITICAL (&__csDmesg__);
+        xSemaphoreGive (__dmesgSemaphore__);
         // send everything to the client
         if (!tsp->connection->sendData (s)) return "";
     
@@ -806,7 +775,7 @@
             delay (10); // wait a while and check again
           }
           // __dmesgEnd__ has changed which means that at least one new message has been inserted into dmesg circular queue menawhile
-          portENTER_CRITICAL (&__csDmesg__);
+          xSemaphoreTake (__dmesgSemaphore__, portMAX_DELAY);
           s = "";
           do {
             s += "\r\n";
@@ -819,7 +788,7 @@
             }
             s += String (c) + __dmesgCircularQueue__ [i].message;
           } while ((i = (i + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) != __dmesgEnd__);
-          portEXIT_CRITICAL (&__csDmesg__);
+          xSemaphoreGive (__dmesgSemaphore__);
           // send everything to the client
           if (!tsp->connection->sendData (s)) return "";
         }
@@ -881,7 +850,8 @@
         File f;
         if ((bool) (f = FFat.open (fp, FILE_READ))) {
           if (!f.isDirectory ()) {
-            char *buff = (char *) malloc (2048); // get 2 KB of memory from heap (not from the stack)
+            #define BUFF_SIZE 2048
+            char *buff = (char *) malloc (BUFF_SIZE); // get 2 KB of memory from heap (not from the stack)
             if (buff) {
               *buff = 0;
               int i = strlen (buff);
@@ -896,7 +866,7 @@
                   default:
                               i ++;                  
                 }
-                if (i >= 2048 - 2) { tsp->connection->sendData ((char *) buff, i); i = 0; }
+                if (i >= BUFF_SIZE - 2) { tsp->connection->sendData ((char *) buff, i); i = 0; }
               }
               if (i) { tsp->connection->sendData ((char *) buff, i); }
               free (buff);

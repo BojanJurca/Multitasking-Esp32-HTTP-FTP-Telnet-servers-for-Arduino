@@ -11,23 +11,12 @@
   
    Functions needed to manage users can be found in this module.
   
-   History:
-            - first release, 
-              November 18, 2018, Bojan Jurca
-            - added fileSystemSemaphore to assure safe muti-threading while using SPIFSS functions (see https://www.esp32.com/viewtopic.php?t=7876), 
-              simplified installation,
-              April 13, 2019, Bojan Jurca
-            - fixed bug in getUserHomeDirectory - it got additional parameter homeDir
-              added functions userAdd and userDel
-              September 4th, Bojan Jurca
-            - elimination of compiler warnings and some bugs
-              Jun 10, 2020, Bojan Jurca     
-            - port from SPIFFS to FAT file system, adjustment for Arduino 1.8.13
-              October 10, 2020, Bojan Jurca
-    
     Unix user management references:
             - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
             - https://www.cyberciti.biz/faq/understanding-etcshadow-file/          
+
+    October 10, 2020, Bojan Jurca
+
  */
 
 
