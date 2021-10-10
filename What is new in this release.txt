@@ -2,7 +2,7 @@ New in 1.29
 
   - SMTP client (sendMail function) 
   - some functions are renamed
-  - simplifycation of template by moving the examples to separate files
+  - simplification of template by moving the examples to separate files
   - additional examples
   - step by step guides
   - reference manual
