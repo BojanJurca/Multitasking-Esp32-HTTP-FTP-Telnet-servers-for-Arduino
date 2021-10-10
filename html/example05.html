@@ -138,17 +138,17 @@
    <div class='d3'>
     <button class='button button1' id='niceButton2' onclick="
 
-     client.request ('/niceButton2/pressed', 'PUT', function (json) {;});
+     client.request ('/niceButton2/pressed', 'PUT', function (json) { alert ('Reply from web server: ' + json); });
 
     ">&nbsp;PRESS&nbsp;</button>
     <button class='button button2' id='niceButton4' onclick="
 
-     client.request ('/niceButton4/pressed', 'PUT', function (json) {;});
+     client.request ('/niceButton4/pressed', 'PUT', function (json) {  alert ('Reply from web server: ' + json); });
 
     ">&nbsp;PRESS&nbsp;</button>
     <button class='button button3' id='niceButton6' onclick="
 
-     client.request ('/niceButton6/pressed', 'PUT', function (json) {;});
+     client.request ('/niceButton6/pressed', 'PUT', function (json) {  alert ('Reply from web server: ' + json); });
 
     ">&nbsp;PRESS&nbsp;</button>
    </div>
