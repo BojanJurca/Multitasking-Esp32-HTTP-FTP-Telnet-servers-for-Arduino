@@ -1,6 +1,6 @@
 # ESP32 with Web Server, Telnet Server, file system, FTP Server and SMTP client
 
-**Maybe you would like to try live demo first? All three servers are available on [193.77.159.208](http://193.77.159.208) (login as root/rootpassword). Please be lenient, ESP32 is not primarily intended for WAN.**
+**Want to try live demo? All three servers are available on demo ESP32 at [193.77.159.208](http://193.77.159.208) (login as root/rootpassword). Please be lenient, ESP32 is not primarily intended for WAN.**
 
 It is more or less about user interface:
 
