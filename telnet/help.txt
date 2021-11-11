@@ -9,7 +9,7 @@ You can use the following commands:
   date [-s <YYYY/MM/DD hh:mm:ss>]                       - Displays and sets date/time (in 24-hour format).
   ntpdate [-u [<ntpServer>]]                            - Makes ESP32 to synchronize time with NTP server.
   crontab [-l]                                          - Displays current content of cron table in ESP32 server memory.
-  free [-s <n>] (where 0 < n < 300)                     - Displays free ESP32 memory.
+  free [-s <n>] [-d|-8|-32|-e] (where 0 < n < 300)      - Displays free ESP32 memory.
   dmesg [--follow] [-T]                                 - Displays ESP32 server messages.
   mkfs.fat                                              - Formats (also erases) ESP32 flash disk with FAT file system.
   fs_info                                               - Displays basic information about flash disk FAT file system.
