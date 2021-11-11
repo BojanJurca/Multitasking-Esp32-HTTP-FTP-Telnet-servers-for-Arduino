@@ -11,7 +11,7 @@
 
 #include "file_system.h"
 #include "network.h"
-// #define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
+#define USER_MANAGEMENT NO_USER_MANAGEMENT                   // define the kind of user management project is going to use (see user_management.h)
 // #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT            
 // (default) #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT
 #include "user_management.h"
@@ -26,30 +26,22 @@
 #include "webServer.hpp"                              // include HTTP Server
 #include "ftpServer.hpp"                              // include FTP server
 #include "telnetServer.hpp"                           // include Telnet server
-#include "smtpClient.h"                               // include SMTP client (sendMail)
+#include "smtpClient.h"                               // include SMTP client (sendMail function)
 
 
 #include "oscilloscope.h"
 
+  String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { return "<html><body>Is this working?</body></html>"; }
 
-  String httpRequestHandler (String& httpRequest, httpServer::wwwSessionParameters *wsp) { 
-    return "<html><body>Is this working?</body></html>"; 
-  }
+  void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { return; }
 
-  void wsRequestHandler (String& wsRequest, WebSocket *webSocket) { 
-    return; 
-  }
+  String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { return ""; }
 
-  String telnetCommandHandler (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) { 
-    return ""; 
-  }
-
-  bool firewall (String connectiongIP) { return true; }
-
+  bool firewall (String connectingIP) { return true; }
 
 void setup () {  
   Serial.begin (115200);
-  
+
   // __TEST_DST_TIME_CHANGE__ ();
 
   // FFat.format ();
@@ -70,23 +62,14 @@ void setup () {
   startWiFi ();
 
   // start telnet server
-  //telnetServer *telnetSrv = new telnetServer (telnetCommandHandler, 16 * 1024, "0.0.0.0", 23, firewall);
-  //if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) Serial.println ("[telnetServer] did not start.");
+  telnetServer *telnetSrv = newTelnetServer (telnetCommandHandler, 16 * 1024, "0.0.0.0", 23, firewall);
+  if (!telnetSrv) Serial.println ("[telnetServer] did not start.");
   
   // start web server
-  httpServer *httpSrv = new httpServer (httpRequestHandler,           // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                        wsRequestHandler,             // a callback function that will handle WS requests, NULL to ignore WS requests
-                                        8 * 1024,                     // 8 KB stack size is usually enough, if httpRequestHandler or wsRequestHandler use more stack increase this value until server is stable
-                                        "0.0.0.0",                    // start HTTP server on all available ip addresses
-                                        80,                           // HTTP port
-                                        NULL);                        // we won't use firewall callback function for HTTP server
-  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
+  httpServer *httpSrv = newHttpServer (httpRequestHandler, wsRequestHandler, 8 * 1024, "0.0.0.0", 80, NULL); if (!httpSrv) dmesg ("[httpServer] did not start.");
 
   // start FTP server
-  ftpServer *ftpSrv = new ftpServer ("0.0.0.0",                       // start FTP server on all available ip addresses
-                                     21,                              // controll connection FTP port
-                                     firewall);                       // use firewall callback function for FTP server (replace with NULL if not needed)
-  if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
+  ftpServer *ftpSrv = newFtpServer ("0.0.0.0", 21, firewall); if (!ftpSrv) dmesg ("[ftpServer] did not start.");
 
 }
 

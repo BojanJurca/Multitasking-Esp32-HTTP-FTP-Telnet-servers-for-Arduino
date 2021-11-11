@@ -9,7 +9,7 @@
     for data transfer. Beside that, data connection can be initialized by FTP server or FTP client and it is FTP client's
     responsibility to decide which way it is going to be.
    
-    July, 25, 2021, Bojan Jurca
+    November, 6, 2021, Bojan Jurca
     
 */
 
@@ -89,11 +89,10 @@
                  bool (* firewallCallback) (String connectingIP)       // a reference to callback function that will be celled when new connection arrives 
                 ): TcpServer (__staticFtpConnectionHandler__, (void *) this, 8 * 1024, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                                                 {
-                                                  if (started ()) dmesg ("[ftpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                                                  else            dmesg ("[ftpServer] couldn't start.");
+                                                  dmesg ("[ftpServer] started on " + serverIP + ":" + serverPort + (firewallCallback ? F (" with firewall.") : F (".")));
                                                 }
       
-      ~ftpServer ()                             { if (started ()) dmesg ("[ftpServer] stopped."); }
+      ~ftpServer ()                             { dmesg (F ("[ftpServer] stopped.")); }
                                      
     private:
 
@@ -107,20 +106,20 @@
         
         ftpSessionParameters fsp = {"", "", "", connection, NULL, NULL};
         
-        String cmdLine;
+        String cmdLine; cmdLine.reserve (80);
 
         if (!__fileSystemMounted__) {
-          connection->sendData ("220-" + String (HOSTNAME) + " file system file system not mounted. You may have to use telnet and mkfs.fat to format flash disk first.");
+          connection->sendData ("220-" + String (HOSTNAME) + F (" file system file system not mounted. You may have to use telnet and mkfs.fat to format flash disk first."));
           goto closeFtpConnection;
         }
   
         #if USER_MANAGEMENT == NO_USER_MANAGEMENT
-          if (!connection->sendData ("220-" + String (HOSTNAME) + " FTP server - everyone is allowed to login\r\n220 \r\n")) goto closeFtpConnection;
+          if (!connection->sendData ("220-" + String (HOSTNAME) + F (" FTP server - everyone is allowed to login\r\n220 \r\n"))) goto closeFtpConnection;
         #else
-          if (!connection->sendData ("220-" + String (HOSTNAME) + " FTP server - please login\r\n220 \r\n")) goto closeFtpConnection;
+          if (!connection->sendData ("220-" + String (HOSTNAME) + F (" FTP server - please login\r\n220 \r\n"))) goto closeFtpConnection;
         #endif  
 
-        while (13 == __readLineFromClient__ (&cmdLine, connection)) { // read and process comands in a loop        
+        while (13 == __readLineFromClient__ (cmdLine, connection)) { // read and process comands in a loop        
 
           if (cmdLine.length ()) {
 
@@ -157,22 +156,22 @@
         } // read and process comands in a loop
 
 closeFtpConnection:      
-        if (fsp.userName != "") dmesg ("[ftpServer] " + fsp.userName + " logged out.");
+        if (fsp.userName != "") dmesg ("[ftpServer] " + fsp.userName + F (" logged out."));
       }
     
       // returns last chracter pressed (Enter or 0 in case of error
-      static char __readLineFromClient__ (String *line, TcpConnection *connection) {
-        *line = "";
+      static char __readLineFromClient__ (String& line, TcpConnection *connection) {
+        line = "";
         
         char c;
-        while (connection->recvData (&c, 1)) { // read and process incomming data in a loop 
+        while (connection->recvChar (&c)) { // read and process incoming data in a loop 
           switch (c) {
               case 10:  // ignore
                         break;
               case 13:  // end of command line
                         return 13;
               default:  // fill the buffer 
-                        *line += c;
+                        line += c;
                         break;              
           } // switch
         } // while
@@ -265,55 +264,55 @@ closeFtpConnection:
 
         // -------------------------------------------------------------------- INVALID COMMAND
                       
-        return "502 command not implemented\r\n"; // "220 unsupported command\r\n";                               
+        return F ("502 command not implemented\r\n"); // "220 unsupported command\r\n";                               
       }
 
       inline String __OPTS__ (String argv1, String argv2) { // enable UTF8
         argv1.toUpperCase (); argv2.toUpperCase ();
-        if (argv1 == "UTF8" && argv2 == "ON")         return "200 UTF8 enabled\r\n";
-                                                      return "502 command not implemented\r\n";
+        if (argv1 == "UTF8" && argv2 == "ON")         return F ("200 UTF8 enabled\r\n");
+                                                      return F ("502 command not implemented\r\n");
       }
 
       inline String __USER__ (String userName, ftpSessionParameters *fsp) { // save user name and require password
-        fsp->userName = userName;                     return "331 enter password\r\n";
+        fsp->userName = userName;                     return F ("331 enter password\r\n");
       }
 
       String __PASS__ (String password, ftpSessionParameters *fsp) { // login
         if (checkUserNameAndPassword (fsp->userName, password)) fsp->workingDir = fsp->homeDir = getUserHomeDirectory (fsp->userName);
         if (fsp->homeDir > "") { // if logged in
-                                                      dmesg ("[ftpServer] " + fsp->userName + " logged in.");
-                                                      return "230 logged on, your home directory is \"" + fsp->homeDir + "\"\r\n";
+                                                      dmesg ("[ftpServer] " + fsp->userName + F (" logged in."));
+                                                      return "230 logged on, your home directory is \"" + fsp->homeDir + F ("\"\r\n");
         } else { 
-                                                      dmesg ("[ftpServer] " + fsp->userName + " login attempt failed.");
-                                                      return "530 user name or password incorrect\r\n"; 
+                                                      dmesg ("[ftpServer] " + fsp->userName + F (" login attempt failed."));
+                                                      return F ("530 user name or password incorrect\r\n"); 
         }
       }
 
       inline String __PWD__ (ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                      return "530 not logged in\r\n";
-                                                     return "257 \"" + fsp->workingDir + "\"\r\n";
+        if (fsp->homeDir == "")                      return F ("530 not logged in\r\n");
+                                                     return "257 \"" + fsp->workingDir + F ("\"\r\n");
       }
 
       inline String __TYPE__ (ftpSessionParameters *fsp) { // command needs to be implemented but we are not going to repond to it
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
-                                                      return "200 ok\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
+                                                      return F ("200 ok\r\n");
       }
 
       inline String __NOOP__ () { 
-                                                      return "200 ok\r\n";
+                                                      return F ("200 ok\r\n");
       }
       
       inline String __SYST__ (ftpSessionParameters *fsp) { // command needs to be implemented but we are going to pretend this is a UNIX system
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
-                                                      return "215 UNIX Type: L8\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
+                                                      return F ("215 UNIX Type: L8\r\n");
       }
 
       inline String __SIZE__ (String fileName, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
 
         String fp = fullFilePath (fileName, fsp->workingDir);
-        if (fp == "")                                 return "550 invalid file name\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (fp == "")                                 return F ("550 invalid file name\r\n");
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
         unsigned long fSize = 0;
         File f = FFat.open (fp, FILE_READ);
@@ -325,24 +324,24 @@ closeFtpConnection:
       }
 
       inline String __PASV__ (ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
 
         int ip1, ip2, ip3, ip4, p1, p2; // get (this) server IP and next free port
         if (4 == sscanf (fsp->controlConnection->getThisSideIP ().c_str (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) {
           // get next free port
           int pasiveDataPort = __pasiveDataPort__ ();
            // open a new TCP server to accept pasive data connection
-          fsp->pasiveDataServer = new TcpServer ((TIME_OUT_TYPE) 5000, fsp->controlConnection->getThisSideIP (), pasiveDataPort, NULL);
+          fsp->pasiveDataServer = newTcpServer ((TIME_OUT_TYPE) 5000, fsp->controlConnection->getThisSideIP (), pasiveDataPort, NULL);
           // report to ftp client through control connection how to connect for data exchange
           p2 = pasiveDataPort % 256;
           p1 = pasiveDataPort / 256;
           if (fsp->pasiveDataServer)                  return "227 entering passive mode (" + String (ip1) + "," + String (ip2) + "," + String (ip3) + "," + String (ip4) + "," + String (p1) + "," + String (p2) + ")\r\n";
         } 
-                                                      return "425 can't open data connection\r\n";
+                                                      return F ("425 can't open data connection\r\n");
       }
 
       inline String __PORT__ (String dataConnectionInfo, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
         
         int ip1, ip2, ip3, ip4, p1, p2; // get client IP and port
         if (6 == sscanf (dataConnectionInfo.c_str (), "%i,%i,%i,%i,%i,%i", &ip1, &ip2, &ip3, &ip4, &p1, &p2)) {
@@ -350,27 +349,27 @@ closeFtpConnection:
           int activeDataPort;
           sprintf (activeDataIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4); 
           activeDataPort = 256 * p1 + p2;
-          fsp->activeDataClient = new TcpClient (activeDataIP, activeDataPort, (TIME_OUT_TYPE) 5000); // open a new TCP client for active data connection
+          fsp->activeDataClient = newTcpClient (activeDataIP, activeDataPort, (TIME_OUT_TYPE) 5000); // open a new TCP client for active data connection
           if (fsp->activeDataClient) {
-            if (fsp->activeDataClient->connection ()) return "200 port ok\r\n"; 
+            if (fsp->activeDataClient->connection ()) return F ("200 port ok\r\n"); 
             delete (fsp->activeDataClient);
             fsp->activeDataClient = NULL;
           }
         } 
-                                                      return "425 can't open data connection\r\n";
+                                                      return F ("425 can't open data connection\r\n");
       }
 
       inline String __NLST__ (String& directory, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
 
         String fp = fullDirectoryPath (directory, fsp->workingDir);
 
-        if (fp == "" || !isDirectory (fp))            return "550 invalid directory\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (fp == "" || !isDirectory (fp))            return F ("550 invalid directory\r\n");
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
         if (fp.substring (fp.length () - 1) != "/") fp += '/'; // full directoy path always ends with /
 
-        if (!fsp->controlConnection->sendData ((char *) "150 starting transfer\r\n")) return ""; // control connection closed
+        if (!fsp->controlConnection->sendData ((char *) F ("150 starting transfer\r\n"))) return ""; // control connection closed
         
         int bytesWritten = 0;
         TcpConnection *dataConnection = NULL;
@@ -381,62 +380,62 @@ closeFtpConnection:
         
         if (fsp->activeDataClient) { delete (fsp->activeDataClient); fsp->activeDataClient = NULL; }
         if (fsp->pasiveDataServer) { delete (fsp->pasiveDataServer); fsp->pasiveDataServer = NULL; }
-        if (bytesWritten)                             return "226 transfer complete\r\n";
-                                                      return "425 can't open data connection\r\n";
+        if (bytesWritten)                             return F ("226 transfer complete\r\n");
+                                                      return F ("425 can't open data connection\r\n");
       }
 
       inline String __CWD__ (String directory, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
         String fp = fullDirectoryPath (directory, fsp->workingDir);
         if (fp == "" || !isDirectory (fp))            return "501 invalid directory " + fp +"\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
         fsp->workingDir = fp;                         return "250 your working directory is now " + fsp->workingDir + "\r\n";
       }
 
       inline String __XMKD__ (String directory, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
         String fp = fullDirectoryPath (directory, fsp->workingDir);
-        if (fp == "")                                 return "501 invalid directory\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (fp == "")                                 return F ("501 invalid directory\r\n");
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
         if (makeDir (fp))                             return "257 \"" + fp + "\" created\r\n";
                                                       return "550 could not create \"" + fp + "\"\r\n";
       }
 
       inline String __RNFR__ (String fileOrDirName, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
 
-        if (!fsp->controlConnection->sendData ((char *) "350 need more information\r\n")) return "";
-        String s;
-        if (13 != __readLineFromClient__ (&s, fsp->controlConnection)) return "503 wrong command syntax\r\n";
+        if (!fsp->controlConnection->sendData ((char *) F ("350 need more information\r\n"))) return "";
+        String s; s.reserve (80);
+        if (13 != __readLineFromClient__ (s, fsp->controlConnection)) return "503 wrong command syntax\r\n";
 
-        if (s.substring (0, 4) != "RNTO")             return "503 wrong command syntax\r\n";
+        if (s.substring (0, 4) != "RNTO")             return F ("503 wrong command syntax\r\n");
         s = s.substring (4); s.trim ();
         String fp1 = fullFilePath (fileOrDirName, fsp->workingDir);
-        if (fp1 == "")                                return "501 invalid directory\r\n";
-        if (!userMayAccess (fp1, fsp->homeDir))       return "553 access denyed\r\n";
+        if (fp1 == "")                                return F ("501 invalid directory\r\n");
+        if (!userMayAccess (fp1, fsp->homeDir))       return F ("553 access denyed\r\n");
 
         String fp2 = fullFilePath (s, fsp->workingDir);
-        if (fp2 == "")                                return "501 invalid directory\r\n";
-        if (!userMayAccess (fp2, fsp->homeDir))       return "553 access denyed\r\n";
+        if (fp2 == "")                                return F ("501 invalid directory\r\n");
+        if (!userMayAccess (fp2, fsp->homeDir))       return F ("553 access denyed\r\n");
 
         if (FFat.rename (fp1, fp2))                   return "250 renamed to " + s + "\r\n";
                                                       return "553 unable to rename " + fileOrDirName + "\r\n";
       }
 
       inline String __XRMD__ (String fileOrDirName, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
         String fp = fullFilePath (fileOrDirName, fsp->workingDir);
-        if (fp == "")                                 return "501 invalid file or directory name\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (fp == "")                                 return F ("501 invalid file or directory name\r\n");
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
         if (isFile (fp)) {
           if (deleteFile (fp))                        return "250 " + fp + " deleted\r\n";
                                                       return "452 could not delete " + fp + "\r\n";
         } else {
-          if (fp == fsp->homeDir)                     return "550 you can't remove your home directory\r\n";
-          if (fp == fsp->workingDir)                  return "550 you can't remove your working directory\r\n";
+          if (fp == fsp->homeDir)                     return F ("550 you can't remove your home directory\r\n");
+          if (fp == fsp->workingDir)                  return F ("550 you can't remove your working directory\r\n");
           if (removeDir (fp))                         return "250 " + fp + " removed\r\n";
                                                       return "452 could not remove " + fp + "\r\n";
         }
@@ -444,14 +443,14 @@ closeFtpConnection:
       }
 
       inline String __RETR__ (String fileName, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
 
         String fp = fullFilePath (fileName, fsp->workingDir);
 
-        if (fp == "" || !isFile (fp))                 return "501 invalid file name\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (fp == "" || !isFile (fp))                 return F ("501 invalid file name\r\n");
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
-        if (!fsp->controlConnection->sendData ((char *) "150 starting transfer\r\n")) return ""; // control connection closed 
+        if (!fsp->controlConnection->sendData ((char *) F ("150 starting transfer\r\n"))) return ""; // control connection closed 
 
         int bytesWritten = 0; int bytesRead = 0;
         TcpConnection *dataConnection = NULL;
@@ -463,16 +462,14 @@ closeFtpConnection:
           if (f) {
             if (!f.isDirectory ()) {
               // read data from file and transfer it through data connection
-              byte *buff = (byte *) malloc (2048); // get 2048 B of memory from heap (not from the stack)
-              if (buff) {
-                int i = bytesWritten = 0;
-                while (f.available ()) {
-                  *(buff + i++) = f.read ();
-                  if (i == 2048) { bytesRead += 2048; bytesWritten += dataConnection->sendData ((char *) buff, 2048); i = 0; }
-                }
-                if (i) { bytesRead += i; bytesWritten += dataConnection->sendData ((char *) buff, i); }
-                free (buff);
+              #define BUFF_SIZE 2048
+              byte buff [2048]; // get 2 KB of memory from the stack
+              int i = bytesWritten = 0;
+              while (f.available ()) {
+                buff [i++] = f.read ();
+                if (i == BUFF_SIZE) { bytesRead += BUFF_SIZE; bytesWritten += dataConnection->sendData ((char *) buff, BUFF_SIZE); i = 0; }
               }
+              if (i) { bytesRead += i; bytesWritten += dataConnection->sendData ((char *) buff, i); }
             }
             f.close ();
           }
@@ -480,19 +477,19 @@ closeFtpConnection:
 
         if (fsp->activeDataClient) { delete (fsp->activeDataClient); fsp->activeDataClient = NULL; }
         if (fsp->pasiveDataServer) { delete (fsp->pasiveDataServer); fsp->pasiveDataServer = NULL; }
-        if (bytesRead && bytesWritten == bytesRead)   return "226 transfer complete\r\n";
-                                                      return "550 file could not be transfered\r\n";      
+        if (bytesRead && bytesWritten == bytesRead)   return F ("226 transfer complete\r\n");
+                                                      return F ("550 file could not be transfered\r\n");      
       }
 
       inline String __STOR__ (String fileName, ftpSessionParameters *fsp) { 
-        if (fsp->homeDir == "")                       return "530 not logged in\r\n";
+        if (fsp->homeDir == "")                       return F ("530 not logged in\r\n");
 
         String fp = fullFilePath (fileName, fsp->workingDir);
 
-        if (fp == "" || isDirectory (fp))             return "501 invalid file name\r\n";
-        if (!userMayAccess (fp, fsp->homeDir))        return "550 access denyed\r\n";
+        if (fp == "" || isDirectory (fp))             return F ("501 invalid file name\r\n");
+        if (!userMayAccess (fp, fsp->homeDir))        return F ("550 access denyed\r\n");
 
-        if (!fsp->controlConnection->sendData ((char *) "150 starting transfer\r\n")) return ""; // control connection closed 
+        if (!fsp->controlConnection->sendData ((char *) F ("150 starting transfer\r\n"))) return ""; // control connection closed 
 
         int bytesWritten = 0; int bytesRead = 0;
         TcpConnection *dataConnection = NULL;
@@ -503,26 +500,23 @@ closeFtpConnection:
           File f = FFat.open (fp, FILE_WRITE);
           if (f) {
             #define BUFF_SIZE 2048
-            byte *buff = (byte *) malloc (BUFF_SIZE); // get 2048 B of memory from heap (not from the )
-            if (buff) {
-              int received;
-              do {
-                bytesRead += (received = dataConnection->recvData ((char *) buff, BUFF_SIZE));
-                int written = f.write (buff, received);                   
-                if (received && (written == received)) bytesWritten += written;
-              } while (received);
-              free (buff);
-            }
+            byte buff [BUFF_SIZE]; // get 2048 B of memory from from the stack
+            int received;
+            do {
+              bytesRead += (received = dataConnection->recvData ((char *) buff, BUFF_SIZE));
+              int written = f.write (buff, received);                   
+              if (received && (written == received)) bytesWritten += written;
+            } while (received);
             f.close ();
           } else {
-            dmesg ("[ftpServer] could not open " + fp + " for writing.");
+            dmesg ("[ftpServer] could not open " + fp + F (" for writing."));
           }
         }
 
         if (fsp->activeDataClient) { delete (fsp->activeDataClient); fsp->activeDataClient = NULL; }
         if (fsp->pasiveDataServer) { delete (fsp->pasiveDataServer); fsp->pasiveDataServer = NULL; }
-        if (bytesRead && bytesWritten == bytesRead)   return "226 transfer complete\r\n";
-                                                      return "550 file could not be transfered\r\n";      
+        if (bytesRead && bytesWritten == bytesRead)   return F ("226 transfer complete\r\n");
+                                                      return F ("550 file could not be transfered\r\n");      
       }
 
       inline String __QUIT__ (ftpSessionParameters *fsp) { 
@@ -530,11 +524,34 @@ closeFtpConnection:
         if (fsp->activeDataClient) delete (fsp->activeDataClient);
         if (fsp->pasiveDataServer) delete (fsp->pasiveDataServer); 
         // report client we are closing contro connection
-        fsp->controlConnection->sendData ((char *) "221 closing control connection\r\n");
+        fsp->controlConnection->sendData ((char *) F ("221 closing control connection\r\n"));
         fsp->controlConnection->closeConnection ();
         return "";
       }
       
   };
 
+
+  // Arduino has serious problem with "new" - if it can not allocat memory for a new object it should
+  // return a NULL pointer but it just crashes ESP32 instead. The way around it to test if there is enough 
+  // memory available first, before calling "new". Since this is multi-threaded environment both should be
+  // done inside a critical section. Each class we create will implement a function that would create a
+  // new object and would follow certain rules. 
+
+  inline ftpServer *newFtpServer (String serverIP,
+                                  int serverPort,
+                                  bool (* firewallCallback) (String connectingIP)) {
+    ftpServer *p = NULL;
+    xSemaphoreTake (__newInstanceSemaphore__, portMAX_DELAY);
+      if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) >= sizeof (ftpServer) + 256) { // don't go below 256 B (live some memory for error messages ...)
+        try {
+          p = new ftpServer (serverIP, serverPort, firewallCallback);
+        } catch (int e) {
+          ; // TcpServer thows exception if constructor fails
+        }
+      }
+    xSemaphoreGive (__newInstanceSemaphore__);
+    return p;
+  }  
+    
 #endif

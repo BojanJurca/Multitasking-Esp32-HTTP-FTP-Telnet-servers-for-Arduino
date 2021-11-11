@@ -6,14 +6,13 @@
 
     It contins some useful functions used by other modules 
     
-    September, 13, 2021, Bojan Jurca
+    November, 2, 2021, Bojan Jurca
     
  */
 
 
 #ifndef __COMMON_FUNCTIONS__
   #define __COMMON_FUNCTIONS__
-
 
   // missing C function in Arduino, but we are going to need it
   char *stristr (char *haystack, char *needle) { 
@@ -94,5 +93,11 @@
     return s;
   }
 
+  // Arduino has serious problem with "new" - if it can not allocat memory for a new object it should
+  // return a NULL pointer but it just crashes ESP32 instead. The way around it to test if there is enough 
+  // memory available first, before calling "new". Since this is multi-threaded environment both should be
+  // done inside a critical section. Each class we create will implement a function that would create a
+  // new object and would follow certain rules. We are going to define only the semaphore here.
+  static SemaphoreHandle_t __newInstanceSemaphore__ = xSemaphoreCreateRecursiveMutex (); 
 
 #endif

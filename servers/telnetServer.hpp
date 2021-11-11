@@ -10,7 +10,7 @@
     function. In this case connectionHandler will first ask callback function wheather is it going to handle the telnet 
     request. If not, the connectionHandler will try to process it.
     
-    September, 9, 2021, Bojan Jurca
+    November, 2, 2021, Bojan Jurca
     
 */
 
@@ -34,29 +34,29 @@
 
   #include "version_of_servers.h" // version of this software used in uname command
   
-  #define UNAME String (MACHINETYPE) + " (" + String (ESP.getCpuFreqMHz ()) + " MHz) " + String (HOSTNAME) + " SDK " + String (ESP_SDK_VERSION) + " " + String (VERSION_OF_SERVERS)
+  #define UNAME String (MACHINETYPE) + F (" (") + ESP.getCpuFreqMHz () + F (" MHz) ") + HOSTNAME + F (" SDK ") + ESP_SDK_VERSION + F (" ") + VERSION_OF_SERVERS
 
 
   // find and report reset reason (this may help with debugging)
   #include <rom/rtc.h>
   String resetReasonAsString (RESET_REASON reason) {
     switch (reason) {
-      case 1:  return "POWERON_RESET - 1, Vbat power on reset";
-      case 3:  return "SW_RESET - 3, Software reset digital core";
-      case 4:  return "OWDT_RESET - 4, Legacy watch dog reset digital core";
-      case 5:  return "DEEPSLEEP_RESET - 5, Deep Sleep reset digital core";
-      case 6:  return "SDIO_RESET - 6, Reset by SLC module, reset digital core";
-      case 7:  return "TG0WDT_SYS_RESET - 7, Timer Group0 Watch dog reset digital core";
-      case 8:  return "TG1WDT_SYS_RESET - 8, Timer Group1 Watch dog reset digital core";
-      case 9:  return "RTCWDT_SYS_RESET - 9, RTC Watch dog Reset digital core";
-      case 10: return "INTRUSION_RESET - 10, Instrusion tested to reset CPU";
-      case 11: return "TGWDT_CPU_RESET - 11, Time Group reset CPU";
-      case 12: return "SW_CPU_RESET - 12, Software reset CPU";
-      case 13: return "RTCWDT_CPU_RESET - 13, RTC Watch dog Reset CPU";
-      case 14: return "EXT_CPU_RESET - 14, for APP CPU, reseted by PRO CPU";
-      case 15: return "RTCWDT_BROWN_OUT_RESET - 15, Reset when the vdd voltage is not stable";
-      case 16: return "RTCWDT_RTC_RESET - 16, RTC Watch dog reset digital core and rtc module";
-      default: return "RESET REASON UNKNOWN";
+      case 1:  return F ("POWERON_RESET - 1, Vbat power on reset");
+      case 3:  return F ("SW_RESET - 3, Software reset digital core");
+      case 4:  return F ("OWDT_RESET - 4, Legacy watch dog reset digital core");
+      case 5:  return F ("DEEPSLEEP_RESET - 5, Deep Sleep reset digital core");
+      case 6:  return F ("SDIO_RESET - 6, Reset by SLC module, reset digital core");
+      case 7:  return F ("TG0WDT_SYS_RESET - 7, Timer Group0 Watch dog reset digital core");
+      case 8:  return F ("TG1WDT_SYS_RESET - 8, Timer Group1 Watch dog reset digital core");
+      case 9:  return F ("RTCWDT_SYS_RESET - 9, RTC Watch dog Reset digital core");
+      case 10: return F ("INTRUSION_RESET - 10, Instrusion tested to reset CPU");
+      case 11: return F ("TGWDT_CPU_RESET - 11, Time Group reset CPU");
+      case 12: return F ("SW_CPU_RESET - 12, Software reset CPU");
+      case 13: return F ("RTCWDT_CPU_RESET - 13, RTC Watch dog Reset CPU");
+      case 14: return F ("EXT_CPU_RESET - 14, for APP CPU, reseted by PRO CPU");
+      case 15: return F ("RTCWDT_BROWN_OUT_RESET - 15, Reset when the vdd voltage is not stable");
+      case 16: return F ("RTCWDT_RTC_RESET - 16, RTC Watch dog reset digital core and rtc module");
+      default: return F ("RESET REASON UNKNOWN");
     }
   } 
 
@@ -65,12 +65,12 @@
     esp_sleep_wakeup_cause_t wakeup_reason;
     wakeup_reason = esp_sleep_get_wakeup_cause ();
     switch (wakeup_reason){
-      case ESP_SLEEP_WAKEUP_EXT0:     return "ESP_SLEEP_WAKEUP_EXT0 - wakeup caused by external signal using RTC_IO.";
-      case ESP_SLEEP_WAKEUP_EXT1:     return "ESP_SLEEP_WAKEUP_EXT1 - wakeup caused by external signal using RTC_CNTL.";
-      case ESP_SLEEP_WAKEUP_TIMER:    return "ESP_SLEEP_WAKEUP_TIMER - wakeup caused by timer.";
-      case ESP_SLEEP_WAKEUP_TOUCHPAD: return "ESP_SLEEP_WAKEUP_TOUCHPAD - wakeup caused by touchpad.";
-      case ESP_SLEEP_WAKEUP_ULP:      return "ESP_SLEEP_WAKEUP_ULP - wakeup caused by ULP program.";
-      default:                        return "WAKEUP REASON UNKNOWN - wakeup was not caused by deep sleep: " + String (wakeup_reason) + ".";
+      case ESP_SLEEP_WAKEUP_EXT0:     return F ("ESP_SLEEP_WAKEUP_EXT0 - wakeup caused by external signal using RTC_IO.");
+      case ESP_SLEEP_WAKEUP_EXT1:     return F ("ESP_SLEEP_WAKEUP_EXT1 - wakeup caused by external signal using RTC_CNTL.");
+      case ESP_SLEEP_WAKEUP_TIMER:    return F ("ESP_SLEEP_WAKEUP_TIMER - wakeup caused by timer.");
+      case ESP_SLEEP_WAKEUP_TOUCHPAD: return F ("ESP_SLEEP_WAKEUP_TOUCHPAD - wakeup caused by touchpad.");
+      case ESP_SLEEP_WAKEUP_ULP:      return F ("ESP_SLEEP_WAKEUP_ULP - wakeup caused by ULP program.");
+      default:                        return String (F ("WAKEUP REASON UNKNOWN - wakeup was not caused by deep sleep: ")) + wakeup_reason + ".";
     }   
   }
 
@@ -89,12 +89,16 @@
   };
 
   #define __DMESG_CIRCULAR_QUEUE_LENGTH__ 256
+  #define __DMESG_MAX_MESSAGE_LENGTH__ 126
   RTC_DATA_ATTR unsigned int bootCount = 0;
-  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{0, 0, "[ESP32] CPU0 reset reason: " + resetReasonAsString (rtc_get_reset_reason (0))}, 
-                                                                            {0, 0, "[ESP32] CPU1 reset reason: " + resetReasonAsString (rtc_get_reset_reason (1))}, 
-                                                                            {millis (), 0, "[ESP32] wakeup reason: " + wakeupReasonAsString ()},
-                                                                            {millis (), 0, String (__timeHasBeenSet__ ? "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + " times at: " + timeToString (getLocalTime ()) + "." : "[ESP32] " + UNAME + " (re)started " + String (++bootCount) + ". time and has not obtained current time yet.")}
-                                                                           }; // there are always at least 4 messages in the queue which makes things a little simper - after reboot or deep sleep the time is preserved
+  __dmesgType__ __dmesgCircularQueue__ [__DMESG_CIRCULAR_QUEUE_LENGTH__] = {{0, 0, String (F ("[ESP32] CPU0 reset reason: ")) + resetReasonAsString (rtc_get_reset_reason (0))}, 
+                                                                            {0, 0, String (F ("[ESP32] CPU1 reset reason: ")) + resetReasonAsString (rtc_get_reset_reason (1))}, 
+                                                                            {millis (), 0, String (F ("[ESP32] wakeup reason: ")) + wakeupReasonAsString ()},
+                                                                            {millis (), 0, String (__timeHasBeenSet__ ? String (F ("[ESP32] ")) + UNAME + F (" (re)started ") + ++bootCount + F (" times at: ") + timeToString (getLocalTime ()) + F (".") : "[ESP32] " + UNAME + F (" (re)started ") + ++bootCount + F (". time and has not obtained current time yet."))}
+                                                                           }; // there are always at least 4 messages in the queue which makes things a little simpler - after reboot or deep sleep the time is preserved
+  // reservee string space to avoid heap fragmentation
+  bool __reserveDmesgStringSpace__ () { for (int i = 0; i < __DMESG_CIRCULAR_QUEUE_LENGTH__; i++) __dmesgCircularQueue__ [i].message.reserve (__DMESG_MAX_MESSAGE_LENGTH__); return true; } // reserve space to avoid heap fragmentation
+  bool __reservedDmesgStringSpace__ = __reserveDmesgStringSpace__ ();
   byte __dmesgBeginning__ = 0; // first used location
   byte __dmesgEnd__ = 4;       // the location next to be used
   static SemaphoreHandle_t __dmesgSemaphore__= xSemaphoreCreateMutex (); 
@@ -105,7 +109,7 @@
     xSemaphoreTake (__dmesgSemaphore__, portMAX_DELAY);
     __dmesgCircularQueue__ [__dmesgEnd__].milliseconds = millis ();
     __dmesgCircularQueue__ [__dmesgEnd__].time = getGmt ();
-    __dmesgCircularQueue__ [__dmesgEnd__].message = message;
+    __dmesgCircularQueue__ [__dmesgEnd__].message = message.substring (0, __DMESG_MAX_MESSAGE_LENGTH__); // trim to avoid heap fragmentation
     if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % __DMESG_CIRCULAR_QUEUE_LENGTH__;
     xSemaphoreGive (__dmesgSemaphore__);
   }
@@ -201,12 +205,10 @@
                    ): TcpServer (__staticTelnetConnectionHandler__, (void *) this, stackSize, (TIME_OUT_TYPE) 300000, serverIP, serverPort, firewallCallback)
                         {
                           __externalTelnetCommandHandler__ = telnetCommandHandler;
-
-                          if (started ()) dmesg ("[telnetServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
-                          else            dmesg ("[telnetServer] couldn't start.");
+                          dmesg (F ("[telnetServer] started.")); // dmesg ("[telnetServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
                         }
 
-      ~telnetServer ()  { if (started ()) dmesg ("[telnetServer] stopped."); }
+      ~telnetServer ()  { dmesg (F ("[telnetServer] stopped.")); }
       
     private:
 
@@ -219,55 +221,58 @@
       virtual void __telnetConnectionHandler__ (TcpConnection *connection) { // connectionHandler callback function
 
         // this is where telnet session begins
-        telnetSessionParameters tsp = {"", "", (char *) "", NULL, 0, 0, 0, 0};
+        telnetSessionParameters tsp = {"", "", "", NULL, 0, 0, 0, 0};
         String password;
         
-        String cmdLine;
+        String cmdLine; cmdLine.reserve  (80);
 
         #if USER_MANAGEMENT == NO_USER_MANAGEMENT
 
-          tsp = {"root", "", "", (char *) "\r\n# ", connection, 0, 0, 0, 0};
+          tsp = {F ("root"), "", "", (char *) "\r\n# ", connection, 0, 0, 0, 0};
           tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);     
           // tell the client to go into character mode, not to echo an send its window size, then say hello 
-          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + connection->getOtherSideIP ()); 
+          connection->sendData (String (F (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS "Hello ")) + connection->getOtherSideIP ()); 
           dmesg ("[telnetServer] " + tsp.userName + " logged in.");
-          connection->sendData ("\r\n\nWelcome " + tsp.userName + ",\r\nyour home directory is " + tsp.homeDir + ",\r\nuse \"help\" to display available commands.\r\n" + tsp.prompt);
+          connection->sendData (String (F ("\r\n\nWelcome ")) + tsp.userName + F (",\r\nyour home directory is ") + tsp.homeDir + F (",\r\nuse \"help\" to display available commands.\r\n") + tsp.prompt);
         
         #else
 
           tsp = {"", "", "", (char *) "", connection, 0, 0, 0, 0};
           // tell the client to go into character mode, not to echo an send its window size, then say hello 
-          connection->sendData (String (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS) + "Hello " + connection->getOtherSideIP () + "!\r\nuser: "); 
+          connection->sendData (String (F (IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS "Hello ")) + connection->getOtherSideIP () + "!\r\nuser: "); 
           // read user name
-          if (13 != __readLineFromClient__ (&tsp.userName, true, &tsp)) goto closeTelnetConnection;
+          if (13 != __readLineFromClient__ (tsp.userName, true, &tsp)) goto closeTelnetConnection;
+
           tsp.workingDir = tsp.homeDir = getUserHomeDirectory (tsp.userName);
-          tsp.prompt = tsp.userName == "root" ? (char *) "\r\n# " : (char *) "\r\n$ ";
-          connection->sendData ((char *) "\r\npassword: ");
-          if (13 != __readLineFromClient__ (&password, false, &tsp)) goto closeTelnetConnection;
+          tsp.prompt = tsp.userName == "root" ? (char *) F ("\r\n# ") : (char *) F ("\r\n$ ");
+          connection->sendData ((char *) F ("\r\npassword: "));
+          if (13 != __readLineFromClient__ (password, false, &tsp)) goto closeTelnetConnection;
           if (!checkUserNameAndPassword (tsp.userName, password)) {
-            dmesg ("[telnetServer] " + tsp.userName + " entered wrong password.");
+            dmesg ("[telnetServer] " + tsp.userName + F (" entered wrong password."));
+            tsp.userName = "";
             goto closeTelnetConnection;
           }
           
           if (tsp.homeDir != "") { 
-            dmesg ("[telnetServer] " + tsp.userName + " logged in.");
-            connection->sendData ("\r\n\nWelcome " + tsp.userName + ",\r\nyour home directory is " + tsp.homeDir + ",\r\nuse \"help\" to display available commands.\r\n" + tsp.prompt);          
+            dmesg ("[telnetServer] " + tsp.userName + F (" logged in."));
+            connection->sendData ("\r\n\nWelcome " + tsp.userName + F (",\r\nyour home directory is ") + tsp.homeDir + F (",\r\nuse \"help\" to display available commands.\r\n") + tsp.prompt);          
           } else {
-            dmesg ("[telnetServer] " + tsp.userName + " login attempt failed.");
-            connection->sendData ((char *) "\r\n\nUser name or password incorrect.");
+            dmesg ("[telnetServer] " + tsp.userName + F (" login attempt failed."));
+            tsp.userName = "";
+            connection->sendData ((char *) F ("\r\n\nUser name or password incorrect."));
             delay (100); // TODO: check why last message doesn't get to the client (without delay) if we close the connection immediatelly
             goto closeTelnetConnection;
           }
         
         #endif
 
-        while (13 == __readLineFromClient__ (&cmdLine, true, &tsp)) { // read and process comands in a loop        
+        while (13 == __readLineFromClient__ (cmdLine, true, &tsp)) { // read and process comands in a loop        
           if (cmdLine.length ()) {
-            connection->sendData ((char *) "\r\n");
+            connection->sendData ((char *) F ("\r\n"));
 
             // ----- parse command line into arguments (max 32) -----
             cmdLine += ' ';
-            int argc = 0; String argv [32] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
+            int argc = 0; String argv [16] = {"", "", "", "", "", "", "", "", "", "", "", "", "", "", "", ""};
             bool quotation = false; 
             for (int i = 0; i < cmdLine.length (); i++) {
               switch (char c = cmdLine.charAt (i)) {
@@ -279,10 +284,10 @@
                             break;
                 default:    argv [argc] += c;
               }
-              if (argc >= 32) break;
+              if (argc >= 16) break;
             }
             if (quotation) {
-              connection->sendData ((char *) "Quotation not finished. Missing ending \".");
+              connection->sendData ((char *) F ("Quotation not finished. Missing ending \"."));
             } else {
               // debug: for (int i = 0; i < argc; i++) Serial.print ("|" + argv [i] + "|     "); Serial.println ();
   
@@ -303,25 +308,24 @@
         goto closeTelnetConnection; // this is just to get rid of compier warning, otherwise it doesn't make sense
       #endif
       closeTelnetConnection:      
-        if (tsp.userName != "") dmesg ("[telnetServer] " + tsp.userName + " logged out.");
+        if (tsp.userName != "") dmesg ("[telnetServer] " + tsp.userName + F (" logged out."));
       }
 
       // returns last chracter pressed (Enter, Ctrl-C, Ctrl-D (Ctrl-Z)) or 0 in case of error
-      static char __readLineFromClient__ (String *line, bool echo, telnetSessionParameters *tsp) {
-        *line = "";
-        
+      static char __readLineFromClient__ (String& line, bool echo, telnetSessionParameters *tsp) {
+        line = "";        
         char c;
-        while (tsp->connection->recvData (&c, 1)) { // read and process incomming data in a loop 
+        while (tsp->connection->recvChar (&c)) { // read and process incomming data in a loop 
           switch (c) {
               case 3:   // Ctrl-C
-                        *line = "";
+                        line = "";
                         return 0;
               case 10:  // ignore
                         break;
               case 8:   // backspace - delete last character from the buffer and from the screen
               case 127: // in Windows telent.exe this is del key but putty this backspace with this code so let's treat it the same way as backspace
-                        if (line->length () > 0) {
-                          *line = line->substring (0, line->length () - 1);
+                        if (line.length () > 0) {
+                          line = line.substring (0, line.length () - 1);
                           if (echo) if (!tsp->connection->sendData ((char *) "\x08 \x08")) return 0; // delete the last character from the screen
                         }
                         break;                            
@@ -332,7 +336,7 @@
                         return 4;                      
               default:  // fill the buffer 
                         if ((c >= ' ' && c < 240) || c == 9) { // ignore control characters
-                          *line += c;
+                          line += c;
                           if (echo) if (!tsp->connection->sendData (&c, 1)) return 0;
                         } else {
                           // the only reply we are interested in so far is IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240)
@@ -343,15 +347,15 @@
                           // window size remains the same.
                           
                           if (c == 255) { // IAC
-                            if (!tsp->connection->recvData (&c, 1)) return 0;
+                            if (!tsp->connection->recvChar (&c)) return 0;
                             switch (c) {
                               case 250: // SB
-                                        if (!tsp->connection->recvData (&c, 1)) return 0;
+                                        if (!tsp->connection->recvChar (&c)) return 0;
                                         if (c == 31) { // NAWS
-                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol1, 1)) return 0;
-                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol2, 1)) return 0;
-                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow1, 1)) return 0;
-                                          if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow2, 1)) return 0;
+                                          if (!tsp->connection->recvChar ((char *) &tsp->clientWindowCol1)) return 0;
+                                          if (!tsp->connection->recvChar ((char *) &tsp->clientWindowCol2)) return 0;
+                                          if (!tsp->connection->recvChar ((char *) &tsp->clientWindowRow1)) return 0;
+                                          if (!tsp->connection->recvChar ((char *) &tsp->clientWindowRow2)) return 0;
                                           // debug: Serial.printf ("[%10lu] [telnet] client reported its window size %i %i   %i %i\n", millis (), tsp->clientWindowCol1, tsp->clientWindowCol2, tsp->clientWindowRow1, tsp->clientWindowRow2);
                                         }
                                         break;
@@ -360,7 +364,7 @@
                               case 252:
                               case 253:
                               case 254:                        
-                                        if (!tsp->connection->recvData (&c, 1)) return 0;
+                                        if (!tsp->connection->recvChar (&c)) return 0;
                               default: // ignore
                                         break;
                             }
@@ -387,68 +391,81 @@
         } // while
         return 0;
       }
-
+      
       // ----- built-in commands -----
-
       String __internalTelnetCommandHandler__ (int argc, String argv [], telnetServer::telnetSessionParameters *tsp) {
 
         if (argv [0] == "help") { //------------------------------------------- HELP
           
           if (argc == 1) return __help__ (tsp);
-                         return "Wrong syntax. Use help";
+                         return F ("Wrong syntax. Use help");
 
         } else if (argv [0] == "quit") { //------------------------------------ QUIT
           
           if (argc == 1) return __quit__ (tsp);
-                         return "Wrong syntax. Use quit";
+                         return F ("Wrong syntax. Use quit");
 
         } else if (argv [0] == "clear" || argv [0] == "cls") { //-------------- CLEAR, CLS
           
           if (argc == 1) return __clear__ (tsp);
-                         return "Wrong syntax. Use clear or cls";
+                         return F ("Wrong syntax. Use clear or cls");
                          
         } else if (argv [0] == "uname") { //----------------------------------- UNAME
     
           if (argc == 1 || (argc == 2 && argv [1] == "-a")) return __uname__ ();
-                                                            return "Wrong syntax. Use uname [-a]";
+                                                            return F ("Wrong syntax. Use uname [-a]");
 
         } else if (argv [0] == "uptime") { //---------------------------------- UPTIME
     
           if (argc == 1) return __uptime__ ();
-                         return "Wrong syntax. Use uptime";
+                         return F ("Wrong syntax. Use uptime");
 
         } else if (argv [0] == "reboot") { //---------------------------------- REBOOT
     
           if (argc == 1) return __reboot__ (tsp);
-                         return "Wrong syntax. Use reboot";
+                         return F ("Wrong syntax. Use reboot");
           
         } else if (argv [0] == "reset") { //----------------------------------- RESET
     
           if (argc == 1) return __reset__ (tsp);
-                         return "Wrong syntax. Use reset";
+                         return F ("Wrong syntax. Use reset");
     
         } else if (argc >= 1 && argv [0] == "date") { //----------------------- DATE
           
           if (argc == 1)                     return __getDateTime__ ();
           if (argc == 4 && argv [1] == "-s") return __setDateTime__ (argv [2], argv [3]);
-                                             return "Wrong syntax. Use date [-s YYYY/MM/DD hh:mm:ss] (use hh in 24 hours time format)";
+                                             return F ("Wrong syntax. Use date [-s YYYY/MM/DD hh:mm:ss] (use hh in 24 hours time format)");
 
         } else if (argc >= 1 && argv [0] == "ntpdate") { //-------------------- NTPDATE
           
           if (argc == 1 || ((argc == 2 || argc == 3) && argv [1] == "-u")) return __ntpdate__ (argv [2]);
-                                                                           return "Wrong syntax. Use ntpdate [-u [ntpServer]]";
+                                                                           return F ("Wrong syntax. Use ntpdate [-u [ntpServer]]");
 
         } else if (argc >= 1 && argv [0] == "crontab") { //-------------------- CRONTAB
           
           if (argc == 1 || (argc == 2 && argv [1] == "-l")) return cronTab ();
-                                                            return "Wrong syntax. Use crontab [-l]";
+                                                            return F ("Wrong syntax. Use crontab [-l]");
 
         } else if (argv [0] == "free") { //------------------------------------ FREE
-    
-          long n;
-          if (argc == 1)                                                               return __free__ (0, tsp);
-          if (argc == 3 && argv [1] == "-s" && (n = argv [2].toInt ()) > 0 && n < 300) return __free__ (n, tsp);
-                                                                                       return "Wrong syntax. Use free [-s n] (where 0 < n < 300)";
+
+          long n = 0;
+          uint32_t caps = 0;
+          for (int i = 1; i < argc; i++) {
+            if (argv [i] == "-s")       {               
+                                          if (i == argc - 1) goto wrongSyntax;
+                                          i ++;
+                                          n = argv [i].toInt ();
+                                          if (n <= 0 || n >= 300) goto wrongSyntax;
+                                        }
+            else if (argv [i] == "-d")  { if (caps) goto wrongSyntax; else caps = MALLOC_CAP_DEFAULT; }
+            else if (argv [i] == "-8")  { if (caps) goto wrongSyntax; else caps = MALLOC_CAP_8BIT; }
+            else if (argv [i] == "-32") { if (caps) goto wrongSyntax; else caps = MALLOC_CAP_32BIT; }
+            else if (argv [i] == "-e")  { if (caps) goto wrongSyntax; else caps = MALLOC_CAP_EXEC; }
+            else {
+                   wrongSyntax: return F ("Wrong syntax. Use free [-s n] [-d|-8|-32|-e] (where 0 < n < 300)");
+                 }
+          }
+          return __free__ (n, caps, tsp);
           
         } else if (argv [0] == "dmesg") { //----------------------------------- DMESG
 
@@ -457,7 +474,7 @@
           for (int i = 1; i < argc; i++) {
             if (argv [i] == "--follow") f = true;
             else if (argv [i] == "-T") t = true;
-            else return "Wrong syntax. Use dmesg [--follow] [-T]";
+            else return F ("Wrong syntax. Use dmesg [--follow] [-T]");
           }
           return __dmesg__ (f, t, tsp);
 
@@ -465,67 +482,67 @@
           
           if (argc == 1) {
             if (tsp->userName == "root") return __mkfs__ (tsp);
-            else                         return "Only root user may format disk.";
+            else                         return F ("Only root user may format disk.");
           }
-                                         return "Wrong syntax. Use mkfs.fat";
+                                         return F ("Wrong syntax. Use mkfs.fat");
           
         } else if (argv [0] == "fs_info") { // -------------------------------- FS_INFO
           
           if (argc <= 2) return __fs_info__ ();
-                         return "Wrong syntax. Use fs_info";          
+                         return F ("Wrong syntax. Use fs_info");          
 
         } else if (argv [0] == "ls" || argv [0] == "dir") { //----------------- LS, DIR
 
           if (argc == 1) return __ls__ (tsp->workingDir, tsp);
           if (argc == 2) return __ls__ (argv [1], tsp);
-                         return "Wrong syntax. Use ls [directoryName]";
+                         return F ("Wrong syntax. Use ls [directoryName]");
 
         } else if (argv [0] == "tree") { //------------------------------------ TREE
 
           if (argc == 1) return __tree__ (tsp->workingDir, tsp);
           if (argc == 2) return __tree__ (argv [1], tsp);
-                         return "Wrong syntax. Use tree [directoryName]";
+                         return F ("Wrong syntax. Use tree [directoryName]");
         
         } else if (argv [0] == "cat" || argv [0] == "type") { //--------------- CAT, TYPE
           
           if (argc == 2) return __catFileToClient__ (argv [1], tsp);
           if (argc == 3 && argv [1] == ">") return __catClientToFile__ (argv [2], tsp);
-                         return "Wrong syntax. Use cat fileName or cat > fileName";
+                         return F ("Wrong syntax. Use cat fileName or cat > fileName");
 
         } else if (argv [0] == "rm" || argv [0] == "del") { //----------------- RM
           
           if (argc == 2) return __rm__ (argv [1], tsp);
-                         return "Wrong syntax. Use rm fileName";
+                         return F ("Wrong syntax. Use rm fileName");
 
         } else if (argv [0] == "mkdir") { //----------------------------------- MKDIR
           
           if (argc == 2) return __mkdir__ (argv [1], tsp);
-                         return "Wrong syntax. Use mkdir directoryName";
+                         return F ("Wrong syntax. Use mkdir directoryName");
 
         } else if (argv [0] == "rmdir") { //----------------------------------- RMDIR
           
           if (argc == 2) return __rmdir__ (argv [1], tsp);
-                         return "Wrong syntax. Use rmdir directoryName";
+                         return F ("Wrong syntax. Use rmdir directoryName");
 
         } else if (argv [0] == "cd") { //-------------------------------------- CD
           
           if (argc == 2) return __cd__ (argv [1], tsp);
-                         return "Wrong syntax. Use cd directoryName";
+                         return F ("Wrong syntax. Use cd directoryName");
 
         } else if (argv [0] == "pwd") { //------------------------------------- PWD
           
           if (argc == 1) return __pwd__ (tsp);
-                         return "Wrong syntax. Use pwd";
+                         return F ("Wrong syntax. Use pwd");
 
         } else if (argv [0] == "mv" || argv [0] == "ren") { //----------------- MV
           
           if (argc == 3) return __mv__ (argv [1], argv [2], tsp);
-                         return "Wrong syntax. Use mv srcFileName dstFileName or mv srcDirectoryName dstDirectoryName";
+                         return F ("Wrong syntax. Use mv srcFileName dstFileName or mv srcDirectoryName dstDirectoryName");
 
         } else if (argv [0] == "cp" || argv [0] == "copy") { //---------------- CP
           
           if (argc == 3) return __cp__ (argv [1], argv [2], tsp);
-                         return "Wrong syntax. Use cp srcFileName dstFileName";
+                         return F ("Wrong syntax. Use cp srcFileName dstFileName");
 
         } else if (argv [0] == "vi") { //-------------------------------------- VI
 
@@ -535,7 +552,7 @@
                             tsp->connection->setTimeOut (timeOutMillis); // restore original time-out
                             return s;
                           }
-                          return "Wrong syntax. Use vi fileName";                         
+                          return F ("Wrong syntax. Use vi fileName");
 
         #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
 
@@ -549,15 +566,15 @@
 
           } else if (argv [0] == "useradd") { //------------------------------- USERADD
 
-            if (tsp->userName != "root")                           return "Only root may add users.";
+            if (tsp->userName != "root")                           return F ("Only root may add users.");
             if (argc == 6 && argv [1] == "-u" && argv [3] == "-d") return __userAdd__ (argv [5], argv [2], argv [4]);
-                                                                   return "Wrong syntax. Use useradd -u userId -d userHomeDirectory userName (where userId > 1000)";
+                                                                   return F ("Wrong syntax. Use useradd -u userId -d userHomeDirectory userName (where userId > 1000)");
 
           } else if (argv [0] == "userdel") { //------------------------------- USERDEL
 
-            if (tsp->userName != "root") return "Only root may delete users.";
-            if (argc != 2)               return "Wrong syntax. Use userdel userName";
-            if (argv [1] == "root")      return "You don't really want to to this.";
+            if (tsp->userName != "root") return F ("Only root may delete users.");
+            if (argc != 2)               return F ("Wrong syntax. Use userdel userName");
+            if (argv [1] == "root")      return F ("You don't really want to to this.");
                                          return __userDel__ (argv [1]);
 
         #endif
@@ -565,30 +582,30 @@
         } else if (argv [0] == "ifconfig" || argv [0] == "ipconfig") { //------ IFCONFIG, IPCONFIG
           
           if (argc == 1) return ifconfig ();
-                         return "Unknown option.";
+                         return F ("Unknown option.");
 
         } else if (argv [0] == "iw") { //-------------------------------------- IW
     
           if (argc == 1) return iw (tsp->connection);
-                         return "Wrong syntax. Use ifconfig";
+                         return F ("Wrong syntax. Use ifconfig");
 
         } else if (argv [0] == "arp") { //------------------------------------- ARP
     
           if (argc == 1)                       return arp (); // from network.h
           if ((argc == 2 && argv [1] == "-a")) return arp (); // from network.h
-                                               return "Wrong syntax. Use arp [-a]";
+                                               return F ("Wrong syntax. Use arp [-a]");
     
         } else if (argv [0] == "ping") { //------------------------------------ PING
 
           if (argc == 2) { ping (argv [1], PING_DEFAULT_COUNT, PING_DEFAULT_INTERVAL, PING_DEFAULT_SIZE, PING_DEFAULT_TIMEOUT, tsp->connection); return ""; }
-                         return "Wrong syntax. Use ping ipAddres";
+                         return F ("Wrong syntax. Use ping ipAddres");
    
         } else if (argv [0] == "telnet") { //---------------------------------- TELENT
 
           long port;
           if (argc == 2)                                                                 return __telnet__ (argv [1], 23, tsp);
           if (argc == 3 && (port = argv [2].toInt ()) && port > 0 && (int) port == port) return __telnet__ (argv [1], (int) port, tsp);
-                                                                                         return "Wrong syntax. Use telnet ipAddress or telnet ipAddress portNumber";
+                                                                                         return F ("Wrong syntax. Use telnet ipAddress or telnet ipAddress portNumber");
 
         } else if (argv [0] == "sendmail") { //-------------------------------- SENDMAIL
 
@@ -602,7 +619,7 @@
           String message = "";
           String nonsense = "";
           String *sp = &nonsense;
-          const String syntaxError = "Use sendmail [-S smtpServer] [-P smtpPort] [-u userName] [-p password] [-f from address] [t to address list] [-s subject] [-m messsage]"; 
+          const String syntaxError = F ("Use sendmail [-S smtpServer] [-P smtpPort] [-u userName] [-p password] [-f from address] [t to address list] [-s subject] [-m messsage]"); 
 
           for (int i = 1; i < argc; i++) {
                  if (argv [i] == "-S") sp = &smtpServer;
@@ -624,7 +641,7 @@
           
           if (argc == 2) return __curl__ ("GET", argv [1]);
           if (argc == 3) return __curl__ (argv [1], argv [2]);
-                         return "Wrong syntax. Use curl http://url or curl method http://url (where method is GET, PUT, ...):";
+                         return F ("Wrong syntax. Use curl http://url or curl method http://url (where method is GET, PUT, ...)");
 
         }
         
@@ -634,8 +651,8 @@
       }
 
       inline String __help__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
-        String e = __catFileToClient__ (getUserHomeDirectory ("telnetserver") + "help.txt", tsp);
-        return e == "" ? "" : e + " Please use FTP, loggin as root and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into " + getUserHomeDirectory ("telnetserver") + " directory.";  
+        String e = __catFileToClient__ (getUserHomeDirectory ("telnetserver") + F ("help.txt"), tsp);
+        return e == "" ? "" : e + F (" Please use FTP, loggin as root and upload help.txt file found in Esp32_web_ftp_telnet_server_template package into ") + getUserHomeDirectory ("telnetserver") + F (" directory.");  
       }
 
       inline String __quit__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
@@ -644,7 +661,7 @@
       }       
 
       inline String __clear__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
-        return "\x1b[2J"; // ESC[2J
+        return F ("\x1b[2J"); // ESC[2J
       }       
 
       inline String __uname__ () __attribute__((always_inline)) {
@@ -674,7 +691,7 @@
       }
 
       inline String __reboot__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
-        tsp->connection->sendData ((char *) "rebooting ...");
+        tsp->connection->sendData ((char *) F ("rebooting ..."));
         delay (100);
         tsp->connection->closeConnection ();
         Serial.printf ("\r\n\nreboot requested ...\r\n");
@@ -684,7 +701,7 @@
       }
 
       inline String __reset__ (telnetSessionParameters *tsp) __attribute__((always_inline)) {
-        tsp->connection->sendData ((char *) "reseting ...");
+        tsp->connection->sendData ((char *) F ("reseting ..."));
         delay (100);
         tsp->connection->closeConnection ();
         Serial.printf ("\r\n\nreset requested ...\r\n");
@@ -715,7 +732,7 @@
             return __getDateTime__ ();          
           }
         }
-        return "Wrong format of date/time specified.";
+        return F ("Wrong format of date/time specified.");
       }         
 
       inline String __ntpdate__ (String ntpServer) __attribute__((always_inline)) {
@@ -724,24 +741,59 @@
         return "Time synchronized, currrent time is " + timeToString (getLocalTime ()) + ".";
       }
 
-      inline String __free__ (int delaySeconds, telnetSessionParameters *tsp) __attribute__((always_inline)) {
-        char *nl = (char *) "";
-        do {
-          char output [50];
-          sprintf (output, "%sFree memory:      %10lu K bytes", nl, (unsigned long) ESP.getFreeHeap () / 1024);
-          if (!tsp->connection->sendData (output, strlen (output))) return "";
-          nl = (char *) "\r\n";
-          // delay with Ctrl C checking
-          for (int i = 0; i < 880; i++) { // 880 instead of 1000 - a correction for more precise timing
-            while (tsp->connection->available () == TcpConnection::AVAILABLE) {
-              char c;
-              if (!tsp->connection->recvData (&c, sizeof (c))) return "";
-              if (c == 3 || c >= ' ') return ""; // return if user pressed Ctrl-C or any key
+      inline String __free__ (int delaySeconds, uint32_t caps, telnetSessionParameters *tsp) __attribute__((always_inline)) {
+        if (!caps) {
+          // simple free with ESP.getFreeHeap ()
+          char *nl = (char *) "";
+          do {
+            char output [50];
+            sprintf (output, "%sFree memory:      %10lu K bytes", nl, (unsigned long) ESP.getFreeHeap () / 1024);
+            if (!tsp->connection->sendData (output, strlen (output))) return "";
+            nl = (char *) "\r\n";
+            // delay and Ctrl C checking
+            for (int i = 0; i < 880; i++) { // 880 instead of 1000 - a correction for more precise timing
+              while (tsp->connection->available () == TcpConnection::AVAILABLE) {
+                char c;
+                if (!tsp->connection->recvChar (&c)) return "";
+                if (c == 3 || c >= ' ') return ""; // return if user pressed Ctrl-C or any key
+              }
+              delay (delaySeconds); // / 1000
             }
-            delay (delaySeconds); // / 1000
+          } while (delaySeconds);
+          return "";
+        } else {
+          // extended free heap information with heap_caps_get...
+          switch (caps) {
+            case MALLOC_CAP_8BIT:     if (!tsp->connection->sendData ((char *) F ("Free memory for 8/16/...-bit data accesses:\r\n\r\n"))) return "";
+                                      break;
+            case MALLOC_CAP_32BIT:    if (!tsp->connection->sendData ((char *) F ("Free memory for 32-bit data accesses:\r\n\r\n"))) return "";
+                                      break;
+            case MALLOC_CAP_DEFAULT:  if (!tsp->connection->sendData ((char *) F ("Free memory available to malloc, calloc, ...:\r\n\r\n"))) return "";
+                                      break;
+            case MALLOC_CAP_EXEC:     if (!tsp->connection->sendData ((char *) F ("Free memory available for executable code:\r\n\r\n"))) return "";
+                                      break;
+            default:                  return F ("Invalid memory specification.");
           }
-        } while (delaySeconds);
-        return "";
+          char output [100] = "total free          LWM    max block";
+          if (!tsp->connection->sendData (output, strlen (output))) return "";
+          do {
+            size_t freeSize = heap_caps_get_free_size (MALLOC_CAP_DEFAULT); // total available blocks
+            size_t minimum = heap_caps_get_minimum_free_size (MALLOC_CAP_DEFAULT); // sum of memory under low water marks
+            size_t maximum = heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT); // largest block size
+            sprintf (output, "\r\n%10lu   %10lu   %10lu   bytes", (unsigned long) freeSize, (unsigned long) minimum, (unsigned long) maximum);
+            if (!tsp->connection->sendData (output, strlen (output))) return "";
+            // delay and Ctrl C checking
+            for (int i = 0; i < 880; i++) { // 880 instead of 1000 - a correction for more precise timing
+              while (tsp->connection->available () == TcpConnection::AVAILABLE) {
+                char c;
+                if (!tsp->connection->recvChar (&c)) return "";
+                if (c == 3 || c >= ' ') return ""; // return if user pressed Ctrl-C or any key
+              }
+              delay (delaySeconds); // / 1000
+            }
+          } while (delaySeconds);
+          return "";
+        }
       }
 
       inline String __dmesg__ (bool follow, bool trueTime, telnetSessionParameters *tsp) __attribute__((always_inline)) { // displays dmesg circular queue over telnet connection
@@ -799,15 +851,15 @@
         tsp->connection->sendData ((char *) "formatting file system with FAT, please wait ... "); 
         FFat.end ();
         if (FFat.format ()) {
-                                  tsp->connection->sendData ((char *) "formatted.");
-          if (FFat.begin (false)) tsp->connection->sendData ((char *) "\r\nFile system mounted,\r\nreboot now to create default configuration files\r\nor create then yorself before rebooting.");
-          else                    tsp->connection->sendData ((char *) "\r\nFile system mounting has failed.");
-        } else                    tsp->connection->sendData ((char *) "failed.");
+                                  tsp->connection->sendData ((char *) F ("formatted."));
+          if (FFat.begin (false)) tsp->connection->sendData ((char *) F ("\r\nFile system mounted,\r\nreboot now to create default configuration files\r\nor create then yorself before rebooting."));
+          else                    tsp->connection->sendData ((char *) F ("\r\nFile system mounting has failed."));
+        } else                    tsp->connection->sendData ((char *) F ("failed."));
         return "";
       }
 
       inline String __fs_info__ () __attribute__((always_inline)) {
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
 
         char output [500];
         sprintf (output, "FAT file system info.\r\n"
@@ -827,7 +879,7 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "" || !isDirectory (fp))            return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + F (" denyed.");
 
         return listDirectory (fp);
       }
@@ -836,7 +888,7 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "" || !isDirectory (fp))            return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + F (" denyed.");
 
         return recursiveListDirectory (fp);
       }
@@ -845,32 +897,29 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullFilePath (fileName, tsp->workingDir);
         if (fp == "" || !isFile (fp))                 return "Invalid file name " + fileName;
-        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + F (" denyed.");
 
         File f;
         if ((bool) (f = FFat.open (fp, FILE_READ))) {
           if (!f.isDirectory ()) {
             #define BUFF_SIZE 2048
-            char *buff = (char *) malloc (BUFF_SIZE); // get 2 KB of memory from heap (not from the stack)
-            if (buff) {
-              *buff = 0;
-              int i = strlen (buff);
-              while (f.available ()) {
-                switch (*(buff + i) = f.read ()) {
-                  case '\r':  // ignore
-                              break;
-                  case '\n':  // crlf conversion
-                              *(buff + i ++) = '\r'; 
-                              *(buff + i ++) = '\n';
-                              break;
-                  default:
-                              i ++;                  
-                }
-                if (i >= BUFF_SIZE - 2) { tsp->connection->sendData ((char *) buff, i); i = 0; }
+            char buff [BUFF_SIZE]; // get 2 KB of memory from the stack
+            *buff = 0;
+            int i = strlen (buff);
+            while (f.available ()) {
+              switch (*(buff + i) = f.read ()) {
+                case '\r':  // ignore
+                            break;
+                case '\n':  // crlf conversion
+                            *(buff + i ++) = '\r'; 
+                            *(buff + i ++) = '\n';
+                            break;
+                default:
+                            i ++;                  
               }
-              if (i) { tsp->connection->sendData ((char *) buff, i); }
-              free (buff);
-            } 
+              if (i >= BUFF_SIZE - 2) { tsp->connection->sendData ((char *) buff, i); i = 0; }
+            }
+            if (i) { tsp->connection->sendData ((char *) buff, i); }
           } else {
             f.close ();
             return "Can't read " + fp;
@@ -886,7 +935,7 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullFilePath (fileName, tsp->workingDir);
         if (fp == "" || isDirectory (fp))             return "Invalid file name " + fileName;
-        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + F (" denyed.");
 
         File f;
         char *s;
@@ -894,22 +943,22 @@
 
         if ((bool) (f = FFat.open (fp, FILE_WRITE))) {
           String line;
-          while (char c = __readLineFromClient__ (&line, true, tsp)) {
+          while (char c = __readLineFromClient__ (line, true, tsp)) {
             switch (c) {
               case 0:   
                       f.close ();
-                      return fp + " not fully written.";
+                      return fp + F (" not fully written.");
               case 4:
-                      tsp->connection->sendData ((char *) "\r\n", 2);
+                      tsp->connection->sendData ((char *) F ("\r\n"), 2);
                       s = (char *) line.c_str (); l = strlen (s);
                       if (l > 0) if (f.write ((uint8_t *) s, l) != l) {
                         f.close ();
                         return "Can't write " + fp;
                       }
                       f.close ();
-                      return fp + " written.";
+                      return fp + F (" written.");
               case 13:
-                      tsp->connection->sendData ((char *) "\r\n", 2);
+                      tsp->connection->sendData ((char *) F ("\r\n"), 2);
                       line += "\r\n";
                       s = (char *) line.c_str (); l = strlen (s);
                       if (f.write ((uint8_t *) s, l) != l) { 
@@ -930,78 +979,78 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullFilePath (fileName, tsp->workingDir);
         if (fp == "" || !isFile (fp))                   return "Invalid file name " + fileName;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access to " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access to " + fp + F (" denyed.");
 
-        if (deleteFile (fp))                            return fp + " deleted.";
+        if (deleteFile (fp))                            return fp + F (" deleted.");
                                                         return "Can't delete " + fp;
       }
 
       inline String __mkdir__ (String& directory, telnetSessionParameters *tsp) { 
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "")                                   return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + removeExtraSlash (fp) + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + removeExtraSlash (fp) + F (" denyed.");
 
-        if (makeDir (fp))                               return removeExtraSlash (fp) + " made.";
+        if (makeDir (fp))                               return removeExtraSlash (fp) + F (" made.");
                                                         return "Can't make " + removeExtraSlash (fp);
 
       }
 
       inline String __rmdir__ (String& directory, telnetSessionParameters *tsp) { 
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "" || !isDirectory (fp))              return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + removeExtraSlash (fp) + " denyed.";
-        if (fp == tsp->homeDir)                         return "You may not remove your home directory.";
-        if (fp == tsp->workingDir)                      return "You can't remove your working directory.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access tp " + removeExtraSlash (fp) + F (" denyed.");
+        if (fp == tsp->homeDir)                         return F ("You may not remove your home directory.");
+        if (fp == tsp->workingDir)                      return F ("You can't remove your working directory.");
 
-        if (removeDir (fp))                             return removeExtraSlash (fp) + " removed.";
+        if (removeDir (fp))                             return removeExtraSlash (fp) + F (" removed.");
                                                         return "Can't remove " + removeExtraSlash (fp);
 
       }      
 
       inline String __cd__ (String& directory, telnetSessionParameters *tsp) { 
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
 
         String fp = fullDirectoryPath (directory, tsp->workingDir);
         if (fp == "" || !isDirectory (fp))              return "Invalid directory name " + directory;
-        if (!userMayAccess (fp, tsp->homeDir))          return "Access to " + removeExtraSlash (fp) + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))          return "Access to " + removeExtraSlash (fp) + F (" denyed.");
 
         tsp->workingDir = fp;                           
                                                         return "Your working directory is " + removeExtraSlash (tsp->workingDir);
       }
 
       inline String __pwd__ (telnetSessionParameters *tsp) { 
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
         
         return "Your working directory is " + removeExtraSlash (tsp->workingDir);
       }
 
       inline String __mv__ (String& srcFileOrDirectory, String& dstFileOrDirectory, telnetSessionParameters *tsp) { 
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
         String fp1 = fullFilePath (srcFileOrDirectory, tsp->workingDir);
         if (fp1 == "")                                  return "Invalid file or directory name " + srcFileOrDirectory;
-        if (!userMayAccess (fp1, tsp->homeDir))         return "Access to " + fp1 + " denyed.";
+        if (!userMayAccess (fp1, tsp->homeDir))         return "Access to " + fp1 + F (" denyed.");
 
         String fp2 = fullFilePath (dstFileOrDirectory, tsp->workingDir);
         if (fp2 == "")                                  return "Invalid file or directory name " + dstFileOrDirectory;
-        if (!userMayAccess (fp2, tsp->homeDir))         return "Access to " + fp2 + " denyed.";
+        if (!userMayAccess (fp2, tsp->homeDir))         return "Access to " + fp2 + F (" denyed.");
 
         if (FFat.rename (fp1, fp2))                     return "Renamed to " + fp2;
                                                         return "Can't rename " + fp1;
       }
 
       inline String __cp__ (String& srcFileName, String& dstFileName, telnetSessionParameters *tsp) { 
-        if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+        if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
 
         String fp1 = fullFilePath (srcFileName, tsp->workingDir);
         if (fp1 == "" || !isFile (fp1))                 return "Invalid file name " + srcFileName;
-        if (!userMayAccess (fp1, tsp->homeDir))         return "Access to " + fp1 + " denyed.";
+        if (!userMayAccess (fp1, tsp->homeDir))         return "Access to " + fp1 + F (" denyed.");
 
         String fp2 = fullFilePath (dstFileName, tsp->workingDir);
         if (fp2 == "" || isDirectory (fp2))             return "Invalid file name " + dstFileName;
-        if (isFile (fp2))                               return fp2 + " already exists, delete it first.";
-        if (!userMayAccess (fp2, tsp->homeDir))         return "Access to " + fp2 + " denyed.";
+        if (isFile (fp2))                               return fp2 + F (" already exists, delete it first.");
+        if (!userMayAccess (fp2, tsp->homeDir))         return "Access to " + fp2 + F (" denyed.");
 
         File f1, f2;
         String retVal = "File copied.";
@@ -1025,37 +1074,37 @@
       #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
 
         inline String __passwd__ (String& userName, telnetSessionParameters *tsp) __attribute__((always_inline)) {
-          String password1;
-          String password2;
+          String password1; password1.reserve (80);
+          String password2; password2.reserve (80);
                     
           if (tsp->userName == userName) { // user changing password for himself
             // read current password
-            tsp->connection->sendData ((char *) "Enter current password: ");
-            if (13 != __readLineFromClient__ (&password1, false, tsp))                                    return "Password not changed.";
+            tsp->connection->sendData ((char *) F ("Enter current password: "));
+            if (13 != __readLineFromClient__ (password1, false, tsp))                                     return F ("Password not changed.");
             // check if password is valid for user
-            if (!checkUserNameAndPassword (userName, password1))                                          return "Wrong password.";
+            if (!checkUserNameAndPassword (userName, password1))                                          return F ("Wrong password.");
           } else {                         // root is changing password for another user
             // check if user exists with getUserHomeDirectory
-            if (getUserHomeDirectory (userName) == "")                                                    return "User " +  userName + " does not exist."; 
+            if (getUserHomeDirectory (userName) == "")                                                    return "User " +  userName + F (" does not exist."); 
           }
           // read new password twice
           tsp->connection->sendData ("\r\nEnter new password for " + userName + ": ");
-          if (13 != __readLineFromClient__ (&password1, false, tsp) || !password1.length ())              return "\r\nPassword not changed.";
-          if (password1.length () > USER_PASSWORD_MAX_LENGTH)                                             return "\r\nNew password too long.";
+          if (13 != __readLineFromClient__ (password1, false, tsp) || !password1.length ())               return F ("\r\nPassword not changed.");
+          if (password1.length () > USER_PASSWORD_MAX_LENGTH)                                             return F ("\r\nNew password too long.");
           tsp->connection->sendData ("\r\nRe-enter new password for " + userName + ": ");
-          if (13 != __readLineFromClient__ (&password2, false, tsp))                                      return "\r\nPasswords do not match.";
+          if (13 != __readLineFromClient__ (password2, false, tsp))                                       return F ("\r\nPasswords do not match.");
           // check passwords
-          if (password1 != password2)                                                                     return "\r\nPasswords do not match.";
+          if (password1 != password2)                                                                     return F ("\r\nPasswords do not match.");
           // change password
           if (passwd (userName, password1))                                                               return "\r\nPassword changed for " + userName + ".";
-          else                                                                                            return "\r\nError changing password.";  
+          else                                                                                            return F ("\r\nError changing password.");  
         }
 
         inline String __userAdd__ (String& userName, String& userId, String& userHomeDir) __attribute__((always_inline)) {
-          if (userName.length () > USER_PASSWORD_MAX_LENGTH)  return "New user name too long.";  
-          if (userHomeDir.length () > FILE_PATH_MAX_LENGTH)   return "User home directory too long.";
+          if (userName.length () > USER_PASSWORD_MAX_LENGTH)  return F ("New user name too long.");  
+          if (userHomeDir.length () > FILE_PATH_MAX_LENGTH)   return F ("User home directory too long.");
           long uid = userId.toInt ();
-          if (!uid || uid <= 100)                             return "User Id must be > 1000.";
+          if (!uid || uid <= 100)                             return F ("User Id must be > 1000.");
                                                               return userAdd (userName, userId, userHomeDir);
         }
 
@@ -1077,10 +1126,11 @@
 
       String __telnet__ (String otherServerName, int otherServerPort, telnetSessionParameters *tsp) {
         // open TCP connection to the other server
-        TcpClient *otherServer = new TcpClient (otherServerName, otherServerPort, (TIME_OUT_TYPE) 300000); // close also this connection if inactive for more than 5 minutes
-        if (!otherServer || !otherServer->connection () || !otherServer->connection ()->started ()) return "Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".";
+        // alocate stack memory to TcpClient instance rather than heap - ESP32's heap gets fragmented easily
+        TcpClient otherServer (otherServerName, otherServerPort, (TIME_OUT_TYPE) 300000); // close also this connection if inactive for more than 5 minutes
+        if (!otherServer.connection ()) return "Could not connect to " + otherServerName + " on port " + String (otherServerPort) + ".";
     
-        struct __telnetStruct__ telnetSessionSharedMemory = {tsp->connection, true, otherServer->connection (), true, false};
+        struct __telnetStruct__ telnetSessionSharedMemory = {tsp->connection, true, otherServer.connection (), true, false};
         #define tskNORMAL_PRIORITY 1
         if (pdPASS != xTaskCreate ( [] (void *param)  { // other server -> client data transfer  
                                                         struct __telnetStruct__ *telnetSessionSharedMemory = (struct __telnetStruct__ *) param;
@@ -1104,7 +1154,6 @@
                                     &telnetSessionSharedMemory,
                                     tskNORMAL_PRIORITY,
                                     NULL)) {
-          delete (otherServer);                               
           return "Could not start telnet session with " + otherServerName + ".";
         } 
         if (pdPASS != xTaskCreate ( [] (void *param)  { // client -> other server data transfer
@@ -1128,9 +1177,8 @@
                                     &telnetSessionSharedMemory,
                                     tskNORMAL_PRIORITY,
                                     NULL)) {
-          telnetSessionSharedMemory.clientConnectionRunning = false;                            // signal other server -> client thread to stop
+          telnetSessionSharedMemory.clientConnectionRunning = false;                // signal other server -> client thread to stop
           while (telnetSessionSharedMemory.otherServerConnectionRunning) delay (1); // wait untill it stops
-          delete (otherServer);                               
           return "Could not start telnet session with " + otherServerName + ".";
         } 
         while (telnetSessionSharedMemory.otherServerConnectionRunning || telnetSessionSharedMemory.clientConnectionRunning) delay (10); // wait untill both threads stop
@@ -1171,12 +1219,12 @@
             // call webClient
             Serial.printf ("[%10lu] [CURL] %s:%i %s %s.\n", millis (), server.c_str (), port, method.c_str (), url.c_str ());
             String r = webClient ((char *) server.c_str (), port, (TIME_OUT_TYPE) 15000, method + " " + url);
-            return r != "" ? r : "Error, check dmesg to get more information.";
+            return r != "" ? r : F ("Error, check dmesg to get more information.");
           } else {
-            return "URL must begin with http://";
+            return F ("URL must begin with http://");
           }
         } else {
-          return "Use GET, PUT, POST or DELETE methods.";
+          return F ("Use GET, PUT, POST or DELETE methods.");
         }
       }
 
@@ -1188,7 +1236,7 @@
         if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
         String fp = fullFilePath (fileName, tsp->workingDir);
         if (fp == "" || isDirectory (fp))             return "Invalid file name " + fileName;
-        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + " denyed.";
+        if (!userMayAccess (fp, tsp->homeDir))        return "Access to " + fp + F (" denyed.");
 
         // 1. create a new file one if it doesn't exist (yet)
         String emptyContent = "";
@@ -1224,7 +1272,7 @@
               }
               f.close ();
               e = false;              
-            } else tsp->connection->sendData ((char *) "Can't edit a directory.");
+            } else tsp->connection->sendData ((char *) F ("Can't edit a directory."));
             f.close ();
           } else tsp->connection->sendData ("Can't read " + fp);
           if (e) return "";
@@ -1233,11 +1281,11 @@
 
         // 3. discard any already pending characters from client
         char c;
-        while (tsp->connection->available () == TcpConnection::AVAILABLE) tsp->connection->recvData (&c, 1);
+        while (tsp->connection->available () == TcpConnection::AVAILABLE) tsp->connection->recvChar (&c);
 
         // 4. get information about client window size
         if (tsp->clientWindowCol2) { // we know that client reports its window size, ask for latest information (the user might have resized the window since beginning of telnet session)
-          tsp->connection->sendData (String (IAC DO NAWS));
+          tsp->connection->sendData ((char *) F (IAC DO NAWS));
           // client reply that we are expecting from IAC DO NAWS will be in the form of: IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240)
 
           // There is a difference between telnet clients. Windows telent.exe for example will only report client window size as a result of
@@ -1249,14 +1297,14 @@
           if (tsp->connection->available () == TcpConnection::AVAILABLE) {
             // debug: Serial.printf ("[telnet vi debug] IAC DO NAWS response available in %lu ms\n", (unsigned long) (millis () - m));
             do {
-              if (!tsp->connection->recvData (&c, 1)) return "";
+              if (!tsp->connection->recvChar (&c)) return "";
             } while (c != 255 /* IAC */); // ignore everything before IAC
-            tsp->connection->recvData (&c, 1); if (c != 250 /* SB */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
-            tsp->connection->recvData (&c, 1); if (c != 31 /* NAWS */) return "Client send invalid reply to IAC DO NAWS."; // error in telnet protocol or connection closed
-            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &tsp->clientWindowCol2, 1)) return ""; 
-            tsp->connection->recvData (&c, 1); if (!tsp->connection->recvData ((char *) &tsp->clientWindowRow2, 1)) return "";
-            tsp->connection->recvData (&c, 1); // should be IAC, won't check if it is OK
-            tsp->connection->recvData (&c, 1); // should be SB, won't check if it is OK
+            tsp->connection->recvChar (&c); if (c != 250 /* SB */) return F ("Client send invalid reply to IAC DO NAWS."); // error in telnet protocol or connection closed
+            tsp->connection->recvChar (&c); if (c != 31 /* NAWS */) return F ("Client send invalid reply to IAC DO NAWS."); // error in telnet protocol or connection closed
+            tsp->connection->recvChar (&c); if (!tsp->connection->recvChar ((char *) &tsp->clientWindowCol2)) return ""; 
+            tsp->connection->recvChar (&c); if (!tsp->connection->recvChar ((char *) &tsp->clientWindowRow2)) return "";
+            tsp->connection->recvChar (&c); // should be IAC, won't check if it is OK
+            tsp->connection->recvChar (&c); // should be SB, won't check if it is OK
             // debug: Serial.println ("[telnet vi debug]  clinet reported its window size: " + String (tsp->clientWindowCol2) + " x " + String (tsp->clientWindowRow2)); // return "";
           } else {
             // debug: Serial.printf ("[telnet vi debug] IAC DO NAWS response not available in %lu ms, taking previous information\n", (unsigned long) (millis () - m));
@@ -1281,7 +1329,7 @@
         String message = " " + String (fileLines) + " lines ";
 
                               // clear screen
-                              if (!tsp->connection->sendData ((char *) "\x1b[2J")) return ""; // ESC[2J = clear screen
+                              if (!tsp->connection->sendData ((char *) F ("\x1b[2J"))) return ""; // ESC[2J = clear screen
 
         while (true) {
           // a. redraw screen 
@@ -1289,7 +1337,7 @@
        
           if (redrawHeader)   { 
                                 s = "---+"; for (int i = 4; i < tsp->clientWindowCol2; i++) s += '-'; 
-                                if (!tsp->connection->sendData ("\x1b[H" + s.substring (0, tsp->clientWindowCol2 - 28) + " Save: Ctrl-S, Exit: Ctrl-X")) return "";  // ESC[H = move cursor home
+                                if (!tsp->connection->sendData ("\x1b[H" + s.substring (0, tsp->clientWindowCol2 - 28) + F (" Save: Ctrl-S, Exit: Ctrl-X"))) return "";  // ESC[H = move cursor home
                                 redrawHeader = false;
                               }
           if (redrawAllLines) {
@@ -1349,20 +1397,20 @@
           // c. read and process incoming stream of characters
           char c = 0;
           delay (1);
-          if (!tsp->connection->recvData (&c, 1)) return "";
+          if (!tsp->connection->recvChar (&c)) return "";
           // debug: Serial.printf ("[telnet vi debug] %c (%i)\n", c, c);
           switch (c) {
             case 24:  // Ctrl-X
                       if (dirty) {
-                        tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + ";2H Save changes (y/n)? ");
+                        tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + F (";2H Save changes (y/n)? "));
                         redrawFooter = true; // overwrite this question at next redraw
                         while (true) {                                                     
-                          if (!tsp->connection->recvData (&c, 1)) return "";
+                          if (!tsp->connection->recvChar (&c)) return "";
                           if (c == 'y') goto saveChanges;
                           if (c == 'n') break;
                         }
                       } 
-                      tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + ";2H Share and Enjoy ----\r\n");
+                      tsp->connection->sendData ("\x1b[" + String (tsp->clientWindowRow2) + F (";2H Share and Enjoy ----\r\n"));
                       return "";
             case 19:  // Ctrl-S
 saveChanges:
@@ -1379,14 +1427,14 @@ saveChanges:
                           }
                           f.close ();
                         }
-                        if (e) { message = " Could't save changes "; } else { message = " Changes saved "; dirty = 0; }
+                        if (e) { message = F (" Could't save changes "); } else { message = F (" Changes saved "); dirty = 0; }
                       }
                       break;
             case 27:  // ESC [A = up arrow, ESC [B = down arrow, ESC[C = right arrow, ESC[D = left arrow, 
-                      if (!tsp->connection->recvData (&c, 1)) return "";
+                      if (!tsp->connection->recvChar (&c)) return "";
                       switch (c) {
                         case '[': // ESC [
-                                  if (!tsp->connection->recvData (&c, 1)) return "";
+                                  if (!tsp->connection->recvChar (&c)) return "";
                                   // debug: Serial.printf ("[telnet vi debug] ESC [ %c (%i)\n", c, c);
                                   switch (c) {
                                     case 'A':  // ESC [ A = up arrow
@@ -1406,25 +1454,25 @@ saveChanges:
                                               else if (textCursorY > 0) { textCursorY--; textCursorX = line [textCursorY].length (); }
                                               break;        
                                     case '1': // ESC [ 1 = home
-                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              tsp->connection->recvChar (&c); // read final '~'
                                               textCursorX = 0;
                                               break;
                                     case '4': // ESC [ 4 = end
-                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              tsp->connection->recvChar (&c); // read final '~'
                                               textCursorX = line [textCursorY].length ();
                                               break;
                                     case '5': // ESC [ 5 = pgup
-                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              tsp->connection->recvChar (&c); // read final '~'
                                               textCursorY -= (tsp->clientWindowRow2 - 2); if (textCursorY < 0) textCursorY = 0;
                                               if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
                                               break;
                                     case '6': // ESC [ 6 = pgdn
-                                              tsp->connection->recvData (&c, 1); // read final '~'
+                                              tsp->connection->recvChar (&c); // read final '~'
                                               textCursorY += (tsp->clientWindowRow2 - 2); if (textCursorY >= fileLines) textCursorY = fileLines - 1;
                                               if (textCursorX > line [textCursorY].length ()) textCursorX = line [textCursorY].length ();
                                               break;  
                                     case '3': // ESC [ 3 
-                                              if (!tsp->connection->recvData (&c, 1)) return "";
+                                              if (!tsp->connection->recvChar (&c)) return "";
                                               // debug: Serial.printf ("[telnet vi debug] ESC [ 3 %c (%i)\n", c, c);
                                               switch (c) {
                                                 case '~': // ESC [ 3 ~ (126) - putty reports del key as ESC [ 3 ~ (126), since it also report backspace key as del key let' treat del key as backspace                                                                 
@@ -1517,6 +1565,31 @@ backspace:
       }
                         
   };
+
+
+  // Arduino has serious problem with "new" - if it can not allocat memory for a new object it should
+  // return a NULL pointer but it just crashes ESP32 instead. The way around it to test if there is enough 
+  // memory available first, before calling "new". Since this is multi-threaded environment both should be
+  // done inside a critical section. Each class we create will implement a function that would create a
+  // new object and would follow certain rules. 
+
+  inline telnetServer *newTelnetServer (String (*telnetCommandHandler) (int argc, String argv [], telnetServer::telnetSessionParameters *tsp),
+                                        size_t stackSize,
+                                        String serverIP,
+                                        int serverPort,
+                                        bool (*firewallCallback) (String connectingIP)) {
+    telnetServer *p = NULL;
+    xSemaphoreTake (__newInstanceSemaphore__, portMAX_DELAY);
+      if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) >= sizeof (telnetServer) + 256) { // don't go below 256 B (live some memory for error messages ...)
+        try {
+          p = new telnetServer (telnetCommandHandler, stackSize, serverIP, serverPort, firewallCallback);
+        } catch (int e) {
+          ; // TcpServer thows exception if constructor fails
+        }
+      }
+    xSemaphoreGive (__newInstanceSemaphore__);
+    return p;
+  }  
   
   #include "time_functions.h"
 

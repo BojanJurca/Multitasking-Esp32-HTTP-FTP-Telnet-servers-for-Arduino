@@ -11,7 +11,7 @@
     request. If not the connectionHandler will try to resolve it by checking file system for a proper .html file
     or it will respond with reply 404 - page not found.
   
-    September, 18, 2021, Bojan Jurca
+    November, 4, 2021, Bojan Jurca
 
 */
 
@@ -85,7 +85,7 @@
                                                   // debug: Serial.printf ("[websocket debug] %s\n", wsRequest.c_str ());
 
                                                   // do the handshake with the browser so it would consider webSocket connection established
-                                                  int i = wsRequest.indexOf ("Sec-WebSocket-Key: ");
+                                                  int i = wsRequest.indexOf (F ("Sec-WebSocket-Key: "));
                                                   if (i > -1) {
                                                     int j = wsRequest.indexOf ("\r\n", i + 19);
                                                     if (j > -1) {
@@ -93,7 +93,7 @@
                                                       if (key.length () <= 24) { // Sec-WebSocket-Key is not supposed to exceed 24 characters
                                                          
                                                         // calculate Sec-WebSocket-Accept
-                                                        char s1 [64]; strcpy (s1, key.c_str ()); strcat (s1, "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"); 
+                                                        char s1 [64]; strcpy (s1, key.c_str ()); strcat (s1, (char *) F ("258EAFA5-E914-47DA-95CA-C5AB0DC85B11")); 
                                                         #define SHA1_RESULT_SIZE 20
                                                         unsigned char s2 [SHA1_RESULT_SIZE]; esp_sha (SHA1,(unsigned char*) s1, strlen (s1), s2);
                                                         #define WS_CLIENT_KEY_LENGTH  24
@@ -179,18 +179,18 @@
 
                                                                                     // check if this frame type is supported
                                                                                     if (!(__header__ [0] & 0b10000000)) { // check fin bit
-                                                                                      Serial.printf ("[%s] browser send a frame that is not supported: fin bit is not set\n", __class__.c_str ());
+                                                                                      // DEBUG: Serial.printf ("[%s] browser send a frame that is not supported: fin bit is not set\n", __class__.c_str ());
                                                                                       __connection__->closeConnection ();
                                                                                       return WebSocket::ERROR;
                                                                                     }
                                                                                     byte b  = __header__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close
                                                                                     if (b == WebSocket::CLOSE) {
                                                                                       __connection__->closeConnection ();
-                                                                                      Serial.printf ("[%s] browser requested to close webSocket\n", __class__.c_str ());
+                                                                                      // DEBUG: Serial.printf ("[%s] browser requested to close webSocket\n", __class__.c_str ());
                                                                                       return WebSocket::NOT_AVAILABLE;
                                                                                     }
                                                                                     if (b != WebSocket::STRING && b != WebSocket::BINARY) { 
-                                                                                      Serial.printf ("[%s] browser send a frame that is not supported: opcode is not text or binary\n", __class__.c_str ());
+                                                                                      // DEBUG: Serial.printf ("[%s] browser send a frame that is not supported: opcode is not text or binary\n", __class__.c_str ());
                                                                                       __connection__->closeConnection ();
                                                                                       return WebSocket::ERROR;
                                                                                     } // NOTE: after this point only TEXT and BINRY frames are processed!
@@ -200,7 +200,7 @@
                                                                                           __mask__ = __header__ + 2; // bytes 2, 3, 4, 5
                                                                                           if (!(__payload__ = (byte *) malloc (__payloadLength__ + 1))) { // + 1: final byte to conclude C string if data type is text
                                                                                             __connection__->closeConnection ();
-                                                                                            Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
+                                                                                            // DEBUG: Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
                                                                                             return WebSocket::ERROR;                                                                                            
                                                                                           }
                                                                                           // continue with reading payload immediatelly
@@ -211,7 +211,7 @@
                                                                                           __bufferState__ = READING_MEDIUM_HEADER;
                                                                                           // continue reading immediately
                                                                                     } else { // 127 means large data block - not supported since ESP32 doesn't have enough memory
-                                                                                          Serial.printf ("[%s] browser send a frame that is not supported: payload is larger then 65535 bytes\n", __class__.c_str ());
+                                                                                          // DEBUG: Serial.printf ("[%s] browser send a frame that is not supported: payload is larger then 65535 bytes\n", __class__.c_str ());
                                                                                           __connection__->closeConnection ();
                                                                                           return WebSocket::ERROR;                         
                                                                                     }
@@ -227,7 +227,7 @@
                                                                                     __mask__ = __header__ + 4; // bytes 4, 5, 6, 7
                                                                                     if (!(__payload__ = (byte *) malloc (__payloadLength__ + 1))) { // + 1: final byte to conclude C string if data type is text
                                                                                       __connection__->closeConnection ();
-                                                                                      Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
+                                                                                      // DEBUG: Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
                                                                                       return WebSocket::ERROR;                                                                                            
                                                                                     }
                                                                                     __bufferState__ = READING_PAYLOAD;
@@ -265,7 +265,7 @@ readingPayload:
                                                       case WebSocket::NOT_AVAILABLE:  delay (1);
                                                                                       break;
                                                       case WebSocket::STRING:         { // Serial.printf ("readString: binary size = %i, buffer state = %i, available = %i\n", binarySize (), __bufferState__, available ());
-                                                                                        String s;
+                                                                                        String s; s.reserve (80);
                                                                                         // if (__bufferState__ == FULL && __payload__) { // double check ...
                                                                                           s = String ((char *) __payload__); 
                                                                                           free (__payload__);
@@ -321,11 +321,9 @@ readingPayload:
                                                 
     private:
 
-      String __class__ = "webSocket";
-
       bool __sendFrame__ (byte *buffer, size_t bufferSize, WEBSOCKET_DATA_TYPE dataType) { // returns true if frame have been sent successfully
                                                 if (bufferSize > 0xFFFF) { // this size fits in large frame size - not supported
-                                                  Serial.printf ("[%s] trying to send a frame that is not supported: payload is larger then 65535 bytes\n", __class__.c_str ());
+                                                  // DEBUG: Serial.printf ("[%s] trying to send a frame that is not supported: payload is larger then 65535 bytes\n", __class__.c_str ());
                                                   __connection__->closeConnection ();
                                                   return false;                         
                                                 } 
@@ -333,7 +331,7 @@ readingPayload:
                                                 int frameSize;
                                                 if (bufferSize > 125) { // medium frame size
                                                   if (!(frame = (byte *) malloc (frameSize = 4 + bufferSize))) { // 4 bytes for header (without mask) + payload
-                                                    Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
+                                                    // DEBUG: Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
                                                     __connection__->closeConnection ();
                                                     return false;
                                                   }
@@ -345,7 +343,7 @@ readingPayload:
                                                   memcpy (frame + 4, buffer, bufferSize);  
                                                 } else { // small frame size
                                                   if (!(frame = (byte *) malloc (frameSize = 2 + bufferSize))) { // 2 bytes for header (without mask) + payload
-                                                    Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
+                                                    // DEBUG: Serial.printf ("[%s] malloc failed - out of memory\n", __class__.c_str ());
                                                     __connection__->closeConnection ();
                                                     return false;
                                                   }
@@ -356,7 +354,7 @@ readingPayload:
                                                 if (__connection__->sendData ((char *) frame, frameSize) != frameSize) {
                                                   free (frame);
                                                   __connection__->closeConnection ();
-                                                  Serial.printf ("[%s] failed to send frame\n", __class__.c_str ());
+                                                  // DEBUG: Serial.printf ("[%s] failed to send frame\n", __class__.c_str ());
                                                   return false;
                                                 }
                                                 free (frame);
@@ -430,7 +428,7 @@ readingPayload:
                                                             return between (cookies, " " + cookieName + "=", ";");
                                                           }
           // setting HTTP response
-          String httpResponseStatus = "200 OK"; // by default
+          String httpResponseStatus = F ("200 OK"); // by default
           void setHttpResponseHeaderField (String fieldName, String fieldValue) { httpResponseHeaderFields += fieldName + ":" + fieldValue + "\r\n"; }
           void setHttpResponseCookie (String cookieName, String cookieValue, time_t expires = 0, String path = "/") { 
                                                                                                                       char e [50] = "";
@@ -462,23 +460,19 @@ readingPayload:
                                   __externalWsRequestHandler__ = wsRequestHandler; 
                                   __webServerHomeDirectory__ = getUserHomeDirectory ("webserver"); 
                                   if (__webServerHomeDirectory__ == "") { 
-                                    dmesg ("[" + __class__ + "] home directory for webserver system account is not set.");
+                                    dmesg (F ("[httpServer] home directory for webserver system account is not set."));
                                     return;
                                   }
                                   __started__ = true; // we have initialized everything needed for TCP connection
-                                  if (started ()) dmesg ("[" + __class__ + "] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
+                                  dmesg ("[httpServer] started on " + String (serverIP) + ":" + String (serverPort) + (firewallCallback ? " with firewall." : "."));
                                 }
       
-      ~httpServer ()            { if (started ()) dmesg ("[" + __class__ + "] stopped."); }
+      ~httpServer ()            { dmesg (F ("[httpServer] stopped.")); }
       
-      bool started ()           { return TcpServer::started () && __started__; } 
-
       String getHomeDirectory () { return __webServerHomeDirectory__; }
 
     private:
       friend class httpsServer;
-
-      String __class__ = "httpServer";
 
       String (*__externalHttpRequestHandler__) (String& httpRequest, httpServer::wwwSessionParameters *wsp);  // httpRequestHandler callback function provided by calling program
       void (*__externalWsRequestHandler__) (String& wsRequest, WebSocket *webSocket);                         // wsRequestHandler callback function provided by calling program
@@ -490,19 +484,22 @@ readingPayload:
       }
 
       virtual void __webConnectionHandler__ (TcpConnection *connection) {  // connectionHandler callback function
-        char buffer [2048 + 1]; *buffer = 0;
-        String incomingRequests = "";
+        #define BUFF_SIZE 1024 + 1
+        char buffer [BUFF_SIZE]; *buffer = 0;
+        String incomingRequests = ""; incomingRequests.reserve (BUFF_SIZE);
         int received;
         while ((received = connection->recvData (buffer, sizeof (buffer) - 1))) { // read block of incoming HTTP request(s)
-          // Serial.printf ("   DEBUG {socket %i} received %i bytes\n", connection->getSocket (), received );
+          // DEBUG: Serial.printf ("   DEBUG {socket %i} received %i bytes\n", connection->getSocket (), received );
           buffer [received] = 0;
           // append it to already existing part of HTTP request
-          incomingRequests += String (buffer);
+          incomingRequests += buffer;
           // check if the end of HTTP request has already arrived
-          int i = incomingRequests.indexOf ("\r\n\r\n");
+          int i = incomingRequests.indexOf (F ("\r\n\r\n"));
           if (i >= 0) {
             // Serial.printf ("   DEBUG {socket %i} received HTTP request\n", connection->getSocket () );
             String httpRequest = incomingRequests.substring (0, i + 4);
+            // DEBUG: Serial.println (httpRequest);            
+            
             wwwSessionParameters wsp (&httpRequest, &__webServerHomeDirectory__, connection);
 
             // we have got HTTP request
@@ -513,34 +510,34 @@ readingPayload:
             //    - reply with error 404 if it is not
 
             // debug: Serial.printf ("[" + __class__ + " debug] %s\n", buffer);
-            if (stristr (buffer, (char *) "UPGRADE: WEBSOCKET")) {
+            if (stristr ((char *) incomingRequests.c_str (), (char *) F ("UPGRADE: WEBSOCKET"))) {
               connection->setTimeOut ((TIME_OUT_TYPE) 300000); // set time-out to 5 minutes for WebSockets (by default if is 1.5 s for HTTP requests)
-              WebSocket *webSocket = new WebSocket (connection, httpRequest); 
-              if (webSocket && webSocket->isOpen ()) { // check success
-                if (__externalWsRequestHandler__) __externalWsRequestHandler__ (httpRequest, webSocket);
-                delete (webSocket);
+              // alocate stack memory to TcpClient instance rather than heap - ESP32's heap gets fragmented easily
+              WebSocket webSocket (connection, httpRequest); 
+              if (webSocket.isOpen ()) { // check success
+                if (__externalWsRequestHandler__) __externalWsRequestHandler__ (httpRequest, &webSocket);
               } else {
-                dmesg ("[" + __class__ + "] can't open WebSocket.");
+                dmesg (F ("[httpServer] can't open WebSocket."));
               }
               return; // close this connection
             }
 
             String httpResponseContent;
             if (__externalHttpRequestHandler__ && (httpResponseContent = __externalHttpRequestHandler__ (httpRequest, &wsp)) != "") {
-              if (!stristr ((char *) wsp.httpResponseHeaderFields.c_str (), (char *) "CONTENT-TYPE")) { // add Content-Type if it is not set yet
-                     if (stristr ((char *) httpResponseContent.c_str (), (char *) "<HTML>")) wsp.setHttpResponseHeaderField ("Content-Type", "text/html"); // try guessing if Content-Type is HTML ...
-                else if (strstr (httpResponseContent.c_str (), "{"))                         wsp.setHttpResponseHeaderField ("Content-Type", "application/json");
+              if (!stristr ((char *) wsp.httpResponseHeaderFields.c_str (), (char *) F ("CONTENT-TYPE"))) { // add Content-Type if it is not set yet
+                     if (stristr ((char *) httpResponseContent.c_str (), (char *) F ("<HTML>"))) wsp.setHttpResponseHeaderField ("Content-Type", "text/html"); // try guessing if Content-Type is HTML ...
+                else if (strstr (httpResponseContent.c_str (), "{"))                             wsp.setHttpResponseHeaderField ("Content-Type", "application/json");
                 // ... add more if needed but Contet-Type can often be omitted without problems ...                
                 else                                                                         wsp.setHttpResponseHeaderField ("Content-Type", "text/plain"); // ... or just say it is a plain text
               }
               // debug: Serial.println ("[" + __class__ + " debug] HTTP/1.1 " + wsp.httpResponseStatus + "\r\n" + wsp.httpResponseHeaderFields + "Content-Length:" + String (httpResponseContent.length ()) + "\r\n\r\n" + httpResponseContent);
-              connection->sendData ("HTTP/1.1 " + wsp.httpResponseStatus + "\r\n" + wsp.httpResponseHeaderFields + "Content-Length:" + String (httpResponseContent.length ()) + "\r\n\r\n" + httpResponseContent);
+              connection->sendData ("HTTP/1.1 " + wsp.httpResponseStatus + F ("\r\n") + wsp.httpResponseHeaderFields + F ("Content-Length:") + String (httpResponseContent.length ()) + F ("\r\n\r\n") + httpResponseContent);
             } else {
               connection->sendData (__internalHttpRequestHandler__ (httpRequest, &wsp)); // send reply to browser
             }
 
             // if the client wants to keep connection alive for the following requests then let it be so
-            if (stristr ((char *) httpRequest.c_str (), (char *) "CONNECTION: KEEP-ALIVE")) {
+            if (stristr ((char *) httpRequest.c_str (), (char *) F ("CONNECTION: KEEP-ALIVE"))) {
               incomingRequests = incomingRequests.substring (i + 4); // read another request on this connection
             } else {
               break; // close this connection
@@ -560,7 +557,7 @@ readingPayload:
               String fileName = httpRequest.substring (5, i);
               if (fileName == "") fileName = "index.html";
               fileName = __webServerHomeDirectory__ + fileName;
-              if (!stristr ((char *) wsp->httpResponseHeaderFields.c_str (), (char *) "CONTENT-TYPE")) { // add Content-Type if it is not set yet
+              if (!stristr ((char *) wsp->httpResponseHeaderFields.c_str (), (char *) F ("CONTENT-TYPE"))) { // add Content-Type if it is not set yet
                      if (fileName.endsWith (".bmp"))                                wsp->setHttpResponseHeaderField ("Content-Type", "image/bmp");
                 else if (fileName.endsWith (".css"))                                wsp->setHttpResponseHeaderField ("Content-Type", "text/css");
                 else if (fileName.endsWith (".csv"))                                wsp->setHttpResponseHeaderField ("Content-Type", "text/csv");
@@ -580,23 +577,20 @@ readingPayload:
               if (f) {
                 if (!f.isDirectory ()) {
                   #define BUFF_SIZE 2048
-                  char *buff = (char *) malloc (BUFF_SIZE); // get 2 KB of memory from heap
-                  if (buff) {
-                    String httpHeader = "HTTP/1.1 " + wsp->httpResponseStatus + "\r\n" + wsp->httpResponseHeaderFields + "Content-Length:" + String (f.size ()) + "\r\n\r\n";
-                    // debug: Serial.printf ("[" + __class__ + " debug] %s", httpHeader.c_str ());
-                    if (httpHeader.length () > BUFF_SIZE - 2) { // there should normally be enough space, but check anyway
-                      f.close ();
-                      return "HTTP/1.1 500 Internal server error\r\nContent-Length:29\r\n\r\nError: HTTP header too large."; 
-                    }
-                    strcpy (buff, httpHeader.c_str ());
-                    int i = strlen (buff);
-                    while (f.available ()) {
-                      *(buff + i++) = f.read ();
-                      if (i == BUFF_SIZE) { wsp->connection->sendData ((char *) buff, BUFF_SIZE); i = 0; }
-                    }
-                    if (i) { wsp->connection->sendData (buff, i); }
-                    free (buff);
-                  } 
+                  char buff [BUFF_SIZE]; // get 2 KB of memory from stack
+                  String httpHeader = "HTTP/1.1 " + wsp->httpResponseStatus + F ("\r\n") + wsp->httpResponseHeaderFields + F ("Content-Length:") + String (f.size ()) + F ("\r\n\r\n");
+                  // debug: Serial.printf ("[" + __class__ + " debug] %s", httpHeader.c_str ());
+                  if (httpHeader.length () > BUFF_SIZE - 2) { // there should normally be enough space, but check anyway
+                    f.close ();
+                    return F ("HTTP/1.1 500 Internal server error\r\nContent-Length:29\r\n\r\nError: HTTP header too large."); 
+                  }
+                  strcpy (buff, httpHeader.c_str ());
+                  int i = strlen (buff);
+                  while (f.available ()) {
+                    *(buff + i++) = f.read ();
+                    if (i == BUFF_SIZE) { wsp->connection->sendData ((char *) buff, BUFF_SIZE); i = 0; }
+                  }
+                  if (i) { wsp->connection->sendData (buff, i); }                  
                   f.close ();
                   return ""; // success
                 } // if file is a file, not a directory
@@ -606,69 +600,91 @@ readingPayload:
           }
         #endif
 
-        return "HTTP/1.1 404 Not found\r\nContent-Length:20\r\n\r\nPage does not exist."; // HTTP header and content
+        return F ("HTTP/1.1 404 Not found\r\nContent-Length:20\r\n\r\nPage does not exist."); // HTTP header and content
       }     
         
   };
 
+  // Arduino has serious problem with "new" - if it can not allocat memory for a new object it should
+  // return a NULL pointer but it just crashes ESP32 instead. The way around it to test if there is enough 
+  // memory available first, before calling "new". Since this is multi-threaded environment both should be
+  // done inside a critical section. Each class we create will implement a function that would create a
+  // new object and would follow certain rules. 
 
+  inline httpServer *newHttpServer (String (*httpRequestHandler) (String& httpRequest, httpServer::wwwSessionParameters *wsp), 
+                                    void (*wsRequestHandler) (String& wsRequest, WebSocket *webSocket),
+                                    size_t stackSize,
+                                    String serverIP, 
+                                    int serverPort,  
+                                    bool (*firewallCallback) (String connectingIP)) {
+    httpServer *p = NULL;
+    xSemaphoreTake (__newInstanceSemaphore__, portMAX_DELAY);
+      if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) >= sizeof (httpServer) + 256) { // don't go below 256 B (live some memory for error messages ...)
+        try {
+          p = new httpServer (httpRequestHandler, wsRequestHandler, stackSize, serverIP, serverPort, firewallCallback);
+        } catch (int e) {
+          ; // TcpServer thows exception if constructor fails
+        }
+      }
+    xSemaphoreGive (__newInstanceSemaphore__);
+    return p;
+  }  
+
+  
 /*  
    webClient function doesn't really belong to webServer, but it may came handy every now and then  
 */
 
   String webClient (String serverName, int serverPort, TIME_OUT_TYPE timeOutMillis, String httpRequest) {
     #define BUFF_SIZE 2048
-    char *buffer = (char *) malloc (BUFF_SIZE); // reserve some space from heap to hold blocks of response
-    if (!buffer) { dmesg ("[webClient] could not get enough heap memory."); return ""; }
+    char buffer [BUFF_SIZE]; // reserve some space from the stack
     *buffer = 0;
     
-    String retVal = ""; // place for response
-    TcpClient nonThreadedTcpClient (serverName, serverPort, timeOutMillis); // create non-threaded TCP client instance
-    // get reference to TCP connection. Before non-threaded constructor of TcpClient returns the connection is established if this is possible
-    TcpConnection *nonThreadedTcpConnection = nonThreadedTcpClient.connection ();
+    String retVal = ""; retVal.reserve (BUFF_SIZE); // place for response
+    // alocate stack memory to TcpClient instance rather than heap - ESP32's heap gets fragmented easily
+    TcpClient notThreadedTcpClient (serverName, serverPort, timeOutMillis); // create non-threaded TCP client instance
+    if (!notThreadedTcpClient.connection ()) {
+      dmesg ("[webClient] unable to connect to " + serverName + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
+      return "";
+    }
+    // get reference to TCP connection. Before not-threaded constructor of TcpClient returns the connection is established if this is possible
+    TcpConnection *connection = notThreadedTcpClient.connection ();
     // test if connection is established
-    if (nonThreadedTcpConnection) {
-      httpRequest += " \r\n\r\n"; // make sure HTTP request ends properly - add ending sequence
-      /* int sentTotal = */ nonThreadedTcpConnection->sendData (httpRequest); // send HTTP request
-      // Serial.printf ("[%10lu] [webClient] sent %i bytes.\n", millis (), sentTotal);
-      // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
-      // if the response is short enough it will normally arrive in one data block although
-      // TCP does not guarantee that it would
-      int receivedTotal = 0;
-      while (int received = nonThreadedTcpConnection->recvData (buffer, BUFF_SIZE - 1)) {
-        receivedTotal += received;
-        buffer [received] = 0; // mark the end of the string we have just read
-        retVal += String (buffer);
-        // DEBUG: Serial.printf ("[%10lu] [webClient] received %i bytes.\n", millis (), received);
-      }
-      if (receivedTotal) {
-        // search buffer for content-lenght: to check if the whole reply has arrived against receivedTotal
-        char *s = (char *) retVal.c_str ();
-        char *c = stristr (s, (char *) "CONTENT-LENGTH:");
-        if (c) {
-          unsigned long ul;
-          if (sscanf (c + 15, "%lu", &ul) == 1) {
-            // DEBUG: Serial.printf ("[%10lu] [webClient] content-length %lu, receivedTotal %i.\n", millis (), ul, receivedTotal);
-            if ((c = strstr (c + 15, "\r\n\r\n"))) {
-              if (receivedTotal == ul + c - s + 4) {
-                // DEBUG: Serial.printf ("[%10lu] [webClient] whole HTTP response of content-length %lu bytes and total length of %u bytes has arrived.\n", millis (), ul, retVal.length ());
-                free (buffer);
-                return retVal; // the response is complete
-              } else {
-                dmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
-                retVal = "";
-              }
+    httpRequest += " \r\n\r\n"; // make sure HTTP request ends properly - add ending sequence
+    /* int sentTotal = */ connection->sendData (httpRequest); // send HTTP request
+    // Serial.printf ("[%10lu] [webClient] sent %i bytes.\n", millis (), sentTotal);
+    // read response in a loop untill 0 bytes arrive - this is a sign that connection has ended 
+    // if the response is short enough it will normally arrive in one data block although
+    // TCP does not guarantee that it would
+    int receivedTotal = 0;
+    while (int received = connection->recvData (buffer, BUFF_SIZE - 1)) {
+      receivedTotal += received;
+      buffer [received] = 0; // mark the end of the string we have just read
+      retVal += String (buffer);
+      // DEBUG: Serial.printf ("[%10lu] [webClient] received %i bytes.\n", millis (), received);
+    }
+    if (receivedTotal) {
+      // search buffer for content-lenght: to check if the whole reply has arrived against receivedTotal
+      char *s = (char *) retVal.c_str ();
+      char *c = stristr (s, (char *) "CONTENT-LENGTH:");
+      if (c) {
+        unsigned long ul;
+        if (sscanf (c + 15, "%lu", &ul) == 1) {
+          // DEBUG: Serial.printf ("[%10lu] [webClient] content-length %lu, receivedTotal %i.\n", millis (), ul, receivedTotal);
+          if ((c = strstr (c + 15, "\r\n\r\n"))) {
+            if (receivedTotal == ul + c - s + 4) {
+              // DEBUG: Serial.printf ("[%10lu] [webClient] whole HTTP response of content-length %lu bytes and total length of %u bytes has arrived.\n", millis (), ul, retVal.length ());
+              return retVal; // the response is complete
+            } else {
+              dmesg ("[webClient] error in HTTP response regarding content-length, httpRequest = " + httpRequest);
+              retVal = "";
             }
           }
-        } // else  'content-lenght' not found in the reply, assume it is OK
-      } else {
-        dmesg ("[webClient] time-out, httpRequest = " + httpRequest);
-      }
-      // DEBUG: Serial.println (retVal);
+        }
+      } // else  'content-lenght' not found in the reply, assume it is OK
     } else {
-      dmesg ("[webClient] unable to connect to " + serverName + " on port " + String (serverPort) + ", httpRequest = " + httpRequest);
-    }     
-    free (buffer);
+      dmesg ("[webClient] time-out, httpRequest = " + httpRequest);
+    }
     return retVal;
   }
  
