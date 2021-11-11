@@ -13,7 +13,7 @@
 
 			h1 {font-family: verdana; font-size: 40px; text-align: center}
 
-			div.d1 {position: relative; overflow: hidden; width: 100%; height: 40px}
+			div.d1 {position: relative; width: 100%; height: 40px}
 			div.d2 {position: relative; float: left; width: 48%; font-family: verdana; font-size: 30px; color: gray;}
 			div.d3 {position: relative; float: left; width: 13%; font-family: verdana; font-size: 30px; color: black;}
 			div.d4 {position: relative; float: left; width: 39%;}
@@ -177,10 +177,10 @@
 			<div class='d2'>&nbsp;Vertical sensitivity</div>
 			<div class='d3' id='sensitivityLabel'>100 %</div>
 			<div class='d4'> 
-				<div class='slider'><input id='sensitivity' type='range' min='0' max='5' value='0' step='1' disabled onchange="
+				<input id='sensitivity' type='range' min='0' max='5' value='0' step='1' disabled onchange="
 					document.getElementById ('sensitivityLabel').textContent = sensitivityLabelFromSensitivitySlider (this.value);
 					drawBackgroundAndCalculateParameters ();
-				" /></div>
+				" />
 			</div>
 		</div>
 
@@ -188,10 +188,10 @@
 			<div class='d2'>&nbsp;Vertical position</div>
 			<div class='d3' id='positionLabel'>0</div>
 			<div class='d4'> 
-				<div class='slider'><input id='position' type='range' min='0' max='4000' value='0' step='100' disabled onchange="
+				<input id='position' type='range' min='0' max='4000' value='0' step='100' disabled onchange="
 					document.getElementById ('positionLabel').textContent = this.value;
 					drawBackgroundAndCalculateParameters ();
-				" /></div>
+				" />
 			</div>
 		</div>
 
@@ -203,10 +203,10 @@
 			</div>
 			<div class='d3' id='posTriggerLabel'>on 1000</div>
 			<div class='d5'> 
-				<div class='slider'><input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' disabled onchange="
+				<input id='posTreshold' type='range' min='1' max='4095' value='1000' step='1' disabled onchange="
 					document.getElementById ('posTriggerLabel').textContent = 'on ' + this.value;
 					document.getElementById ('posTrigger').checked = true;
-				" /></div>
+				" />
 			</div>
 		</div>
 		<div class='d1'>
@@ -216,10 +216,10 @@
 			</div>
 			<div class='d3' id='negTriggerLabel'>on 3000</div>
 			<div class='d5'> 
-				<div class='slider'><input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' disabled onchange="
+				<input id='negTreshold' type='range' min='0' max='4094' value='3000' step='1' disabled onchange="
 					document.getElementById('negTriggerLabel').textContent = 'on ' + this.value;
 					document.getElementById('negTrigger').checked = true;
-				" /></div>
+				" />
 			</div>
 
 		</div>
@@ -229,10 +229,10 @@
 			<div class='d2'>&nbsp;Horizontal frequency</div>
 			<div class='d3' id='frequencyLabel'>1 KHz</div>
 			<div class='d4'> 
-				<div class='slider'><input id='frequency' type='range' min='1' max='17' value='14' step='1' onchange="
+				<input id='frequency' type='range' min='1' max='17' value='14' step='1' onchange="
 					document.getElementById ('frequencyLabel').textContent = frequencyLabelFromFrequencySlider (this.value);
 					drawBackgroundAndCalculateParameters ();
-				" /></div>
+				" />
 			</div>
 		</div>
 
@@ -256,7 +256,7 @@
 
 		<hr />
 		<div class='d1'; style='height: 76px;'>
-			<div class='d2'>&nbsp;Remeber settings<br>&nbsp;<small><small>Some essential cookies will be used for this.</small></small></div>
+			<div class='d2'>&nbsp;Remember settings<br>&nbsp;<small><small>Some essential cookies will be used for this.</small></small></div>
 			<div class='d3'>
 				<label class='switch'><input type='checkbox' id='remember' onclick="
 					saveSettings ();
