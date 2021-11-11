@@ -8,7 +8,7 @@
  
     Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
     
-    September, 19, 2021, Bojan Jurca
+    November, 2, 2021, Bojan Jurca
                  
  */
 
@@ -250,21 +250,21 @@ void setup () {
                                         "0.0.0.0",                    // start HTTP server on all available ip addresses
                                         80,                           // HTTP port
                                         NULL);                        // we won't use firewall callback function for HTTP server
-  if (!httpSrv || (httpSrv && !httpSrv->started ())) dmesg ("[httpServer] did not start.");
+  if (!httpSrv) dmesg ("[httpServer] did not start.");
 
   // start FTP server
   ftpServer *ftpSrv = new ftpServer ("0.0.0.0",                       // start FTP server on all available ip addresses
                                      21,                              // controll connection FTP port
                                      firewall);                       // use firewall callback function for FTP server (replace with NULL if not needed)
-  if (!ftpSrv || (ftpSrv && !ftpSrv->started ())) dmesg ("[ftpServer] did not start.");
+  if (!ftpSrv) dmesg ("[ftpServer] did not start.");
 
   // start telnet server
-  telnetServer *telnetSrv = new telnetServer (telnetCommandHandler,   // a callback function that will handle telnet commands that are not handled by telnet server itself
-                                              16 * 1024,              // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
-                                              "0.0.0.0",              // start telnt server on all available ip addresses
-                                              23,                     // telnet port
-                                              NULL);                  // use firewall callback function for telnet server (replace with NULL if not needed)
-  if (!telnetSrv || (telnetSrv && !telnetSrv->started ())) dmesg ("[telnetServer] did not start.");
+  telnetServer *telnetSrv = newTelnetServer (telnetCommandHandler,  // a callback function that will handle telnet commands that are not handled by telnet server itself
+                                             16 * 1024,             // 16 KB stack size is usually enough, if telnetCommandHanlder uses more stack increase this value until server is stable
+                                             "0.0.0.0",             // start telnt server on all available ip addresses
+                                             23,                    // telnet port
+                                             NULL);                 // use firewall callback function for telnet server (replace with NULL if not needed)
+  if (!telnetSrv) dmesg ("[telnetServer] did not start.");
 
               // ----- some examples - delete this code if it is not needed -----
 
