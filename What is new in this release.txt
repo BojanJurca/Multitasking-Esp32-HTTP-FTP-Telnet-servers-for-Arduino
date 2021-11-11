@@ -1,8 +1,3 @@
-New in 1.29
+New in 1.30 - still in development
 
-  - SMTP client (sendMail function) 
-  - some functions are renamed
-  - simplification of template by moving the examples to separate files
-  - additional examples
-  - step by step guides
-  - reference manual
+  - freeing up heap to avoid memory fragmentation
