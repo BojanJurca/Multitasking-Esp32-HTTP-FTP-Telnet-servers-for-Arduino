@@ -1,5 +1,8 @@
-New in release 1.26
+New in 1.29
 
-  - supports cookies built into web server
-  - improved oscilloscope
-  - bug fixes
+  - SMTP client (sendMail function) 
+  - some functions are renamed
+  - simplification of template by moving the examples to separate files
+  - additional examples
+  - step by step guides
+  - reference manual

@@ -1,17 +1,14 @@
 /*
- * 
- * measurements.hpp 
- * 
- *  This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- * 
- *  Measurements.hpp include circular queue for storing measurements data set.
- * 
- * History:
- *          - first release, October 31, 2018, Bojan Jurca
- *          - elimination of compiler warnings and some bugs
- *            Jun 10, 2020, Bojan Jurca       
- *  
- */
+  
+    measurements.hpp 
+  
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+  
+    Measurements.hpp include circular queue for storing measurements data set.
+  
+    Jun 10, 2020, Bojan Jurca
+
+*/
 
 
 #ifndef __MEASUREMENTS__
