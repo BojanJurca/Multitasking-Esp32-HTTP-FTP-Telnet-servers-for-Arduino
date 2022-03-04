@@ -1,10 +1,14 @@
 /*
-    Handle web cookies
+    A minimal HTTP server
 */
 
 #include <WiFi.h>
 
+  // include all .h and .hpp files for full functionality of httpServer
+  
   #include "./servers/dmesg_functions.h"      // contains message queue that can be displayed by using "dmesg" telnet command
+  // #include "./servers/perfMon.h"           // contains performence countrs that can be displayed by using "perfmon" telnet command
+  // #include "./servers/file_system.h"       // httpServer can server .html and other files from /var/www/html directory
 
   // define how network.h will connect to the router
     #define HOSTNAME                  "MyESP32Server"       // define the name of your ESP32 here
@@ -27,6 +31,7 @@
   // finally include httpServer.hpp
   #include "./servers/httpServer.hpp"
 
+
   String httpRequestHandler (char *httpRequest, httpConnection *hcn) { // note that each HTTP connection runs in its own thread/task, more of them may run simultaneously so this function should be reentrant
     // input: char *httpRequest: the whole HTTP request but without ending \r\n\r\n
     // input example: GET / HTTP/1.1
@@ -40,15 +45,14 @@
 
     #define httpRequestStartsWith(X) (strstr(httpRequest,X)==httpRequest)
 
-    if (httpRequestStartsWith ("GET / ")) {
-                                            String refreshCounter = hcn->getHttpRequestCookie ((char *) "refreshCounter");  // get cookie from HTTP request
-                                            if (refreshCounter == "") refreshCounter = "0";
-                                            refreshCounter = String (refreshCounter.toInt () + 1); // increase refresh counter
-                                            hcn->setHttpReplyCookie ("refreshCounter", refreshCounter, getGmt () + 60);     // set 1 minute valid cookie that will be send to browser with HTTP reply
-                                          
-                                            return "<HTML>Web cookies<br><br>This page has been refreshed " + refreshCounter + " times last minute. Click refresh to see more.</HTML>";
-                                          }
-    
+    if (httpRequestStartsWith ("GET / ")) // return a static (for example HTML) content from RAM - static content may be several KB long 
+                                          return F ("<html>"
+                                                    "  Congratulations, this is working."
+                                                    "</html>");
+
+    if (httpRequestStartsWith ("GET /upTime ")) // return calculated (for example JSON) content - we are more limited with calculated content regarding its size
+                                                return "{\"upTime\":\"" + String (millis () / 1000) + " seconds\"}";
+
     // let the HTTP server try to find a file in /var/www/html and send it as a reply
     return "";
   }
@@ -61,7 +65,7 @@ void setup () {
 
   // mountFileSystem (true);                              // to enable httpServer to server .html and other files from /var/www/html directory
   startWiFi ();
-  startCronDaemon (NULL);                                 // sichronize ESP32 clock with NTP servers if you want to use cookies with expiration time
+  // startCronDaemon (NULL);                              // sichronize ESP32 time with NTP servers if you want to use cookies with expiration time
 
   myHttpServer = new httpServer (
                                   httpRequestHandler,               // or NULL if httpRequestHandler is not going to be used

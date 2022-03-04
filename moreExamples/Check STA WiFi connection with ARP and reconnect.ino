@@ -8,28 +8,26 @@
 
 #include <WiFi.h>
 
-  #define HOSTNAME    "MyESP32Server" // define the name of your ESP32 here
-  #define MACHINETYPE "ESP32 NodeMCU" // describe your hardware here
-
-  // tell ESP32 how to connect to your WiFi router
-  #define DEFAULT_STA_SSID          "YOUR_STA_SSID"               // define default WiFi settings (see network.h) 
-  #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
-  // tell ESP32 not to set up AP, we do not need it in this example
-  #define DEFAULT_AP_SSID           "" // HOSTNAME                      // set it to "" if you don't want ESP32 to act as AP 
-  #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"            // must be at leas 8 characters long
+  // define how network.h will connect to the router
+    #define HOSTNAME                  "MyESP32Server"       // define the name of your ESP32 here
+    #define MACHINETYPE               "ESP32 NodeMCU"       // describe your hardware here
+    // tell ESP32 how to connect to your WiFi router if this is needed
+    #define DEFAULT_STA_SSID          "YOUR_STA_SSID"       // define default WiFi settings  
+    #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
+    // tell ESP32 not to set up AP if it is not needed
+    #define DEFAULT_AP_SSID           ""  // HOSTNAME       // set it to "" if you don't want ESP32 to act as AP 
+    #define DEFAULT_AP_PASSWORD       "YOUR_AP_PASSWORD"    // must have at leas 8 characters
   #include "./servers/network.h"
-
-
+  
 void setup () {
   Serial.begin (115200);
 
-  startWiFi ();                             // connect to to WiFi router
+  startWiFi ();
 
+  #define tskNORMAL_PRIORITY 1
   if (pdPASS != xTaskCreate ([] (void *) {  // start checking in a separate task
-
     while (true) {
       delay (1 * 60 * 60 * 1000); // 1 hour
-
       Serial.printf ("[%10lu] [checkRouter] checking ...\n", millis ());
       // send ARP request to all working netifs
       if (WiFi.localIP ().toString () >  "0.0.0.0") {
@@ -39,13 +37,10 @@ void setup () {
         for (netif = netif_list; netif; netif = netif->next) {
           if (netif_is_up (netif)) {
             if (netif->hwaddr_len) { 
-
               // make ARP request
               etharp_request (netif, (const ip4_addr_t *) &ipAddrTo);  
-
               // give ARP reply some time to arrive
               delay (1000); 
-                  
             }
           }
         }
@@ -56,9 +51,7 @@ void setup () {
         Serial.printf ("[%10lu] [checkRouter] lost WiFi connection.\n", millis ());
         startWiFi (); // try reconnecting                                       
       }
-            
     } // while
-  
   }, "checkRouter", 8 * 1024, NULL, tskNORMAL_PRIORITY, NULL)) Serial.printf ("[%10lu] [checkRouter] couldn't start new task.\n", millis ());
 
 }

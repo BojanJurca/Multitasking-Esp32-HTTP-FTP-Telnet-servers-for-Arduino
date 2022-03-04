@@ -1,0 +1,25 @@
+# Example of /etc/mail/sendmail.cf configuration file with (some or all) default values for sendMail function and sendmail Telnet command
+
+# SMTP server name
+smtpServer   smtp.siol.net
+
+# SMTP port (default SMTP port is 25)
+smtpPort     25
+
+# your user name for SMTP server
+userName     yourusername
+
+# your password for SMTP server
+password     yourpassword
+
+# From field of SMTP protocol usually contains your email address
+from         "youresp32"<your.email@somewhere.org>
+
+# To field of SMTP protocol
+to           "you"<your.other@emai.org>
+
+# Subject field of SMTP profocol
+subject      Test
+
+# message body text
+message      This is yust a test message.
