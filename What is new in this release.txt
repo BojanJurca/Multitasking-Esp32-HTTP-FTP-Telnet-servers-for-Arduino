@@ -1,3 +1,0 @@
-New in 1.30 - still in development
-
-  - freeing up heap to avoid memory fragmentation
