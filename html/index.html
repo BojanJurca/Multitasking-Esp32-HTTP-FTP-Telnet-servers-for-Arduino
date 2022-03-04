@@ -83,14 +83,24 @@
 		<hr />
 
 		<script type='text/javascript'>
-			var httpClient=function(){
-				this.request=function(url,method,callback){
-				 var httpRequest=new XMLHttpRequest();
-				 httpRequest.onreadystatechange=function(){
-							if (httpRequest.readyState==4 && httpRequest.status==200) callback(httpRequest.responseText);
-				 }
-				 httpRequest.open(method,url,true);
-				 httpRequest.send(null);
+			// mechanism that makes REST calls and get their replies
+			var httpClient = function () {
+				this.request = function (url, method, callback) {
+					var httpRequest = new XMLHttpRequest ();
+					var httpRequestTimeout;
+					httpRequest.onreadystatechange = function () {
+						// console.log (httpRequest.readyState);
+						if (httpRequest.readyState == 1) { // 1 = OPENED, start timing
+							httpRequestTimeout = setTimeout (function () { alert ('Server did not reply (in time).'); }, 1500);
+						}
+						if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
+							clearTimeout (httpRequestTimeout);
+							if (httpRequest.status == 200) callback (httpRequest.responseText); // 200 = OK
+							else alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
+						}
+					}
+					httpRequest.open (method, url, true);
+					httpRequest.send (null);
 				}
 			}
 			var client=new httpClient();
@@ -168,7 +178,7 @@
 			// we can not send all requests to ESP32 at the same time, resources are limited - give ESP32 some time to process previous ones first
 			setTimeout(function(){
 				client.request('/freeHeap','GET',function(json){document.getElementById('freeHeap').innerText=lineGraph(json,'freeHeapGraph','#0961aa') + ' KB';});
-			}, 10);
+			}, 30);
 			setInterval(function(){
 				client.request('/freeHeap','GET',function(json){document.getElementById('freeHeap').innerText=lineGraph(json,'freeHeapGraph','#0961aa') + ' KB';});
 			}, 60000);
@@ -176,7 +186,7 @@
 			// we can not send all requests to ESP32 at the same time, resources are limited - give ESP32 some time to process previous ones first
 			setTimeout(function(){
 				client.request('/httpRequestCount','GET',function(json){document.getElementById('httpRequestCount').innerText=lineGraph(json,'httpRequestCountGraph','#2597f4') + ' / min';});
-			}, 20);
+			}, 60);
 			setInterval(function(){
 				client.request('/httpRequestCount','GET',function(json){document.getElementById('httpRequestCount').innerText=lineGraph(json,'httpRequestCountGraph','#2597f4') + ' / min';});
 			}, 60000);
