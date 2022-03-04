@@ -1,1 +1,1 @@
-#define VERSION_OF_SERVERS "SRV32-1.30 dev" // development / release
+#define VERSION_OF_SERVERS "SRV32-2.0 beta" // development / release
