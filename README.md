@@ -18,7 +18,9 @@ Beside this, the performance, efficiency and stability have been largely improve
 
 
 HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to some extent.
-**HTTP server performance** 
+
+**HTTP server performance**Â 
+
 ![HTTP server performance](performance.gif)
 
 
@@ -37,32 +39,63 @@ FTP server is needed for uploading configuration files, .html files, ... to ESP3
 # Time zones
 
 
-time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the supported time zones or modify timeToLocalTime function yourself. 
+time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the supported time zones or modify timeToLocalTime function yourself.Â 
 
 
 # Configuration files
 
 
-   - /etc/passwd                                     - Contains users' accounts information.   - /etc/shadow                                     - Contains hashed users' passwords.
-   - /network/interfaces                             - Contains WiFi STA(tion) configuration.   - /etc/wpa_supplicant/wpa_supplicant.conf         - Contains WiFi STA(tion) credentials.   - /etc/dhcpcd.conf                                - Contains WiFi A(ccess) P(oint) configuration.   - /etc/hostapd/hostapd.conf                       - Contains WiFi A(ccess) P(oint) credentials.
-   - /etc/ntp.conf                                   - Contains NTP time servers names.   - /etc/crontab                                    - Contains scheduled tasks.
-   -   /etc/mail/sendmail.cf                         - contains sendMail default settings.   -   /etc/ftp/ftpclient.cf                         - contains ftpPut and ftpGet default settings.
+```C++
+Â  Â - /etc/passwdÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - Contains users' accounts information.Â  Â - /etc/shadowÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - Contains hashed users' passwords.
+Â  Â - /network/interfacesÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - Contains WiFi STA(tion) configuration.Â  Â - /etc/wpa_supplicant/wpa_supplicant.confÂ  Â  Â  Â  Â - Contains WiFi STA(tion) credentials.Â  Â - /etc/dhcpcd.confÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  - Contains WiFi A(ccess) P(oint) configuration.Â  Â - /etc/hostapd/hostapd.confÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - Contains WiFi A(ccess) P(oint) credentials.
+Â  Â - /etc/ntp.confÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - Contains NTP time servers names.Â  Â - /etc/crontabÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  - Contains scheduled tasks.
+Â  Â -Â  Â /etc/mail/sendmail.cfÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - contains sendMail default settings.Â  Â -Â  Â /etc/ftp/ftpclient.cfÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â - contains ftpPut and ftpGet default settings.
+```
 
 
 ## Setup instructions
 
 
 1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.3. modify (some or all) the default #definitions (that will be later written to configuration files) **before** the sketch is run for the first time:
-```C++#include "./servers/dmesg_functions.h"#include "./servers/perfMon.h"                      // #include perfMon.h prior to other modules to make sure you're monitoring everything#include "./servers/file_system.h"  // #define network parameters before #including network.h  #define HOSTNAME                                  "MyESP32Server"  #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"  #define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"  #define DEFAULT_AP_SSID                           "" // HOSTNAME - leave empty if you don't want to use AP  #define DEFAULT_AP_PASSWORD                       "" // "YOUR_AP_PASSWORD" - at least 8 characters  // ... add other #definitions from network.h#include "./servers/network.h"                      // file_system.h is needed prior to #including network.h if you want to store the default parameters  // #define how you want to calculate local time and which NTP servers GMT will be synchronized with before #including time_functions.h  #define DEFAULT_NTP_SERVER_1                      "1.si.pool.ntp.org"  #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"  #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"  #define TIMEZONE CET_TIMEZONE                     // or another one supported in time_functions.h#include "./servers/time_functions.h"               // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters#include "./servers/httpClient.h"#include "./servers/ftpClient.h"                    // file_system.h is needed prior to #including ftpClient.h if you want to store the default parameters#include "./servers/smtpClient.h"                   // file_system.h is needed prior to #including smtpClient.h if you want to store the default parameters  // #define what kind of user management you want before #including user_management.h  #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT#include "./servers/user_management.h"              // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENT  // #define machint type, it is only used in uname telnet command  #define MACHINETYPE                               "ESP32 Dev Modue"#include "./servers/telnetServer.hpp"               // needs almost all the above files for the whole functionality#include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h#include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files```
-4. Select one of FAT partition schemas (Tool | Partition Scheme).5. Compile the sketch and run it on your ESP32.
+
+```C++
+#include "./servers/dmesg_functions.h"#include "./servers/perfMon.h"Â  Â  Â  Â  Â // #include perfMon.h prior to other modules to make sure you're monitoring everything#include "./servers/file_system.h"Â  
+  // #define network parameters before #including network.hÂ  
+  #define HOSTNAMEÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  "MyESP32Server"
+  #define DEFAULT_STA_SSIDÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  "YOUR_STA_SSID"Â  
+  #define DEFAULT_STA_PASSWORDÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  "YOUR_STA_PASSWORD"Â  
+  #define DEFAULT_AP_SSIDÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â "" // HOSTNAME - leave empty if you don't want to use AP
+  #define DEFAULT_AP_PASSWORDÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â "" // "YOUR_AP_PASSWORD" - at least 8 charactersÂ  
+// ... add other #definitions from network.h
+#include "./servers/network.h"Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  // file_system.h is needed prior to #including network.h if you want to store the default parametersÂ  
+  // #define how you want to calculate local time and which NTP servers GMT will be synchronized with before #including time_functions.hÂ  
+  #define DEFAULT_NTP_SERVER_1Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  "1.si.pool.ntp.org"Â  
+  #define DEFAULT_NTP_SERVER_2Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  "2.si.pool.ntp.org"Â  
+  #define DEFAULT_NTP_SERVER_3Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  "3.si.pool.ntp.org"Â  
+  #define TIMEZONE CET_TIMEZONEÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â // or another one supported in time_functions.h
+#include "./servers/time_functions.h"Â  Â  Â  Â  Â  Â  Â  Â // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters#include "./servers/httpClient.h"
+#include "./servers/ftpClient.h"Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  // file_system.h is needed prior to #including ftpClient.h if you want to store the default parameters#include "./servers/smtpClient.h"Â  Â  Â  Â  Â  Â  Â  Â  Â  Â // file_system.h is needed prior to #including smtpClient.h if you want to store the default parametersÂ  
+  // #define what kind of user management you want before #including user_management.hÂ  
+  #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT
+#include "./servers/user_management.h"Â  Â  Â  Â  Â  Â  Â  // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENTÂ  
+  // #define machint type, it is only used in uname telnet commandÂ  
+  #define MACHINETYPEÂ  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â  Â "ESP32 Dev Modue"#include "./servers/telnetServer.hpp"Â  Â  Â  Â  Â  Â  Â  Â // needs almost all the above files for the whole functionality
+#include "./servers/ftpServer.hpp"Â  Â  Â  Â  Â  Â  Â  Â  Â  // file_system.h is also necessary to use ftpServer.h
+#include "./servers/httpServer.hpp"Â  Â  Â  Â  Â  Â  Â  Â  Â // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
+```
+
+4. Select one of FAT partition schemas (Tool | Partition Scheme).
+5. Compile the sketch and run it on your ESP32.
 Doing this the following will happen:
-  - ESP32 flash memory will be formatted with the FAT file system. WARNING: every information you have stored into ESP32’s flash memory will be lost.  - Configuration files will be created with the default settings.   - Two users will be created: **root** with **rootpassword** and **webadmin** with **webadminpassword**.
+Â  - ESP32 flash memory will be formatted with the FAT file system. WARNING: every information you have stored into ESP32â€™s flash memory will be lost.
+Â  - Configuration files will be created with the default settings.
+Â  - Two users will be created: **root** with **rootpassword** and **webadmin** with **webadminpassword**.
 At this point, you can already test if everything is going on as planned by http, FTP or telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to be done.
 6. FTP (demo and example: index.html, ...) files from html directory to ESP32's /var/www/html/ directory.
 7. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
 
 
-## Debugging the code 
+## Debugging the codeÂ 
 
 
 Telnet server provides Unix/Linux like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with a USB cable. In your C++ code use dmesg () function to insert important messages about the state of your code into a circular queue. When you want to view it, connect to your ESP32 with Telnet client and type dmesg command.
