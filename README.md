@@ -30,19 +30,19 @@ HTTP server can handle HTTP requests in two different ways. As a programmed resp
 Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in for editing small configuration files.
 
 
-# FTP server
+## FTP server
 
 
 FTP server is needed for uploading configuration files, .html files, ... to ESP32 file system. Both active and passive modes are supported.
 
 
-# Time zones
+## Time zones
 
 
 time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the supported time zones or modify timeToLocalTime function yourself. 
 
 
-# Configuration files
+## Configuration files
 
 
 ```C++
