@@ -11,13 +11,13 @@
 
 
 Honestly, not much, only a FTP client and HTTP sessions (login/logout). But since API interface has slightly changed there is a version 2.0. I do not find the time to write manuals, please check examples and the code itself. It is pretty straightforward.
-Beside this, the performance, efficiency and stability have been largely improved. An IDF version 4.4 is also supported.
+Beside this, the performance, efficiency and stability have been largely improved. An IDF version 4.4 is now supported.
 
 
 ## HTTP server
 
 
-HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to some extent.
+HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to certain extent.
 
 **HTTP server performance** 
 
@@ -27,7 +27,7 @@ HTTP server can handle HTTP requests in two different ways. As a programmed resp
 ## Telnet server
 
 
-Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in for editing small configuration files.
+Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in, mainly for editing small configuration files.
 
 
 ## FTP server
@@ -46,23 +46,25 @@ time_functions.h provides GMT to local time conversion from 35 different time zo
 
 
 ```C++
-   - /etc/passwd                                     - Contains users' accounts information.
-   - /etc/shadow                                     - Contains hashed users' passwords.
-   - /network/interfaces                             - Contains WiFi STA(tion) configuration.
-   - /etc/wpa_supplicant/wpa_supplicant.conf         - Contains WiFi STA(tion) credentials.
-   - /etc/dhcpcd.conf                                - Contains WiFi A(ccess) P(oint) configuration.
-   - /etc/hostapd/hostapd.conf                       - Contains WiFi A(ccess) P(oint) credentials.
-   - /etc/ntp.conf                                   - Contains NTP time servers names.
-   - /etc/crontab                                    - Contains scheduled tasks.
-   - /etc/mail/sendmail.cf                           - contains sendMail default settings.
-   - /etc/ftp/ftpclient.cf                           - contains ftpPut and ftpGet default settings.
+/etc/passwd                               - contains users' accounts information
+/etc/shadow                               - contains hashed users' passwords
+/network/interfaces                       - contains WiFi STA(tion) configuration
+/etc/wpa_supplicant/wpa_supplicant.conf   - contains WiFi STA(tion) credentials
+/etc/dhcpcd.conf                          - contains WiFi A(ccess) P(oint) configuration
+/etc/hostapd/hostapd.conf                 - contains WiFi A(ccess) P(oint) credentials
+/etc/ntp.conf                             - contains NTP time servers names
+/etc/crontab                              - contains scheduled tasks
+/etc/mail/sendmail.cf                     - contains sendMail default settings
+/etc/ftp/ftpclient.cf                     - contains ftpPut and ftpGet default settings
 ```
 
 
 ## Setup instructions
 
 
-1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.3. modify (some or all) the default #definitions (that will be later written to configuration files) **before** the sketch is run for the first time:
+1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
+2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
+3. modify (some or all) the default #definitions (that will be later written to configuration files) **before** the sketch is run for the first time:
 
 ```C++
 #include "./servers/dmesg_functions.h"
