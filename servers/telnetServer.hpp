@@ -1878,22 +1878,24 @@
           }
           { __telnet_connection_time_out__ = telnet_connection_time_out; return ""; }
         }
-
-        String __ftpPut__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
-          String fp = fullFilePath (localFileName, __workingDir__);
-          if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
-          return ftpPut ((char *) fp.c_str (), remoteFileName, password, userName, ftpPort, ftpServer);
-        }
-
-        String __ftpGet__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
-          String fp = fullFilePath (localFileName, __workingDir__);
-          if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
-          return ftpGet ((char *) fp.c_str (), remoteFileName, password, userName, ftpPort, ftpServer);
-        }
+          
+        #ifdef __FTP_CLIENT__
+          String __ftpPut__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
+            if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+            String fp = fullFilePath (localFileName, __workingDir__);
+            if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
+            if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
+            return ftpPut ((char *) fp.c_str (), remoteFileName, password, userName, ftpPort, ftpServer);
+          }
+  
+          String __ftpGet__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
+            if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+            String fp = fullFilePath (localFileName, __workingDir__);
+            if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
+            if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
+            return ftpGet ((char *) fp.c_str (), remoteFileName, password, userName, ftpPort, ftpServer);
+          }
+        #endif
 
       #endif
       
