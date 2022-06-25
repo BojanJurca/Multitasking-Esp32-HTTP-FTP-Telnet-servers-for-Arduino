@@ -8,7 +8,7 @@
  
     Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
     
-    March, 4, 2022, Bojan Jurca
+    June, 25, 2022, Bojan Jurca
                  
 */
 
@@ -21,6 +21,8 @@
 
 #include "./servers/dmesg_functions.h"
 #include "./servers/perfMon.h"                      // #include perfMon.h prior to other modules to make sure you're monitoring everything
+  // choose file system (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
+  #define FILE_SYSTEM FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
 #include "./servers/file_system.h"
   // #define network parameters before #including network.h
   #define HOSTNAME                                  "MyESP32Server"
