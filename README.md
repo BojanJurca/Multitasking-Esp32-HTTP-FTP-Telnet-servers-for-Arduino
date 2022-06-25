@@ -68,7 +68,10 @@ time_functions.h provides GMT to local time conversion from 35 different time zo
 
 ```C++
 #include "./servers/dmesg_functions.h"
-#include "./servers/perfMon.h"         // #include perfMon.h prior to other modules to make sure you're monitoring everything#include "./servers/file_system.h"  
+#include "./servers/perfMon.h"         // #include perfMon.h prior to other modules to make sure you're monitoring everything
+  // choose file system (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
+  #define FILE_SYSTEM FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
+#include "./servers/file_system.h"  
   // #define network parameters before #including network.h  
   #define HOSTNAME                                  "MyESP32Server"
   #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"  
@@ -88,7 +91,8 @@ time_functions.h provides GMT to local time conversion from 35 different time zo
   #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT
 #include "./servers/user_management.h"              // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENT  
   // #define machint type, it is only used in uname telnet command  
-  #define MACHINETYPE                               "ESP32 Dev Modue"#include "./servers/telnetServer.hpp"               // needs almost all the above files for the whole functionality
+  #define MACHINETYPE                               "ESP32 Dev Modue"
+#include "./servers/telnetServer.hpp"               // needs almost all the above files for the whole functionality
 #include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h
 #include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
 ```
