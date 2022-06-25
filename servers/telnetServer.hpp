@@ -684,13 +684,27 @@
         #endif
 
         #ifdef __FILE_SYSTEM__        
+      
+          #if FILE_SYSTEM == FILE_SYSTEM_FAT
 
-          else if (argv0Is ("mkfs.fat"))  { 
+            else if (argv0Is ("mkfs.fat"))  { 
                                             if (argc == 1) {
                                               if (!strcmp (__userName__, "root")) return __mkfs__ (tcn);
                                               else                                return F ("Only root may format disk.");
                                             }                                     return F ("Wrong syntax, use mkfs.fat");
                                           } 
+          
+          #endif
+          #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+
+            else if (argv0Is ("mkfs.littlefs"))  { 
+                                            if (argc == 1) {
+                                              if (!strcmp (__userName__, "root")) return __mkfs__ (tcn);
+                                              else                                return F ("Only root may format disk.");
+                                            }                                     return F ("Wrong syntax, use mkfs.littlefs");
+                                          } 
+          
+          #endif
 
           else if (argv0Is ("fs_info"))   {
                                             if (argc == 1)  return __fs_info__ ();
@@ -855,9 +869,13 @@
                                         #endif
 
                                         #ifdef __FILE_SYSTEM__
-                                        
                                           "\r\n  file commands:"
-                                          "\r\n      mkfs.fat"
+                                          #if FILE_SYSTEM == FILE_SYSTEM_FAT
+                                            "\r\n      mkfs.fat"
+                                          #endif
+                                          #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+                                            "\r\n      mkfs.littlefs"
+                                          #endif
                                           "\r\n      fs_info"
                                           "\r\n      ls [<directoryName>]"
                                           "\r\n      tree [<directoryName>]"
@@ -1232,34 +1250,48 @@
         #define telnetUserHasRightToAccess(fullPath) (strstr(fullPath,__homeDir__)==fullPath) // user has a right to access file or directory if it begins with user's home directory
 
         String __mkfs__ (telnetConnection *tcn) {
-          if (sendAll (__connectionSocket__, (char *) "formatting file system with FAT, please wait ... ", sizeof ("formatting file system with FAT, please wait ... "), __telnet_connection_time_out__) <= 0) return ""; 
-          FFat.end ();
-          if (FFat.format ()) {
+          if (sendAll (__connectionSocket__, (char *) "formatting file system, please wait ... ", sizeof ("formatting file system, please wait ... "), __telnet_connection_time_out__) <= 0) return ""; 
+          fileSystem.end ();
+          if (fileSystem.format ()) {
                                     return F ("formatted.");
-            if (FFat.begin (false)) return F ("\r\nFile system mounted,\r\nreboot now to create default configuration files\r\nor you can create them yorself before rebooting.");
+            if (fileSystem.begin (false)) return F ("\r\nFile system mounted,\r\nreboot now to create default configuration files\r\nor you can create them yorself before rebooting.");
             else                    return F ("formatted but failed to mount the file system."); 
           } else                    return F ("failed.");
           return "";
         }
   
         String __fs_info__ () {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           char output [500];
-          sprintf (output, "FAT file system info.\r\n"
-                           "Total space:      %10i K bytes\r\n"
-                           "Total space used: %10i K bytes\r\n"
-                           "Free space:       %10i K bytes\r\n"
-                           "Max path length:  %10i",
-                           FFat.totalBytes () / 1024, 
-                           (FFat.totalBytes () - FFat.freeBytes ()) / 1024, 
-                           FFat.freeBytes () / 1024,
-                           FILE_PATH_MAX_LENGTH
-                );
+          #if FILE_SYSTEM == FILE_SYSTEM_FAT
+            sprintf (output, "FAT file system info.\r\n"
+                             "Total space:      %10i K bytes\r\n"
+                             "Total space used: %10i K bytes\r\n"
+                             "Free space:       %10i K bytes\r\n"
+                             "Max path length:  %10i",
+                             fileSystem.totalBytes () / 1024, 
+                             (fileSystem.totalBytes () - fileSystem.freeBytes ()) / 1024, 
+                             fileSystem.freeBytes () / 1024,
+                             FILE_PATH_MAX_LENGTH
+                  );
+          #endif
+          #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+            sprintf (output, "LittleFS file system info.\r\n"
+                             "Total space:      %10i K bytes\r\n"
+                             "Total space used: %10i K bytes\r\n"
+                             "Free space:       %10i K bytes\r\n"
+                             "Max path length:  %10i",
+                             fileSystem.totalBytes () / 1024, 
+                             fileSystem.usedBytes () / 1024, 
+                             (fileSystem.totalBytes () - fileSystem.usedBytes ()) / 1024, 
+                             FILE_PATH_MAX_LENGTH
+                  );
+          #endif
           return String (output);
         } 
   
         String __ls__ (char *directory) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directory, __workingDir__);
           if (fp == "" || !isDirectory (fp))             return F ("Invalid directory name.");
           if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
@@ -1267,7 +1299,7 @@
         }
   
         String __tree__ (char *directory) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directory, __workingDir__);
           if (fp == "" || !isDirectory (fp))             return F ("Invalid directory name.");
           if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
@@ -1275,7 +1307,7 @@
         }
 
         String __catFileToClient__ (char *fileName, telnetConnection *tcn) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || !isFile (fp))                  return F ("Invalid file name.");
           if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
@@ -1287,7 +1319,7 @@
           char buff [CAT_TO_CLIENT_BUFF_SIZE]; // as long as we have stack memory there's no need for allocating aditional memory from heap
   
           File f;
-          if ((bool) (f = FFat.open (fp, FILE_READ))) {
+          if ((bool) (f = fileSystem.open (fp, FILE_READ))) {
             if (!f.isDirectory ()) {
               int i = strlen (buff);
               while (f.available ()) {
@@ -1326,13 +1358,13 @@
         }
 
         String __catClientToFile__ (char *fileName, telnetConnection *tcn) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || isDirectory (fp))              return F ("Invalid file name.");
           if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
 
           File f;
-          if ((bool) (f = FFat.open (fp, FILE_WRITE))) {
+          if ((bool) (f = fileSystem.open (fp, FILE_WRITE))) {
             while (char c = readTelnetChar ()) { 
               switch (c) {
                 case 0: // Error
@@ -1372,7 +1404,7 @@
         }
 
         String __tail__ (char *fileName, bool follow, telnetConnection *tcn) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || !isFile (fp))                  return F ("Invalid file name.");
           if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
@@ -1380,7 +1412,7 @@
           File f;
           size_t filePosition = 0;
           do {
-            if ((bool) (f = FFat.open (fp, FILE_READ))) {
+            if ((bool) (f = fileSystem.open (fp, FILE_READ))) {
               // if this is the first time skip to (almost) the end of file
               if (filePosition == 0) {
                 size_t fileSize = f.size ();
@@ -1442,7 +1474,7 @@
         }
 
         String __mkdir__ (char *directoryName) { 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "")                                   return F ("Invalid directory name.");
           if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
@@ -1452,7 +1484,7 @@
         }
   
         String __rmdir__ (char *directoryName) { 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "" || !isDirectory (fp))              return F ("Invalid directory name.");
           if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
@@ -1464,7 +1496,7 @@
         }      
 
         String __cd__ (char *directoryName) { 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "" || !isDirectory (fp))              return F ("Invalid directory name.");
           if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
@@ -1473,7 +1505,7 @@
         }
 
         String __pwd__ () { 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           // remove extra /
           String s (__workingDir__);
           if (s.charAt (s.length () - 1) == '/') s = s.substring (0, s.length () - 1); 
@@ -1482,7 +1514,7 @@
         }
 
         String __mv__ (char *srcFileOrDirectory, char *dstFileOrDirectory) { 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp1 = fullFilePath (srcFileOrDirectory, __workingDir__);
           if (fp1 == "")                                  return F ("Invalid source file or directory name.");
           if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access to source file or directory denyed.");
@@ -1490,12 +1522,12 @@
           if (fp2 == "")                                  return F ("Invalid destination file or directory name.");
           if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access destination file or directory denyed.");
   
-          if (FFat.rename (fp1, fp2))                     return "Renamed to " + fp2;
+          if (fileSystem.rename (fp1, fp2))                     return "Renamed to " + fp2;
                                                           return "Can't rename " + fp1;
         }
 
         String __cp__ (char *srcFileName, char *dstFileName) { 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp1 = fullFilePath (srcFileName, __workingDir__);
           if (fp1 == "")                                  return F ("Invalid source file name.");
           if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access to source file denyed.");
@@ -1506,9 +1538,9 @@
           File f1, f2;
           String retVal = "File copied.";
           
-          if (!(bool) (f1 = FFat.open (fp1, FILE_READ))) { return "Can't read " + fp1; }
+          if (!(bool) (f1 = fileSystem.open (fp1, FILE_READ))) { return "Can't read " + fp1; }
           if (f1.isDirectory ()) { f1.close (); return  "Can't read " + fp1; }
-          if (!(bool) (f2 = FFat.open (fp2, FILE_WRITE))) { f1.close (); return "Can't write " + fp2; }
+          if (!(bool) (f2 = fileSystem.open (fp2, FILE_WRITE))) { f1.close (); return "Can't write " + fp2; }
 
           int bytesReadTotal = 0;
           int bytesWrittenTotal = 0;
@@ -1535,7 +1567,7 @@
         }
 
         String __rm__ (char *fileName) {
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "" || !isFile (fp))                   return F ("Invalid file name.");
           if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
@@ -1550,16 +1582,16 @@
         String __vi__ (char *fileName, telnetConnection *tcn) {
           // a good reference for telnet ESC codes: https://en.wikipedia.org/wiki/ANSI_escape_code
           // and: https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
-          if (!__fileSystemMounted__) return "File system not mounted. You may have to use mkfs.fat to format flash disk first.";
+          if (!__fileSystemMounted__) return "File system not mounted. You may have to format flash disk first.";
 
-          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+          if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "")                                   return F ("Invalid file name.");
           if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
   
           // 1. create a new file one if it doesn't exist (yet)
           if (!isFile (fp)) {
-            File f = FFat.open (fp, FILE_WRITE);
+            File f = fileSystem.open (fp, FILE_WRITE);
             if (f) { f.close (); if (sendAll (__connectionSocket__, (char *) "\r\nFile created.", strlen ("\r\nFile created."), __telnet_connection_time_out__) <= 0) return ""; }
             else return "Can't create " + fp;
           }
@@ -1571,7 +1603,7 @@
           bool dirty = false;
           unsigned long telnet_connection_time_out = __telnet_connection_time_out__;
           {
-            File f = FFat.open (fp, FILE_READ);
+            File f = fileSystem.open (fp, FILE_READ);
             if (f) {
               if (!f.isDirectory ()) {
                 while (f.available ()) { 
@@ -1725,7 +1757,7 @@
                         // save changes to fp
                         {
                           bool e = false;
-                          File f = FFat.open (fp, FILE_WRITE);
+                          File f = fileSystem.open (fp, FILE_WRITE);
                           if (f) {
                             if (!f.isDirectory ()) {
                               for (int i = 0; i < fileLines; i++) {
@@ -1881,7 +1913,7 @@
           
         #ifdef __FTP_CLIENT__
           String __ftpPut__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
-            if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+            if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
             String fp = fullFilePath (localFileName, __workingDir__);
             if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
             if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
@@ -1889,7 +1921,7 @@
           }
   
           String __ftpGet__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
-            if (!__fileSystemMounted__) return F ("File system not mounted. You may have to use mkfs.fat to format flash disk first.");
+            if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
             String fp = fullFilePath (localFileName, __workingDir__);
             if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
             if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");

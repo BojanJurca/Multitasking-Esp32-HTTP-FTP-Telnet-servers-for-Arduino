@@ -69,6 +69,7 @@
   // include all .h files telnet server is using to test the whole functionality
       #include "dmesg_functions.h"
       #include "perfMon.h"
+        #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
       #include "file_system.h"
       #include "network.h"
       #include "time_functions.h"

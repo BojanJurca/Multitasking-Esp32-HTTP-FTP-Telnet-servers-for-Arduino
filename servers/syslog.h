@@ -42,15 +42,15 @@
           return;
         #endif
       }
-      File f = FFat.open ("/var/log/syslog", FILE_APPEND);
+      File f = fileSystem.open ("/var/log/syslog", FILE_APPEND);
       if (!f) {
-        if (!isDirectory ("/var/log")) { FFat.mkdir ("/var"); FFat.mkdir ("/var/log"); } // location of /var/log/syslog
+        if (!isDirectory ("/var/log")) { fileSystem.mkdir ("/var"); fileSystem.mkdir ("/var/log"); } // location of /var/log/syslog
       }
       // try opening /var/log/syslog max 4 more times
       int i = 4;
       while (!f && i --) {
         delay (10);
-        f = FFat.open ("/var/log/syslog", FILE_APPEND);
+        f = fileSystem.open ("/var/log/syslog", FILE_APPEND);
       }
       if (!f) {
         #ifdef __DMESG__
@@ -95,8 +95,8 @@
       size_t fileSize = f.size ();
       f.close ();
       if (fileSize >= SYSLOG_MAX_LENGTH) { // try switching syslog
-        FFat.remove ("/var/log/syslog.bkp");
-        FFat.rename ("/var/log/syslog", "/var/log/syslog.bkp");
+        fileSystem.remove ("/var/log/syslog.bkp");
+        fileSystem.rename ("/var/log/syslog", "/var/log/syslog.bkp");
       }
     }
 

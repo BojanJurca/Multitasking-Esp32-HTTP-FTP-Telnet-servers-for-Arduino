@@ -198,7 +198,7 @@
                                                       if (!strcmp (ftpCommand, "GET")) {
                                                         
                                                           int bytesRecvTotal = 0; int bytesWrittenTotal = 0;
-                                                          File f = FFat.open (clientFile, FILE_WRITE);
+                                                          File f = fileSystem.open (clientFile, FILE_WRITE);
                                                           if (f) {
                                                             // read data from data connection and store it to the file
                                                             #define BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
@@ -237,7 +237,7 @@
                                               } else if (!strcmp (ftpCommand, "PUT")) {
 
                                                           int bytesReadTotal = 0; int bytesSentTotal = 0;
-                                                          File f = FFat.open (clientFile, FILE_READ);
+                                                          File f = fileSystem.open (clientFile, FILE_READ);
                                                           if (f) {
                                                             // read data from file and transfer it through data connection
                                                             #define BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
