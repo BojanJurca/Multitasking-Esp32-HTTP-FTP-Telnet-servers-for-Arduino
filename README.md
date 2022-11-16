@@ -21,7 +21,7 @@ HTTP server can handle HTTP requests in two different ways. As a programmed resp
 ## Telnet server
 
 
-Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in, mainly for editing small configuration files. Demo Telnet server is available at 193.77.159.208.
+Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in, mainly for editing small configuration files. Demo Telnet server is available at 193.77.159.208 (login as root with default password rootpassword).
 
 
 ## FTP server
