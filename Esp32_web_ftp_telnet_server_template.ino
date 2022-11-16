@@ -8,44 +8,47 @@
  
     Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
     
-    June, 25, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
                  
 */
 
-// Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemes (Tools | Partition scheme)!
+// Compile this code with Arduino for:
+// - one of ESP32 boards (Tools | Board) and 
+// - one of FAT partition schemes (Tools | Partition scheme) and
+// - at least 80 MHz CPU (Tools | CPU Frequency)
 
 #include <WiFi.h>
 
 
 // you can skip some files #included if you don't need the whole functionality
 
+#include "./servers/version_of_servers.h"
 #include "./servers/dmesg_functions.h"
 #include "./servers/perfMon.h"                      // #include perfMon.h prior to other modules to make sure you're monitoring everything
-  // choose file system (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
+  // #define file system you want to use (it must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
   #define FILE_SYSTEM FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
+  // #define how you want to calculate local time and which NTP servers GMT wil be sinchronized with before #including time_functions.h
+  #define DEFAULT_NTP_SERVER_1                      "1.si.pool.ntp.org"
+  #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"
+  #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"
+  #define TIMEZONE CET_TIMEZONE                     // or another one supported in time_functions.h  
 #include "./servers/file_system.h"
+#include "./servers/time_functions.h"               // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters
   // #define network parameters before #including network.h
-  #define HOSTNAME                                  "MyESP32Server"
   #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"
   #define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"
   #define DEFAULT_AP_SSID                           "" // HOSTNAME - leave empty if you don't want to use AP
   #define DEFAULT_AP_PASSWORD                       "" // "YOUR_AP_PASSWORD" - at least 8 characters
   // ... add other #definitions from network.h
+  #define HOSTNAME                                  "MyESP32Server"
+  #define MACHINETYPE                               "ESP32 Dev Module"   // #define machint type, it is only used in uname telnet command  
 #include "./servers/network.h"                      // file_system.h is needed prior to #including network.h if you want to store the default parameters
-  // #define how you want to calculate local time and which NTP servers GMT wil be sinchronized with before #including time_functions.h
-  #define DEFAULT_NTP_SERVER_1                      "1.si.pool.ntp.org"
-  #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"
-  #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"
-  #define TIMEZONE CET_TIMEZONE                     // or another one supported in time_functions.h
-#include "./servers/time_functions.h"               // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters
 #include "./servers/httpClient.h"
 #include "./servers/ftpClient.h"                    // file_system.h is needed prior to #including ftpClient.h if you want to store the default parameters
 #include "./servers/smtpClient.h"                   // file_system.h is needed prior to #including smtpClient.h if you want to store the default parameters
   // #define what kind of user management you want before #including user_management.h
   #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT
 #include "./servers/user_management.h"              // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENT
-  // #define machint type, it is only used in uname telnet command
-  #define MACHINETYPE                               "ESP32 Dev Modue"
 #include "./servers/telnetServer.hpp"               // needs almost all the above files for the whole functionality
 #include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h
 #include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
@@ -56,6 +59,7 @@
               measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
               measurements httpRequestCount (60);         // measure how many web connections arrive each minute
 
+              #undef LED_BUILTIN
               #define LED_BUILTIN 2                       // built-in led blinking is used in examples 01, 03 and 04
 
  
@@ -245,10 +249,14 @@ void cronHandler (char *cronCommand) {
 
 
 void setup () {
+    
   Serial.begin (115200);
- 
-  // FFat.format (); // clear up flash disk to reset everithing
-  mountFileSystem (true);                                                   // this is the first thing to do - all configuration files reside on the file system
+  Serial.println (String (MACHINETYPE) + " (" + ESP.getCpuFreqMHz () + " MHz) " + HOSTNAME + " SDK:" + ESP.getSdkVersion () + " " + VERSION_OF_SERVERS + " compiled at: " + String (__DATE__) + " " + String (__TIME__));
+
+  // fileSystem.format (); Serial.printf ("\nFormatting file system ...\n\n"); // format flash disk to start everithing from the scratch
+  #ifdef __FILE_SYSTEM__
+    mountFileSystem (true);                                                 // this is the first thing to do - all configuration files reside on the file system
+  #endif
 
   // deleteFile ("/etc/ntp.conf");                                          // contains ntp server names for time sync - deleting this file would cause creating default one
   // deleteFile ("/etc/crontab");                                           // contains cheduled tasks                 - deleting this file would cause creating empty one
@@ -266,27 +274,32 @@ void setup () {
   // deleteFile ("/etc/hostapd/hostapd.conf");                              // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
   startWiFi ();                                                             // starts WiFi according to configuration files, creates configuration files if they don't exist
 
-  // start web server 
-  httpServer *httpSrv = new httpServer (httpRequestHandler,                 // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                        wsRequestHandler,                   // a callback function that will handle WS requests, NULL to ignore WS requests
-                                        (char *) "0.0.0.0",                 // start HTTP server on all available IP addresses
-                                        80,                                 // default HTTP port
-                                        NULL);                              // we won't use firewallCallback function for HTTP server
-  if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
-
-  // start FTP server
-  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",                    // start FTP server on all available ip addresses
-                                     21,                                    // default FTP port
-                                     firewallCallback);                     // let's use firewallCallback function for FTP server
-  if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+  #ifdef __HTTP_SERVER__
+    // start web server 
+    httpServer *httpSrv = new httpServer (httpRequestHandler,                 // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                          wsRequestHandler,                   // a callback function that will handle WS requests, NULL to ignore WS requests
+                                          (char *) "0.0.0.0",                 // start HTTP server on all available IP addresses
+                                          80,                                 // default HTTP port
+                                          NULL);                              // we won't use firewallCallback function for HTTP server
+    if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
+  #endif
   
-  // start telnet server
-  telnetServer *telnetSrv = new telnetServer (telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
-                                              (char *) "0.0.0.0",           // start Telnet server on all available ip addresses 
-                                              23,                           // default Telnet port
-                                              firewallCallback);            // let's use firewallCallback function for Telnet server
-  if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) dmesg ("[telnetServer] did not start.");
+  #ifdef __FTP_SERVER__
+    // start FTP server
+    ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",                    // start FTP server on all available ip addresses
+                                       21,                                    // default FTP port
+                                       firewallCallback);                     // let's use firewallCallback function for FTP server
+    if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+  #endif
 
+  #ifdef __TELNET_SERVER__
+    // start telnet server
+    telnetServer *telnetSrv = new telnetServer (telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
+                                                (char *) "0.0.0.0",           // start Telnet server on all available ip addresses 
+                                                23,                           // default Telnet port
+                                                firewallCallback);            // let's use firewallCallback function for Telnet server
+    if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) dmesg ("[telnetServer] did not start.");
+  #endif
 
               // ----- some examples - delete this code if it is not needed -----
 
@@ -299,9 +312,8 @@ void setup () {
               // other examples:
               pinMode (LED_BUILTIN, OUTPUT);         
               digitalWrite (LED_BUILTIN, LOW);
- 
 }
 
 void loop () {
-                           
+
 }

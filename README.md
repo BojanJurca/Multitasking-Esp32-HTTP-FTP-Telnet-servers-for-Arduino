@@ -7,12 +7,6 @@
 ![Screenshot](presentation.gif)
 
 
-## What is new in version 2.0?
-
-
-Honestly, not much, only a FTP client and HTTP sessions (login/logout). But since API interface has slightly changed there is a version 2.0. I do not find the time to write manuals, please check examples and the code itself. It is pretty straightforward and commented.
-Beside this, the performance, efficiency and stability have been largely improved. An IDF version 4.4 is now supported.
-
 
 ## HTTP server
 
