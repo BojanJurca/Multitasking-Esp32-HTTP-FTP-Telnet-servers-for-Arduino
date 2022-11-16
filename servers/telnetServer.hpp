@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an application program interface.
   
-    February, 6, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -48,6 +48,28 @@
 #ifndef __TELNET_SERVER__
   #define __TELNET_SERVER__
 
+  #ifndef __PERFMON__
+    #pragma message "Compiling telnetServer.h without performance monitors (perfMon.h), perfmon command will not be available"
+  #endif
+  #ifndef __FILE_SYSTEM__
+    #pragma message "Compiling telnetServer.h without file system (file_system.h), some commands, like ls, vi, pwd, ... will not be available"  
+  #endif
+  #ifndef __TIME_FUNCTIONS__
+    #pragma message "Compiling telnetServer.h without time functions (time_functions.h), some commands, date, ntpdate, crontab, ... will not be available"  
+  #endif
+  #ifndef __NETWORK__
+    #pragma message "Compiling telnetServer.h without network functions (network.h), some commands, ping, ifconfig, arp, ... will not be available"  
+  #endif
+  #ifndef __HTTP_CLIENT__
+    #pragma message "Compiling telnetServer.h without HTTP client (httpClient.h), curl command will not be available"  
+  #endif
+  #ifndef __SMTP_CLIENT__
+    #pragma message "Compiling telnetServer.h without SMTP client (smtpClient.h), sendmail command will not be available"  
+  #endif
+  #ifndef __FTP_CLIENT__ 
+    #pragma message "Compiling telnetServer.h without FTP client (ftpClient.h), ftpput and ftpget commands will not be available"  
+  #endif
+
 
     // TUNNING PARAMETERS
 
@@ -67,14 +89,16 @@
     #endif
 
     #include "version_of_servers.h"                         // version of this software, used in uname command
-    #define UNAME String (MACHINETYPE) + " (" + ESP.getCpuFreqMHz () + " MHz) " + HOSTNAME + " SDK:" + ESP.getSdkVersion () + " " + VERSION_OF_SERVERS // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
+    #define UNAME String (MACHINETYPE) + " (" + ESP.getCpuFreqMHz () + " MHz) " + HOSTNAME + " SDK:" + ESP.getSdkVersion () + " " + VERSION_OF_SERVERS  + " compiled at: " + String (__DATE__) + " " + String (__TIME__) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
 
 
     // ----- CODE -----
 
     #include "dmesg_functions.h"
-
-    #include "user_management.h"    // for logging in
+    #ifndef __USER_MANAGEMENT__
+      #pragma message "Implicitly including user_management.h (needed for login on to Telnet server)"
+      #include "user_management.h"    // for logging in
+    #endif
 
 
     // define some IAC telnet commands
@@ -140,7 +164,7 @@
                             #ifdef __PERFMON__
                               xSemaphoreTake (__telnetServerSemaphore__, portMAX_DELAY);
                                 __perfOpenedTelnetConnections__ ++;
-                                __perfConcurrentTelnetConnections__ ++;
+                                __perfCurrentTelnetConnections__ ++;
                               xSemaphoreGive (__telnetServerSemaphore__);
                             #endif
                           }
@@ -149,7 +173,7 @@
                                 closeConnection ();
                                 #ifdef __PERFMON__
                                   xSemaphoreTake (__telnetServerSemaphore__, portMAX_DELAY);
-                                    __perfConcurrentTelnetConnections__ --;
+                                    __perfCurrentTelnetConnections__ --;
                                   xSemaphoreGive (__telnetServerSemaphore__);
                                 #endif
                             }
@@ -323,7 +347,7 @@
           char __homeDir__ [FILE_PATH_MAX_LENGTH + 1] = "";
           char __workingDir__ [FILE_PATH_MAX_LENGTH + 1] = "";
         #endif
-        char *__prompt__ = (char *) "*";
+        char *__prompt__ = (char *) "";
         uint16_t __clientWindowWidth__ = 0;
         uint16_t __clientWindowHeight__ = 0;
 
@@ -346,16 +370,16 @@
                 ths->__prompt__ = (char *) "\r\n# ";
                 dmesg ("[telnetConnection] user logged in: ", ths->__userName__);
                 // tell the client to go into character mode, not to echo and send its window size, then say hello 
-                sprintf (ths->__cmdLine__, IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS "Hello %s\r\nWelcome %s, use \"help\" to display available commands.", ths->__clientIP__, ths->__userName__);
+                sprintf (ths->__cmdLine__, IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS HOSTNAME " says hello to %s.\r\nWelcome %s, use \"help\" to display available commands.", ths->__clientIP__, ths->__userName__);
                 if (sendAll (ths->__connectionSocket__, ths->__cmdLine__, strlen (ths->__cmdLine__), ths->__telnet_connection_time_out__) <= 0) {
-                  dmesg ("[telnetConnection] send error: ", errno);
+                  dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
               #else
                 // tell the client to go into character mode, not to echo an send its window size, then say hello 
-                sprintf (ths->__cmdLine__, IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS "Hello %s\r\nuser: ", ths->__clientIP__);
+                sprintf (ths->__cmdLine__, IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS HOSTNAME " says hello to %s, please login.\r\nuser: ", ths->__clientIP__);
                 if (sendAll (ths->__connectionSocket__, ths->__cmdLine__, strlen (ths->__cmdLine__), ths->__telnet_connection_time_out__) <= 0) {
-                  dmesg ("[telnetConnection] send error: ", errno);
+                  dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
                 if (ths->readTelnetLine (ths->__userName__, sizeof (ths->__userName__)) != 10) { 
@@ -365,7 +389,7 @@
                 char password [USER_PASSWORD_MAX_LENGTH + 1] = "";
                 ths->__echo__ = false;
                 if (sendAll (ths->__connectionSocket__, (char *) "password: ", strlen ("password: "), ths->__telnet_connection_time_out__) <= 0) {
-                  dmesg ("[telnetConnection] send error: ", errno);
+                  dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
                 if (ths->readTelnetLine (password, sizeof (password)) != 10) { 
@@ -389,7 +413,7 @@
                 ths->__prompt__ = strcmp (ths->__userName__, "root") ? (char *) "\r\n$ " : (char *) "\r\n# ";
                 sprintf (ths->__cmdLine__, "\r\nWelcome %s, use \"help\" to display available commands.", ths->__userName__);
                 if (sendAll (ths->__connectionSocket__, ths->__cmdLine__, strlen (ths->__cmdLine__), ths->__telnet_connection_time_out__) <= 0) {
-                  dmesg ("[telnetConnection] send error: ", errno);
+                  dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
               #endif
@@ -399,7 +423,7 @@
               
                 // write prompt
                 if (sendAll (ths->__connectionSocket__, ths->__prompt__, strlen (ths->__prompt__), ths->__telnet_connection_time_out__) <= 0) {
-                  dmesg ("[telnetConnection] send error: ", errno);
+                  dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
                 // read command line
@@ -439,7 +463,7 @@
                                 if (ths->__connectionSocket__ == -1) goto endOfConnection; // in case of quit
                                 // write reply
                                 if (s != "" && sendAll (ths->__connectionSocket__, (char *) s.c_str (), s.length (), ths->__telnet_connection_time_out__) <= 0) {
-                                  dmesg ("[telnetConnection] send error: ", errno);
+                                  dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
                                   goto endOfConnection;
                                 }
                               }
@@ -458,7 +482,7 @@
             
           } // code block
         endOfConnection:  
-          if (*ths->__userName__) dmesg ("[telnetConnection] user logged out: ", ths->__userName__);
+          if (*ths->__prompt__) dmesg ("[telnetConnection] user logged out: ", ths->__userName__); // if prompt is set, we know that login was successful
           // all variables are freed now, unload the instance and stop the task (in this order)
           delete ths;
           vTaskDelete (NULL);                
@@ -483,17 +507,32 @@
                                             if (argc == 1) return __uname__ ();  
                                             return F ("Wrong syntax, use uname");              
                                           }
-                                            
+
           else if (argv0Is ("free"))      { 
-                                            if (argc == 1)                                        return __free__ (0, tcn);
-                                            if (argv1Is ("-f") || argv1Is ("-follow")) {
-                                              if (argc == 2)                                      return __free__ (1, tcn);
-                                              if (argc == 3) {
-                                                int n = atoi (argv [2]); if (n > 0 && n <= 3600)  return __free__ (n, tcn);
-                                              }
+                                            if (argc == 1)                                      return __free__ (0, tcn);
+                                            if (argc == 2) {
+                                              int n = atoi (argv [2]); if (n > 0 && n <= 3600)  return __free__ (n, tcn);
                                             }
-                                            return F ("Wrong syntax, use free [-follow [<n>]]   (where 0 < n <= 3600)");
+                                            return F ("Wrong syntax, use free [<n>]   (where 0 < n <= 3600)");
                                           } 
+
+          else if (argv0Is ("netstat"))   { 
+                                            if (argc == 1) return __netstat__ (0, tcn);
+                                            if (argc == 2) {
+                                              int n = atoi (argv [1]); if (n > 0 && n < 3600) return __netstat__ (n, tcn);
+                                            }
+                                            return F ("Wrong syntax, use netstat [<n>]   (where 0 < n <= 3600)");
+                                          } 
+
+          else if (argv0Is ("closesocket")) { 
+                                              if (!strcmp (__userName__, "root")) {
+                                                if (argc == 2) {
+                                                  int n = atoi (argv [1]); if (n >= LWIP_SOCKET_OFFSET && n < LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN) return __closesocket__ (n);
+                                                }
+                                                return "Wrong syntax, use closesocket <socket>   (where " + String (LWIP_SOCKET_OFFSET) + " <= socket <= " + String (LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 1) + ")";
+                                              }
+                                              else                                return F ("Only root may close sockets.");
+                                            } 
 
           else if (argv0Is ("nohup"))     { 
                                             if (argc == 1) return __nohup__ (0);
@@ -807,14 +846,11 @@
         #ifdef __PERFMON__
 
           else if (argv0Is ("perfmon"))   { 
-                                            bool f = false;
-                                            bool r = false;
-                                            for (int i = 1; i < argc; i++) {
-                                                   if (!strcmp (argv [i], (char *) "-f") || !strcmp (argv [i], (char *) "-follow")) f = true;
-                                              else if (!strcmp (argv [i], (char *) "-r") || !strcmp (argv [i], (char *) "-reset")) r = true;
-                                              else return F ("Wrong syntax, use perfmon [-follow] [-reset]");
+                                            if (argc == 1) return __perfmon__ (0, tcn);
+                                            if (argc == 2) {
+                                              int n = atoi (argv [1]); if (n > 0 && n < 3600) return __perfmon__ (n, tcn);
                                             }
-                                            return __perfmon__ (f, r, tcn);
+                                            return F ("Wrong syntax, use perfmon [<n>]   (where 0 < n <= 3600)");
                                           }
                                       
         #endif
@@ -827,8 +863,8 @@
                                           "\r\n      help"
                                           "\r\n      clear"
                                           "\r\n      uname"
-                                          "\r\n      free [<n>]      (where 0 < n <= 3600)"
-                                          "\r\n      nohup [<n>]     (where 0 < n <= 3600)"
+                                          "\r\n      free [<n>]   (where 0 < n <= 3600)"
+                                          "\r\n      nohup [<n>]   (where 0 < n <= 3600)"
                                           "\r\n      quit"
   
                                         #ifdef __DMESG__
@@ -851,6 +887,8 @@
                                           "\r\n      ifconfig"
                                           "\r\n      arp"
                                           "\r\n      iw"
+                                          "\r\n      netstat [<n>]   (where 0 < n <= 3600)"
+                                          "\r\n      closesocket <socket>   (where socket is a valid socket)"
                                         #endif
 
                                           "\r\n      telnet <server> [port]"
@@ -900,11 +938,10 @@
                                         
                                         #ifdef __PERFMON__
                                           "\r\n  performance monitoring:"
-                                          "\r\n      perfmon [-follow] [-reset]"                                          
+                                          "\r\n      perfmon [<n>]   (where 0 < n <= 3600)"
                                         #endif
 
                                         #ifdef __FILE_SYSTEM__
-                                        
                                           "\r\n  configuration files used by system:"
                                           #ifdef __TIME_FUNCTIONS__
                                             "\r\n      /etc/ntp.conf                             (contains NTP time servers names)"
@@ -926,10 +963,6 @@
                                             "\r\n      /etc/passwd                               (contains users' accounts information)"
                                             "\r\n      /etc/shadow                               (contains users' passwords)"
                                           #endif
-                                          #ifdef __SYSLOG__
-                                            "\r\n      /var/log/syslog                           (contains system log messages)"
-                                          #endif
-                                          
                                         #endif
                                        );
 
@@ -970,6 +1003,98 @@
             currentLine ++; // we have just displayed the next line (data)
           } while (delaySeconds);
           return "";
+        }
+
+        String __netstat__ (unsigned long delaySeconds, telnetConnection *tcn) {
+          char s [128];
+          #ifdef __PERFMON__
+            // there are unsigned long __perfWiFiBytesReceived__ and unsigned long __perfWiFiBytesSent__ counters available
+            unsigned long startWiFiBytesReceived, startWiFiBytesSent, endWiFiBytesReceived, endWiFiBytesSent;
+            if (!delaySeconds) {
+              sprintf (s, "bytes received since startup: %10lu\r\n"
+                          "bytes sent since startup:     %10lu\r\n", __perfWiFiBytesReceived__, __perfWiFiBytesSent__);
+              if (sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__) <= 0) return "";
+            } else {
+              startWiFiBytesReceived = __perfWiFiBytesReceived__;
+              startWiFiBytesSent = __perfWiFiBytesSent__;
+            }
+          #endif
+
+          unsigned long netstatBytes = 0;
+          int sentBytes;
+          
+          do {
+            // clear sccreen
+            if (delaySeconds) {
+              if ((sentBytes = sendAll (tcn->getSocket (), "\x1b[2J", strlen ("\x1b[2J"), __telnet_connection_time_out__)) <= 0) return "";
+              netstatBytes += sentBytes;
+            }
+            
+            // display counters
+            #ifdef __PERFMON__
+              if (delaySeconds) {
+                endWiFiBytesReceived = __perfWiFiBytesReceived__;
+                endWiFiBytesSent = __perfWiFiBytesSent__;
+                sprintf (s, "bytes received: %10lu\r\n"
+                            "bytes sent:     %10lu (excluding netstat command itself)\r\n", endWiFiBytesReceived - startWiFiBytesReceived, endWiFiBytesSent - startWiFiBytesSent - netstatBytes);
+                netstatBytes = 0;
+                if ((sentBytes = sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__)) <= 0) return "";
+                netstatBytes += sentBytes;
+                startWiFiBytesReceived = endWiFiBytesReceived;
+                startWiFiBytesSent = endWiFiBytesSent;
+              }
+            #endif
+
+            // display header
+            sprintf (s, "Connections:\r\n"
+                        "socket  local address      remote address\r\n"
+                        "------------------------------------------------------------------\r\n"); 
+            if ((sentBytes = sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__)) <= 0) return "";
+            netstatBytes += sentBytes;
+            
+            // scan through sockets
+            for (int i = LWIP_SOCKET_OFFSET; i < LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN; i++) {
+              char *explanation = "\r\n";
+              char socketIP [46]; struct sockaddr_in socketAddress = {}; socklen_t len = sizeof (socketAddress);
+              // get server side address first
+              if (getsockname (i, (struct sockaddr *) &socketAddress, &len) != -1) {
+                inet_ntoa_r (socketAddress.sin_addr, socketIP, sizeof (socketIP));
+                sprintf (s, "%2i      %s:%i                                         ", i, socketIP, ntohs (socketAddress.sin_port));
+                // get client side address next
+                if (getpeername (i, (struct sockaddr *) &socketAddress, &len) != -1) {
+                  inet_ntoa_r (socketAddress.sin_addr, socketIP, sizeof (socketIP));
+                  sprintf (s + 28, "%s:%i                         ", socketIP, ntohs (socketAddress.sin_port));
+                  if (i == tcn->getSocket ()) explanation = "this connection\r\n";
+                } else { // socket without peer address - it ust be a listening socket
+                  explanation = "listening socket\r\n";
+                }
+                sprintf (s + 50, "%s", explanation);
+                if ((sentBytes = sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__)) <= 0) return "";
+                netstatBytes += sentBytes;
+              }
+            }
+
+            // wait
+            unsigned long startMillis = millis ();
+            while (millis () - startMillis < (delaySeconds * 1000)) {
+              delay (100);
+              if (tcn->readTelnetChar (true)) {
+                tcn->readTelnetChar (false); // read pending character
+                return ""; // return if user pressed Ctrl-C or any key
+              } 
+              if (tcn->connectionTimeOut ()) { sendAll (tcn->getSocket (), (char *) "\r\nTime-out", strlen ("\r\nTime-out"), 1000); tcn->closeConnection (); return ""; }
+            }
+
+          } while (delaySeconds);
+          return "";
+        }
+
+        String __closesocket__ (int i) {
+          if (close (i) < 0) {
+            dmesg ("[telnet] close() error: ", errno, strerror (errno));               
+            return "Error: " + String (errno) + " " + strerror (errno);
+          }
+          return "socked closed.";
         }
 
         String __nohup__ (unsigned long timeOutSeconds) {
@@ -1133,18 +1258,18 @@
         // get server address
         struct hostent *he = gethostbyname (server);
         if (!he) {
-          return "gethostbyname() error: " + String (h_errno);
+          return "gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);
         }
         // create socket
         int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
         if (connectionSocket == -1) {
-          return "socket() error: " + String (errno);
+          return "socket() error: " + String (errno) + " " + strerror (errno);
         }
         
         // make the socket not-blocking so that time-out can be detected
         if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
           close (connectionSocket);
-          return "fcntl() error: " + String (errno);
+          return "fcntl() error: " + String (errno) + " "  + strerror (errno);
         }
         // connect to server
         struct sockaddr_in serverAddress;
@@ -1154,7 +1279,7 @@
         if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
           if (errno != EINPROGRESS) {
             close (connectionSocket);
-            return "connect() error: " + String (errno);
+            return "connect() error: " + String (errno) + " "  + strerror (errno);
           }
         } // it is likely that socket is not connected yet at this point
         // send information about IP used to connect to server back to client
@@ -1247,8 +1372,9 @@
 
       #ifdef __FILE_SYSTEM__        
 
-        #define telnetUserHasRightToAccess(fullPath) (strstr(fullPath,__homeDir__)==fullPath) // user has a right to access file or directory if it begins with user's home directory
-
+        bool telnetUserHasRightToAccessFile (String& fullPath) { return strstr (fullPath.c_str (), __homeDir__) == fullPath.c_str (); }
+        bool telnetUserHasRightToAccessDirectory (String& fullPath) { return telnetUserHasRightToAccessFile (fullPath + '/'); }
+        
         String __mkfs__ (telnetConnection *tcn) {
           if (sendAll (__connectionSocket__, (char *) "formatting file system, please wait ... ", sizeof ("formatting file system, please wait ... "), __telnet_connection_time_out__) <= 0) return ""; 
           fileSystem.end ();
@@ -1294,7 +1420,7 @@
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directory, __workingDir__);
           if (fp == "" || !isDirectory (fp))             return F ("Invalid directory name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
+          if (!telnetUserHasRightToAccessDirectory (fp)) return F ("Access denyed.");
           return listDirectory (fp);
         }
   
@@ -1302,15 +1428,15 @@
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directory, __workingDir__);
           if (fp == "" || !isDirectory (fp))             return F ("Invalid directory name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
+          if (!telnetUserHasRightToAccessDirectory (fp)) return F ("Access denyed.");
           return recursiveListDirectory (fp);
         }
 
         String __catFileToClient__ (char *fileName, telnetConnection *tcn) {
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
-          if (fp == "" || !isFile (fp))                  return F ("Invalid file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
+          if (fp == "" || !isFile (fp))             return F ("Invalid file name.");
+          if (!telnetUserHasRightToAccessFile (fp)) return F ("Access denyed.");
 
           #define CAT_TO_CLIENT_BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
           // char *buff = (char *) malloc (CAT_TO_CLIENT_BUFF_SIZE); 
@@ -1360,8 +1486,8 @@
         String __catClientToFile__ (char *fileName, telnetConnection *tcn) {
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
-          if (fp == "" || isDirectory (fp))              return F ("Invalid file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
+          if (fp == "" || isDirectory (fp))         return F ("Invalid file name.");
+          if (!telnetUserHasRightToAccessFile (fp)) return F ("Access denyed.");
 
           File f;
           if ((bool) (f = fileSystem.open (fp, FILE_WRITE))) {
@@ -1406,8 +1532,8 @@
         String __tail__ (char *fileName, bool follow, telnetConnection *tcn) {
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
-          if (fp == "" || !isFile (fp))                  return F ("Invalid file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access denyed.");
+          if (fp == "" || !isFile (fp))             return F ("Invalid file name.");
+          if (!telnetUserHasRightToAccessFile (fp)) return F ("Access denyed.");
 
           File f;
           size_t filePosition = 0;
@@ -1477,7 +1603,7 @@
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "")                                   return F ("Invalid directory name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
+          if (!telnetUserHasRightToAccessDirectory (fp))  return F ("Access denyed.");
   
           if (makeDir (fp))                               return fp + " made.";
                                                           return "Can't make " + fp;
@@ -1487,7 +1613,7 @@
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "" || !isDirectory (fp))              return F ("Invalid directory name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
+          if (!telnetUserHasRightToAccessDirectory (fp))  return F ("Access denyed.");
           if (fp == __homeDir__)                          return F ("You can't remove your home directory.");
           if (fp == __workingDir__)                       return F ("You can't remove your working directory.");
   
@@ -1499,7 +1625,7 @@
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (directoryName, __workingDir__);
           if (fp == "" || !isDirectory (fp))              return F ("Invalid directory name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
+          if (!telnetUserHasRightToAccessDirectory (fp))  return F ("Access denyed.");
   
           strcpy (__workingDir__, fp.c_str ());           return "Your working directory is " + fp;
         }
@@ -1516,24 +1642,34 @@
         String __mv__ (char *srcFileOrDirectory, char *dstFileOrDirectory) { 
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp1 = fullFilePath (srcFileOrDirectory, __workingDir__);
-          if (fp1 == "")                                  return F ("Invalid source file or directory name.");
-          if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access to source file or directory denyed.");
-          String fp2 = fullFilePath (dstFileOrDirectory, __workingDir__);
-          if (fp2 == "")                                  return F ("Invalid destination file or directory name.");
-          if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access destination file or directory denyed.");
-  
-          if (fileSystem.rename (fp1, fp2))                     return "Renamed to " + fp2;
-                                                          return "Can't rename " + fp1;
+          String fp2;
+          if (fp1 == "")                                    return F ("Invalid source file or directory name.");
+          if (isDirectory (fp1)) {
+            if (!telnetUserHasRightToAccessDirectory (fp1)) return F ("Access to source file or directory denyed.");
+            fp2 = fullFilePath (dstFileOrDirectory, __workingDir__);
+            if (fp2 == "")                                  return F ("Invalid destination file or directory name.");
+            if (!telnetUserHasRightToAccessDirectory (fp1)) return F ("Access destination file or directory denyed.");            
+          } else if (isFile (fp1)) {
+            if (!telnetUserHasRightToAccessFile (fp1))      return F ("Access to source file or directory denyed.");
+            String fp2 = fullFilePath (dstFileOrDirectory, __workingDir__);
+            if (fp2 == "")                                  return F ("Invalid destination file or directory name.");
+            if (!telnetUserHasRightToAccessFile (fp1))      return F ("Access destination file or directory denyed.");
+          } else {
+                                                            return F ("Invalid source file or directory name.");
+          }
+          
+          if (fileSystem.rename (fp1, fp2))                 return "Renamed to " + fp2;
+                                                            return "Can't rename " + fp1;
         }
 
         String __cp__ (char *srcFileName, char *dstFileName) { 
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp1 = fullFilePath (srcFileName, __workingDir__);
-          if (fp1 == "")                                  return F ("Invalid source file name.");
-          if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access to source file denyed.");
+          if (fp1 == "")                              return F ("Invalid source file name.");
+          if (!telnetUserHasRightToAccessFile (fp1))  return F ("Access to source file denyed.");
           String fp2 = fullFilePath (dstFileName, __workingDir__);
-          if (fp2 == "")                                  return F ("Invalid destination file name.");
-          if (!telnetUserHasRightToAccess (fp1.c_str ())) return F ("Access destination file denyed.");
+          if (fp2 == "")                              return F ("Invalid destination file name.");
+          if (!telnetUserHasRightToAccessFile (fp1))  return F ("Access destination file denyed.");
 
           File f1, f2;
           String retVal = "File copied.";
@@ -1569,13 +1705,12 @@
         String __rm__ (char *fileName) {
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
-          if (fp == "" || !isFile (fp))                   return F ("Invalid file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
+          if (fp == "" || !isFile (fp))             return F ("Invalid file name.");
+          if (!telnetUserHasRightToAccessFile (fp)) return F ("Access denyed.");
 
-          if (deleteFile (fp))                            return fp + " deleted.";
-          else                                            return "Can't delete " + fp;
+          if (deleteFile (fp))                      return fp + " deleted.";
+          else                                      return "Can't delete " + fp;
         }
-
 
         // not really a vi but small and simple text editor
   
@@ -1587,7 +1722,7 @@
           if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
           String fp = fullFilePath (fileName, __workingDir__);
           if (fp == "")                                   return F ("Invalid file name.");
-          if (!telnetUserHasRightToAccess (fp.c_str ()))  return F ("Access denyed.");
+          if (!telnetUserHasRightToAccessFile (fp))       return F ("Access denyed.");
   
           // 1. create a new file one if it doesn't exist (yet)
           if (!isFile (fp)) {
@@ -1597,7 +1732,7 @@
           }
   
           // 2. read the file content into internal vi data structure (lines of Strings)
-          #define MAX_LINES 600 // may increase up to < 998 but this would require even more stack for telnet server and it is slow
+          #define MAX_LINES 500 // may increase up to < 998 but this would require even more stack for telnet server and it is slow
           String line [MAX_LINES]; for (int i = 0; i < MAX_LINES; i++) line [i] = "";
           int fileLines = 0;
           bool dirty = false;
@@ -1915,16 +2050,16 @@
           String __ftpPut__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
             if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
             String fp = fullFilePath (localFileName, __workingDir__);
-            if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
-            if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
+            if (fp == "" || isDirectory (fp))         return F ("Invalid local file name.");
+            if (!telnetUserHasRightToAccessFile (fp)) return F ("Access to local file denyed.");
             return ftpPut ((char *) fp.c_str (), remoteFileName, password, userName, ftpPort, ftpServer);
           }
   
           String __ftpGet__ (char *localFileName, char *remoteFileName, char *password, char *userName, int ftpPort, char *ftpServer) {
             if (!__fileSystemMounted__) return F ("File system not mounted. You may have to format flash disk first.");
             String fp = fullFilePath (localFileName, __workingDir__);
-            if (fp == "" || isDirectory (fp))              return F ("Invalid local file name.");
-            if (!telnetUserHasRightToAccess (fp.c_str ())) return F ("Access to local file denyed.");
+            if (fp == "" || isDirectory (fp))         return F ("Invalid local file name.");
+            if (!telnetUserHasRightToAccessFile (fp)) return F ("Access to local file denyed.");
             return ftpGet ((char *) fp.c_str (), remoteFileName, password, userName, ftpPort, ftpServer);
           }
         #endif
@@ -1967,33 +2102,33 @@
       #endif
 
       #ifdef __PERFMON__
-  
-        char *__perfmon__ (bool follow, bool resetCounters, telnetConnection *tcn) {
-          bool firstTime = follow;
-          do { // follow         
-            char s [1024];
-            sprintf (s, "%s" // ESC sequence
-                        "Performnce counter\r\n"
-                        "--------------------------------------------\r\n"
-                        "__perfFSBytesRead__:                    %8lu\r\n"  // file system performance counters
-                        "__perfFSBytesWritten__:                 %8lu\r\n"
+
+        String __perfmon__ (unsigned long delaySeconds, telnetConnection *tcn) {
+          char s [1024];
+          // the following counters can display delat values:  __perfFSBytesRead__, __perfFSBytesWritten__, __perfWiFiBytesReceived__, __perfWiFiBytesSent__, __perfOpenedHttpConnections__, __perfHttpRequests__, __perOpenedfWebSockets__, __perfOpenedTelnetConnections__          
+          unsigned long startPerfFSBytesRead, startPerfFSBytesWritten, startPerfWiFiBytesReceived, startPerfWiFiBytesSent, startPerfOpenedHttpConnections, startPerfHttpRequests, startPerOpenedfWebSockets, startPerfOpenedTelnetConnections, startPerfOpenedFtpControlConnections;
+          unsigned long endPerfFSBytesRead, endPerfFSBytesWritten, endPerfWiFiBytesReceived, endPerfWiFiBytesSent, endPerfOpenedHttpConnections, endPerfHttpRequests, endPerOpenedfWebSockets, endPerfOpenedTelnetConnections, endPerfOpenedFtpControlConnections;
+          if (!delaySeconds) {
+            sprintf (s, "Performnce counter\r\n"
+                        "------------------------------------------\r\n"
+                        "perfFSBytesRead:                  %8lu\r\n"  // file system performance counters
+                        "perfFSBytesWritten:               %8lu\r\n"
                         "\r\n"                        
-                        "__perfWiFiBytesReceived__:              %8lu\r\n"  // WiFi performance counters
-                        "__perfWiFiBytesSent__:                  %8lu\r\n"
+                        "perfWiFiBytesReceived:            %8lu\r\n"  // WiFi performance counters
+                        "perfWiFiBytesSent:                %8lu\r\n"
                         "\r\n"
-                        "__perfOpenedHttpConnections__:          %8lu\r\n"  // HTTP performance counters
-                        "__perfHttpRequests__:                   %8lu\r\n"
-                        "__perOpenedfWebSockets__:               %8lu\r\n"
-                        "__perfConcurrentHttpConnections__:      %8lu\r\n"
-                        "__perfConcurrentWebSockets__:           %8lu\r\n"
+                        "perfOpenedHttpConnections:        %8lu\r\n"  // HTTP performance counters
+                        "perfHttpRequests:                 %8lu\r\n"
+                        "perOpenedfWebSockets:             %8lu\r\n"
+                        "perfCurrentHttpConnections:       %8lu\r\n"
+                        "perfCurrentWebSockets:            %8lu\r\n"
                         "\r\n"
-                        "__perfOpenedTelnetConnections__:        %8lu\r\n"  // Telnet performance counters
-                        "__perfConcurrentTelnetConnections__:    %8lu\r\n\r\n"
-                        "__perfConcurrentOscWebSockets__:        %8lu\r\n"      // oscilloscope performance counters
+                        "perfOpenedTelnetConnections:      %8lu\r\n"  // Telnet performance counters
+                        "perfCurrentTelnetConnections:     %8lu\r\n\r\n"
+                        "perfCurrentOscWebSockets:         %8lu\r\n"      // oscilloscope performance counters
                         "\r\n"
-                        "__perfOpenedFtpControlConnections__:    %8lu\r\n"  // FTP performance counters
-                        "__perfConcurrentFtpControlConnections__:%8lu"
-                        , firstTime ? "\x1b[2J" : follow ? "\x1b[0;0H" : "" // cleaar screen or move cursor to 0, 0
+                        "perfOpenedFtpControlConnections:  %8lu\r\n"  // FTP performance counters
+                        "perfCurrentFtpControlConnections: %8lu"
                         , __perfFSBytesRead__
                         , __perfFSBytesWritten__
                         , __perfWiFiBytesReceived__
@@ -2001,46 +2136,106 @@
                         , __perfOpenedHttpConnections__
                         , __perfHttpRequests__
                         , __perOpenedfWebSockets__
-                        , __perfConcurrentHttpConnections__
-                        , __perfConcurrentWebSockets__
+                        , __perfCurrentHttpConnections__
+                        , __perfCurrentWebSockets__
                         , __perfOpenedTelnetConnections__
-                        , __perfConcurrentTelnetConnections__
-                        , __perfConcurrentOscWebSockets__
+                        , __perfCurrentTelnetConnections__
+                        , __perfCurrentOscWebSockets__
                         ,__perfOpenedFtpControlConnections__
-                        ,__perfConcurrentFtpControlConnections__  
+                        ,__perfCurrentFtpControlConnections__  
                         );
-            firstTime = false;
-            if (resetCounters) {
-              __perfFSBytesRead__ = 0;
-              __perfFSBytesWritten__ = 0;
-              __perfWiFiBytesReceived__ = 0;
-              __perfWiFiBytesSent__ = 0;
-              __perfOpenedHttpConnections__ = 0;
-              __perfHttpRequests__ = 0;
-              __perOpenedfWebSockets__ = 0;
-              // __perfConcurrentHttpConnections__
-              // __perfConcurrentWebSockets__
-              __perfOpenedTelnetConnections__ = 0;
-              // __perfConcurrentTelnetConnections__
-              // __perfConcurrentOscWebSockets__
-            }
-            // send everything to the client
-            if (sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__) <= 0) return (char *) "";
+            if (sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__) <= 0) return "";
+          } else {
+            startPerfFSBytesRead = __perfFSBytesRead__;
+            startPerfFSBytesWritten = __perfFSBytesWritten__;
+            startPerfWiFiBytesReceived = __perfWiFiBytesReceived__;
+            startPerfWiFiBytesSent = __perfWiFiBytesSent__;
+            startPerfOpenedHttpConnections = __perfOpenedHttpConnections__;
+            startPerfHttpRequests = __perfHttpRequests__;
+            startPerOpenedfWebSockets = __perOpenedfWebSockets__;
+            startPerfOpenedTelnetConnections = __perfOpenedTelnetConnections__;
+            startPerfOpenedFtpControlConnections = __perfOpenedFtpControlConnections__;
+          }
 
-            if (follow) { // wait and check if user pressed a key
-              unsigned long startMillis = millis ();
-              while (millis () - startMillis < (1000)) {
-                delay (100);
-                if (tcn->readTelnetChar (true)) {
-                  tcn->readTelnetChar (false); // read pending character
-                  return (char *) ""; // return if user pressed Ctrl-C or any key
-                } 
-                if (tcn->connectionTimeOut ()) { sendAll (tcn->getSocket (), (char *) "\r\nTime-out", strlen ("\r\nTime-out"), 1000); tcn->closeConnection (); return (char *) ""; }
-              }              
+          do {
+            // clear sccreen
+            if (delaySeconds) {
+              if (sendAll (tcn->getSocket (), "\x1b[2J", strlen ("\x1b[2J"), __telnet_connection_time_out__) <= 0) return "";
             }
-          } while (follow);
-          return (char *) "";
-        }      
+            
+            // display counters
+            if (delaySeconds) {
+              endPerfFSBytesRead = __perfFSBytesRead__;
+              endPerfFSBytesWritten = __perfFSBytesWritten__;
+              endPerfWiFiBytesReceived = __perfWiFiBytesReceived__;
+              endPerfWiFiBytesSent = __perfWiFiBytesSent__;
+              endPerfOpenedHttpConnections = __perfOpenedHttpConnections__;
+              endPerfHttpRequests = __perfHttpRequests__;
+              endPerOpenedfWebSockets = __perOpenedfWebSockets__;
+              endPerfOpenedTelnetConnections = __perfOpenedTelnetConnections__;
+              endPerfOpenedFtpControlConnections = __perfOpenedFtpControlConnections__;
+              sprintf (s, "Performnce counter\r\n"
+                          "------------------------------------------\r\n"
+                          "perfFSBytesRead:                  %8lu\r\n"  // file system performance counters
+                          "perfFSBytesWritten:               %8lu\r\n"
+                          "\r\n"                        
+                          "perfWiFiBytesReceived:            %8lu\r\n"  // WiFi performance counters
+                          "perfWiFiBytesSent:                %8lu\r\n"
+                          "\r\n"
+                          "perfOpenedHttpConnections:        %8lu\r\n"  // HTTP performance counters
+                          "perfHttpRequests:                 %8lu\r\n"
+                          "perOpenedfWebSockets:             %8lu\r\n"
+                          "perfCurrentHttpConnections:       %8lu\r\n"
+                          "perfCurrentWebSockets:            %8lu\r\n"
+                          "\r\n"
+                          "perfOpenedTelnetConnections:      %8lu\r\n"  // Telnet performance counters
+                          "perfCurrentTelnetConnections:     %8lu\r\n\r\n"
+                          "perfCurrentOscWebSockets:         %8lu\r\n"      // oscilloscope performance counters
+                          "\r\n"
+                          "perfOpenedFtpControlConnections:  %8lu\r\n"  // FTP performance counters
+                          "perfCurrentFtpControlConnections: %8lu"
+                          , endPerfFSBytesRead - startPerfFSBytesRead
+                          , endPerfFSBytesWritten - startPerfFSBytesWritten
+                          , endPerfWiFiBytesReceived - startPerfWiFiBytesReceived
+                          , endPerfWiFiBytesSent - startPerfWiFiBytesSent
+                          , endPerfOpenedHttpConnections - startPerfOpenedHttpConnections
+                          , endPerfHttpRequests - startPerfHttpRequests
+                          , endPerOpenedfWebSockets - startPerOpenedfWebSockets
+                          , __perfCurrentHttpConnections__
+                          , __perfCurrentWebSockets__
+                          , endPerfOpenedTelnetConnections - startPerfOpenedTelnetConnections
+                          , __perfCurrentTelnetConnections__
+                          , __perfCurrentOscWebSockets__
+                          , endPerfOpenedFtpControlConnections - startPerfOpenedFtpControlConnections
+                          ,__perfCurrentFtpControlConnections__  
+                          );
+              if (sendAll (tcn->getSocket (), s, strlen (s), __telnet_connection_time_out__) <= 0) return "";
+
+              startPerfFSBytesRead = endPerfFSBytesRead;
+              startPerfFSBytesWritten = endPerfFSBytesWritten;
+              startPerfWiFiBytesReceived = endPerfWiFiBytesReceived;
+              startPerfWiFiBytesSent = endPerfWiFiBytesSent;
+              startPerfOpenedHttpConnections = endPerfOpenedHttpConnections;
+              startPerfHttpRequests = endPerfHttpRequests;
+              startPerOpenedfWebSockets = endPerOpenedfWebSockets;
+              startPerfOpenedTelnetConnections = endPerfOpenedTelnetConnections;
+              startPerfOpenedFtpControlConnections = endPerfOpenedFtpControlConnections;
+            }
+
+            // wait
+            unsigned long startMillis = millis ();
+            while (millis () - startMillis < (delaySeconds * 1000)) {
+              delay (100);
+              if (tcn->readTelnetChar (true)) {
+                tcn->readTelnetChar (false); // read pending character
+                return ""; // return if user pressed Ctrl-C or any key
+              } 
+              if (tcn->connectionTimeOut ()) { sendAll (tcn->getSocket (), (char *) "\r\nTime-out", strlen ("\r\nTime-out"), 1000); tcn->closeConnection (); return ""; }
+            }
+
+          } while (delaySeconds);
+          return "";
+        }
 
       #endif
         
@@ -2119,12 +2314,12 @@
             // start listener
             ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
             if (ths->__listeningSocket__ == -1) {
-              dmesg ("[telnetServer] socket error: ", errno);
+              dmesg ("[telnetServer] socket error: ", errno, strerror (errno));
             } else {
               // make address reusable - so we won't have to wait a few minutes in case server will be restarted
               int flag = 1;
               if (setsockopt (ths->__listeningSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag)) == -1) {
-                dmesg ("[telnetServer] setsockopt error: ", errno);
+                dmesg ("[telnetServer] setsockopt error: ", errno, strerror (errno));
               } else {
                 // bind listening socket to IP address and port     
                 struct sockaddr_in serverAddress; 
@@ -2133,12 +2328,12 @@
                 serverAddress.sin_addr.s_addr = inet_addr (ths->__serverIP__);
                 serverAddress.sin_port = htons (ths->__serverPort__);
                 if (bind (ths->__listeningSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                  dmesg ("[telnetServer] bind error: ", errno);
+                  dmesg ("[telnetServer] bind error: ", errno, strerror (errno));
                } else {
                  // mark socket as listening socket
                  #define BACKLOG 5
                  if (listen (ths->__listeningSocket__, TCP_LISTEN_BACKLOG) == -1) {
-                  dmesg ("[tlnetServer] listen error: ", errno);
+                  dmesg ("[tlnetServer] listen error: ", errno, strerror (errno));
                  } else {
           
                   // listener is ready for accepting connections
@@ -2151,7 +2346,7 @@
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
-                        if (ths->__listeningSocket__ > -1) dmesg ("[telnetServer] accept error: ", errno);
+                        if (ths->__listeningSocket__ > -1) dmesg ("[telnetServer] accept error: ", errno, strerror (errno));
                       } else {
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
@@ -2165,7 +2360,7 @@
                         } else {
                           // make the socket non-blocking so that we can detect time-out
                           if (fcntl (connectingSocket, F_SETFL, O_NONBLOCK) == -1) {
-                            dmesg ("[telnetServer] fcntl error: ", errno);
+                            dmesg ("[telnetServer] fcntl error: ", errno, strerror (errno));
                             close (connectingSocket);
                           } else {
                                 // create telnetConnection instence that will handle the connection, then we can lose reference to it - telnetConnection will handle the rest

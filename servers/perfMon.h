@@ -29,19 +29,19 @@
   // HTTP performance counters
   unsigned long __perfOpenedHttpConnections__ = 0;
   unsigned long __perOpenedfWebSockets__ = 0;  
-  unsigned long __perfConcurrentHttpConnections__ = 0;
-  unsigned long __perfConcurrentWebSockets__ = 0;
+  unsigned long __perfCurrentHttpConnections__ = 0;
+  unsigned long __perfCurrentWebSockets__ = 0;
   unsigned long __perfHttpRequests__ = 0;
 
   // Telnet performance counters
   unsigned long __perfOpenedTelnetConnections__ = 0;
-  unsigned long __perfConcurrentTelnetConnections__ = 0;
+  unsigned long __perfCurrentTelnetConnections__ = 0;
 
   // FTP performance counters
   unsigned long __perfOpenedFtpControlConnections__ = 0;
-  unsigned long __perfConcurrentFtpControlConnections__ = 0;  
+  unsigned long __perfCurrentFtpControlConnections__ = 0;  
 
   // oscilloscope performance counters
-  unsigned long __perfConcurrentOscWebSockets__ = 0;
+  unsigned long __perfCurrentOscWebSockets__ = 0;
 
 #endif

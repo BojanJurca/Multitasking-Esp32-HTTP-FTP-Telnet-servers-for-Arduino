@@ -6,7 +6,7 @@
   
     HTTP client combines a HTTP request from server, page and method and returns a HTTP reply or "" if there is none.
   
-    Januar, 10, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
          
 */
 
@@ -18,6 +18,10 @@
 
 #ifndef __HTTP_CLIENT__
   #define __HTTP_CLIENT__
+
+  #ifndef __PERFMON__
+    #pragma message "Compiling httpClient.h without performance monitors (perfMon.h)"
+  #endif  
 
 
     // ----- functions and variables in this modul -----
@@ -63,18 +67,18 @@
       // get server address
       struct hostent *he = gethostbyname (serverName);
       if (!he) {
-        dmesg ("[httpClient] gethostbyname() error: ", h_errno);
+        dmesg ("[httpClient] gethostbyname() error: ", h_errno, hstrerror (h_errno));
         return "";
       }
       // create socket
       int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
       if (connectionSocket == -1) {
-        dmesg ("[httpClient] socket() error: ", errno);
+        dmesg ("[httpClient] socket() error: ", errno, strerror (errno));
         return "";
       }
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        dmesg ("[httpClient] fcntl() error: ", errno);
+        dmesg ("[httpClient] fcntl() error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -85,7 +89,7 @@
       serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
       if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
         if (errno != EINPROGRESS) {
-          dmesg ("[httpClient] connect() error: ", errno); 
+          dmesg ("[httpClient] connect() error: ", errno, strerror (errno)); 
           close (connectionSocket);
           return "";
         }
@@ -97,7 +101,7 @@
       httpRequest = httpMethod + " " + httpRequest + " HTTP/1.0\r\nHost: " + String (serverIP) + "\r\n\r\n"; // 1.0 HTTP does not know keep-alive directive  - we want the server to close the connection immediatelly after sending the reply
       // DEBUG: Serial.print ("[httpClient] httpRequest = " + httpRequest);
       if (sendAll (connectionSocket, (char *) httpRequest.c_str (), httpRequest.length (), timeOut) == -1) {
-        dmesg ("[httpClient] send() error: ", errno); 
+        dmesg ("[httpClient] send() error: ", errno, strerror (errno)); 
         close (connectionSocket);
         return "";        
       }
@@ -110,7 +114,7 @@
         switch (receivedThisTime = recv (connectionSocket, __httpReply__, HTTP_REPLY_BUFFER_SIZE - 1, 0)) {
           case -1:
             if ((errno == EAGAIN || errno == ENAVAIL) && HTTP_REPLY_TIME_OUT && millis () - lastActive < HTTP_REPLY_TIME_OUT) break; // not time-out yet
-            dmesg ("[httpClient] recv() error: ", errno);
+            dmesg ("[httpClient] recv() error: ", errno, strerror (errno));
             close (connectionSocket);  
             return ""; // return empty reply - error
           case 0: // connection closed by peer

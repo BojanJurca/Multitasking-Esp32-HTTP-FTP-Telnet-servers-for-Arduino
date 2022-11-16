@@ -10,9 +10,6 @@
 #define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"
 
 
-
-
-
 // #define TEST_FTP
 #ifdef TEST_FTP // TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP
 
@@ -24,7 +21,7 @@
     #include "file_system.h"
 
     #include "time_functions.h"
-      #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+      #define NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
     #include "user_management.h"
   #include "ftpServer.hpp"
 
@@ -35,7 +32,8 @@
   void setup () {
     Serial.begin (115200);
 
-    mountFileSystem (true); 
+    mountFileSystem (true);
+
     startWiFi ();
     startCronDaemon (NULL);
 
@@ -69,7 +67,7 @@
   // include all .h files telnet server is using to test the whole functionality
       #include "dmesg_functions.h"
       #include "perfMon.h"
-        #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
+        // #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
       #include "file_system.h"
       #include "network.h"
       #include "time_functions.h"
@@ -240,32 +238,8 @@
     Serial.begin (115200);
 
     // for (default) CET_TIMEZONE
-    Serial.printf ("\n      Testing summer local time change\n");
-    Serial.printf ("      ----------------------------------------------------------------\n");
-    for (time_t testTime = 1616893200 - 2; testTime < 1616893200 + 2; testTime ++) {
-      setGmt (testTime);
-      time_t localTestTime = getLocalTime ();
-      Serial.printf ("      %llu | ", (unsigned long long) testTime);
-      char s [50];
-      strftime (s, 50, "%Y/%m/%d %H:%M:%S", gmtime (&testTime));
-      Serial.printf ("%s | ", s);
-      strftime (s, 50, "%Y/%m/%d %H:%M:%S", gmtime (&localTestTime));
-      Serial.printf ("%s | ", s);
-      Serial.printf ("%i\n", (int) (localTestTime - testTime));
-    }
-    Serial.printf ("\n      Testing autumn local time change\n");
-    Serial.printf ("      ----------------------------------------------------------------\n");
-    for (time_t testTime = 1635642000 - 2; testTime < 1635642000 + 2; testTime ++) {
-      setGmt (testTime);
-      time_t localTestTime = getLocalTime ();
-      Serial.printf ("      %llu | ", (unsigned long long) testTime);
-      char s [50];
-      strftime (s, 50, "%Y/%m/%d %H:%M:%S", gmtime (&testTime));
-      Serial.printf ("%s | ", s);
-      strftime (s, 50, "%Y/%m/%d %H:%M:%S", gmtime (&localTestTime));
-      Serial.printf ("%s | ", s);
-      Serial.printf ("%i\n", (int) (localTestTime - testTime));
-    }    
+    __TEST_DST_TIME_CHANGE__ ();
+    
 
     mountFileSystem (false);
     startWiFi (); // for some strange reason you can't set time if WiFi is not initialized
@@ -294,7 +268,6 @@
   #include "dmesg_functions.h"
   #include "network.h"
   #include "file_system.h" // include file_system.h if you want httpServer to server .html and other files as well
-  #include "syslog.h"
   #include "perfMon.h"  // include perfMon.h if you want to monitor performance
   #include "httpServer.hpp"
   #include "httpClient.h"
@@ -318,8 +291,6 @@
     // DEBUG: Serial.printf ("socket: %i    %s\n", hcn->socket (), httpRequest);
 
     #define httpRequestStartsWith(X) (strstr(httpRequest,X)==httpRequest)
-
-    syslog (httpRequest);
 
     if (httpRequestStartsWith ("GET / ")) {
                                             // play with cookies

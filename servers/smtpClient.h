@@ -44,18 +44,18 @@
       // get server address
       struct hostent *he = gethostbyname (smtpServer);
       if (!he) {
-        dmesg ("[smtpClient] gethostbyname() error: ", h_errno);
+        dmesg ("[smtpClient] gethostbyname() error: ", h_errno, hstrerror (h_errno));
         return "";
       }
       // create socket
       int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
       if (connectionSocket == -1) {
-        dmesg ("[smtpClient] socket() error: ", errno);
+        dmesg ("[smtpClient] socket() error: ", errno, strerror (errno));
         return "";
       }
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        dmesg ("[smtpClient] fcntl() error: ", errno);
+        dmesg ("[smtpClient] fcntl() error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -66,7 +66,7 @@
       serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
       if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
         if (errno != EINPROGRESS) {
-          dmesg ("[smtpClient] connect() error: ", errno); 
+          dmesg ("[smtpClient] connect() error: ", errno, strerror (errno)); 
           close (connectionSocket);
           return "";
         }
@@ -76,7 +76,7 @@
       
       // read welcome message from SMTP server
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) {
-        dmesg ("[smtpClient] read error: ", errno);
+        dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -90,12 +90,12 @@
       }
       sprintf (buffer, "EHLO %s\r\n", (char *) HOSTNAME);
       if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
-        dmesg ("[smtpClient] send error: ", errno);
+        dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-        dmesg ("[smtpClient] read error: ", errno);
+        dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -103,12 +103,12 @@
 
       // send login request to SMTP server and read its reply
       if (sendAll (connectionSocket, (char *) "AUTH LOGIN\r\n", strlen ((char *) "AUTH LOGIN\r\n"), SMTP_TIME_OUT) <= 0) {
-        dmesg ("[smtpClient] send error: ", errno);
+        dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-        dmesg ("[smtpClient] read error: ", errno);
+        dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -119,12 +119,12 @@
       mbedtls_base64_encode ((unsigned char *) buffer, sizeof (buffer) - 3, &encodedLen, (const unsigned char *) userName, strlen (userName));
       strcpy (buffer + encodedLen, "\r\n");
       if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
-        dmesg ("[smtpClient] send error: ", errno);
+        dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-        dmesg ("[smtpClient] read error: ", errno);
+        dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -134,12 +134,12 @@
       mbedtls_base64_encode ((unsigned char *) buffer, sizeof (buffer) - 3, &encodedLen, (const unsigned char *) password, strlen (password));
       strcpy (buffer + encodedLen, "\r\n");
       if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
-        dmesg ("[smtpClient] send error: ", errno);
+        dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-        dmesg ("[smtpClient] read error: ", errno);
+        dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -166,12 +166,12 @@
                           strcpy (buffer, "MAIL FROM:"); strcat (buffer, buffer + j + 1); strcat (buffer, (char *) "\r\n");
                           // send buffer now
                           if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
-                            dmesg ("[smtpClient] send error: ", errno);
+                            dmesg ("[smtpClient] send error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";        
                           }
                           if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-                            dmesg ("[smtpClient] read error: ", errno);
+                            dmesg ("[smtpClient] read error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";
                           }
@@ -203,12 +203,12 @@
                           strcpy (buffer, "RCPT TO:"); strcat (buffer, buffer + j + 1); strcat (buffer, (char *) "\r\n");
                           // send buffer now
                           if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
-                            dmesg ("[smtpClient] send error: ", errno);
+                            dmesg ("[smtpClient] send error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";        
                           }
                           if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-                            dmesg ("[smtpClient] read error: ", errno);
+                            dmesg ("[smtpClient] read error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";
                           }
@@ -221,12 +221,12 @@
 
       // send DATA command to SMTP server and read its reply
       if (sendAll (connectionSocket, (char *) "DATA\r\n", strlen ((char *) "DATA\r\n"), SMTP_TIME_OUT) <= 0) {
-        dmesg ("[smtpClient] send error: ", errno);
+        dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-        dmesg ("[smtpClient] read error: ", errno);
+        dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
@@ -251,12 +251,12 @@
              String (message) + 
              "\r\n.\r\n"; // end-of-message mark
         if (sendAll (connectionSocket, (char *) s.c_str (), s.length (), SMTP_TIME_OUT) <= 0) {
-          dmesg ("[smtpClient] send error: ", errno);
+          dmesg ("[smtpClient] send error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";        
         }
         if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
-          dmesg ("[smtpClient] read error: ", errno);
+          dmesg ("[smtpClient] read error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";
         }

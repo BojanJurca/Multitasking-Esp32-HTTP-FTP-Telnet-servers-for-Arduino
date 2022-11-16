@@ -4,7 +4,7 @@
  
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    March, 12, 2022, Bojan Jurca
+    October, 23, 2022, Bojan Jurca
 
 */
 
@@ -16,6 +16,14 @@
 
 #ifndef __FTP_CLIENT__
   #define __FTP_CLIENT__
+
+  #ifndef __FILE_SYSTEM__
+    #error "You can't use ftpClient.h without file_system.h. Either #include file_system.h prior to including ftpClient.h or exclude ftpClient.h"
+  #endif
+  #ifndef __PERFMON__
+    #pragma message "Compiling ftpClient.h without performance monitors (perfMon.h)"
+  #endif
+
 
     // ----- functions and variables in this modul -----
 
@@ -41,18 +49,16 @@
       // get server address
       struct hostent *he = gethostbyname (ftpServer);
       if (!he) {
-        String e (errno);
-        return "gethostbyname() error: " + e;
+        return "gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);
       }
       // create socket
       int controlConnectionSocket = socket (PF_INET, SOCK_STREAM, 0);
       if (controlConnectionSocket == -1) {
-        String e (errno);
-        return "socket() error: " + e;
+        return "socket() error: " + String (errno) + " " + strerror (errno);
       }
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (controlConnectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        String e (errno);
+        String e = String (errno) + " " + strerror (errno);
         close (controlConnectionSocket);
         return "fcntl() error: " + e;
       }
@@ -63,7 +69,7 @@
       serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
       if (connect (controlConnectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
         if (errno != EINPROGRESS) {
-          String e (errno); 
+          String e = String (errno) + " " + strerror (errno); 
           close (controlConnectionSocket);
           return "connect() error: " + e;
         }
@@ -77,7 +83,7 @@
       do {
         receivedTotal = recvAll (controlConnectionSocket, buffer + receivedTotal, sizeof (buffer) - 1 - receivedTotal, (char *) "\n", FTP_CLIENT_TIME_OUT);
         if (receivedTotal <= 0) {
-          String e (errno);
+          String e = String (errno) + " " + strerror (errno);
           close (controlConnectionSocket);
           return "recv() error: " + e;
         }
@@ -93,7 +99,7 @@
                   if (ftpReplyIs ("220 "))  { // server wants client to log in
                                               String s = "USER " + String (userName) + "\r\n";
                                               if (sendAll (controlConnectionSocket, (char *) s.c_str (), s.length (), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e (errno);
+                                                String e = String (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return "send() error: " + e;
                                               }
@@ -101,14 +107,14 @@
             else if (ftpReplyIs ("331 "))   { // server wants client to send password
                                               String s = "PASS " + String (password) + "\r\n";
                                               if (sendAll (controlConnectionSocket, (char *) s.c_str (), s.length (), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e (errno);
+                                                String e = String (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return "send() error: " + e;
                                               }
                                             }
             else if (ftpReplyIs ("230 "))   { // server said that we have logged in, initiate pasive data connection
                                               if (sendAll (controlConnectionSocket, (char *) "PASV\r\n", strlen ("PASV\r\n"), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e (errno);
+                                                String e = String (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return "send() error: " + e;
                                               }
@@ -118,7 +124,7 @@
                                               int ip1, ip2, ip3, ip4, p1, p2; // get FTP server IP and port
                                               if (6 != sscanf (buffer, "%*[^(](%i,%i,%i,%i,%i,%i)", &ip1, &ip2, &ip3, &ip4, &p1, &p2)) { // shoul always succeed
                                                 close (controlConnectionSocket);
-                                                return (buffer); 
+                                                return buffer; 
                                               }
                                               char pasiveDataIP [46]; sprintf (pasiveDataIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4);
                                               int pasiveDataPort = p1 << 8 | p2; 
@@ -134,16 +140,16 @@
                                               // create socket
                                               dataConnectionSocket = socket (PF_INET, SOCK_STREAM, 0);
                                               if (dataConnectionSocket == -1) {
-                                                String e (errno);
+                                                String e = String (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
-                                                return ("socket() error: " + e); 
+                                                return "socket() error: " + e; 
                                               }
                                               // make the socket not-blocking so that time-out can be detected
                                               if (fcntl (dataConnectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                String e (errno);
+                                                String e = String (errno) + " " + strerror (errno);
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return ("fcntl() error: " + e); 
+                                                return "fcntl() error: " + e; 
                                               }
                                               // connect to client that acts as a data server 
                                               struct sockaddr_in serverAddress;
@@ -167,10 +173,10 @@
                                               */
                                               if (connect (dataConnectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
                                                 if (errno != EINPROGRESS) {
-                                                  String e (errno);
+                                                  String e = String (errno) + " " + strerror (errno);
                                                   close (dataConnectionSocket);
                                                   close (controlConnectionSocket);
-                                                  return ("connect() error: " + e);
+                                                  return "connect() error: " + e;
                                                 } 
                                               }
                                               // it is likely that socket is not connected yet at this point (the socket is non-blocking)
@@ -183,10 +189,10 @@
                                               } else  {
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return ("Unknown FTP command " + String (ftpCommand)); 
+                                                return "Unknown FTP command " + String (ftpCommand); 
                                               }
                                               if (sendAll (controlConnectionSocket, (char *) s.c_str (), s.length (), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e (errno);
+                                                String e = String (errno) + " " + strerror (errno);
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
                                                 return "send() error: " + e;
@@ -275,7 +281,7 @@
                                               } else  {
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return ("Unknown FTP command " + String (ftpCommand)); 
+                                                return "Unknown FTP command " + String (ftpCommand); 
                                               }
                                             }
             else                            {
