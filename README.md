@@ -1,7 +1,7 @@
 # ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
 
 
-**The template is a quick and easy way to build a user interface for an ESP32 project.
+## The template is a quick and easy way to build a user interface for an ESP32 project.
 
    - You only have to modify the telnetCommandHandlerCallback function to buld the Telnet user interface for your project.
 
@@ -11,7 +11,7 @@
 
    - A Web-based Oscilloscope is already built-in which can help you see the signals on your Esp32 pins at run-time (accessible through Http server).
 
-Demo ESP32 server is available at [193.77.159.208](http://193.77.159.208)**
+Demo ESP32 server is available at [193.77.159.208](http://193.77.159.208)
 
 
 
