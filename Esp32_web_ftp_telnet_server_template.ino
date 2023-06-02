@@ -1,59 +1,29 @@
 /*
  
     Esp32_web_ftp_telnet_server_template.ino
- 
+
+        Compile this code with Arduino for:
+            - one of ESP32 boards (Tools | Board) and 
+            - one of FAT partition schemes (Tools | Partition scheme) and
+
+
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
- 
-    File contains a working template for some operating system functionalities that can support your projects.
- 
-    Copy all files in the package into Esp32_web_ftp_telnet_server_template directory, compile them with Arduino and run on ESP32.
-    
-    March, 4, 2022, Bojan Jurca
-                 
+     
+    May 1, 2023, Bojan Jurca
+           
 */
 
-// Compile this code with Arduino for one of ESP32 boards (Tools | Board) and one of FAT partition schemes (Tools | Partition scheme)!
-
 #include <WiFi.h>
+// --- Please modify this file first! --- This is where you can configure your network credentials, which servers will be included, etc ...
+#include "Esp32_servers_config.h"
 
 
-// you can skip some files #included if you don't need the whole functionality
-
-#include "./servers/dmesg_functions.h"
-#include "./servers/perfMon.h"                      // #include perfMon.h prior to other modules to make sure you're monitoring everything
-#include "./servers/file_system.h"
-  // #define network parameters before #including network.h
-  #define HOSTNAME                                  "MyESP32Server"
-  #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"
-  #define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"
-  #define DEFAULT_AP_SSID                           "" // HOSTNAME - leave empty if you don't want to use AP
-  #define DEFAULT_AP_PASSWORD                       "" // "YOUR_AP_PASSWORD" - at least 8 characters
-  // ... add other #definitions from network.h
-#include "./servers/network.h"                      // file_system.h is needed prior to #including network.h if you want to store the default parameters
-  // #define how you want to calculate local time and which NTP servers GMT wil be sinchronized with before #including time_functions.h
-  #define DEFAULT_NTP_SERVER_1                      "1.si.pool.ntp.org"
-  #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"
-  #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"
-  #define TIMEZONE CET_TIMEZONE                     // or another one supported in time_functions.h
-#include "./servers/time_functions.h"               // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters
-#include "./servers/httpClient.h"
-#include "./servers/ftpClient.h"                    // file_system.h is needed prior to #including ftpClient.h if you want to store the default parameters
-#include "./servers/smtpClient.h"                   // file_system.h is needed prior to #including smtpClient.h if you want to store the default parameters
-  // #define what kind of user management you want before #including user_management.h
-  #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT
-#include "./servers/user_management.h"              // file_system.h is needed prior to #including user_management.h in case of UNIX_LIKE_USER_MANAGEMENT
-  // #define machint type, it is only used in uname telnet command
-  #define MACHINETYPE                               "ESP32 Dev Modue"
-#include "./servers/telnetServer.hpp"               // needs almost all the above files for the whole functionality
-#include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h
-#include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
-
-
-              // ----- measurements are just for demonstration - delete this code if it is not needed -----
+              // ----- measurements are just for demonstration purpose - delete this code if it is not needed -----
               #include "measurements.hpp"
               measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
               measurements httpRequestCount (60);         // measure how many web connections arrive each minute
 
+              #undef LED_BUILTIN
               #define LED_BUILTIN 2                       // built-in led blinking is used in examples 01, 03 and 04
 
  
@@ -71,7 +41,7 @@ String httpRequestHandler (char *httpRequest, httpConnection *hcn) {
               httpRequestCount.increaseCounter ();                            // gether some statistics
 
               // variables used by example 05
-              char niceSwitch1 [6] = "false";  
+              char niceSwitch1 [6] = "false";
               static int niceSlider3 = 3;
               char niceRadio5 [3] = "fm";
 
@@ -176,7 +146,7 @@ void wsRequestHandler (char *wsRequest, WebSocket *webSocket) {
                                                                               int i = WiFi.RSSI ();
                                                                               c = (char) i;
                                                                               // Serial.printf ("[WebSocket data streaming] sending %i to web client\n", i);
-                                                                            } while (webSocket->sendBinary ((byte *) &c,  sizeof (c))); // send RSSI information as long as web browser is willing tzo receive it
+                                                                            } while (webSocket->sendBinary ((byte *) &c, sizeof (c))); // send RSSI information as long as web browser is willing tzo receive it
                                                                           }
 
 }
@@ -243,48 +213,59 @@ void cronHandler (char *cronCommand) {
 
 
 void setup () {
+    
   Serial.begin (115200);
- 
-  // FFat.format (); // clear up flash disk to reset everithing
-  mountFileSystem (true);                                                   // this is the first thing to do - all configuration files reside on the file system
 
-  // deleteFile ("/etc/ntp.conf");                                          // contains ntp server names for time sync - deleting this file would cause creating default one
-  // deleteFile ("/etc/crontab");                                           // contains cheduled tasks                 - deleting this file would cause creating empty one
+  Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
+
+  // fileSystem.formatFAT (); Serial.printf ("\nFormatting file system ...\n\n"); // format flash disk to start everithing from the scratch
+  #ifdef __FILE_SYSTEM__
+    fileSystem.mountLittleFs (true);                                        // this is the first thing to do - all configuration files reside on the file system
+    // fileSystem.mountFAT (true);
+  #endif
+
+  // fileSystem.deleteFile ("/etc/ntp.conf");                               // contains ntp server names for time sync - deleting this file would cause creating default one
+  // fileSystem.deleteFile ("/etc/crontab");                                // contains cheduled tasks                 - deleting this file would cause creating empty one
   startCronDaemon (cronHandler);                                            // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
                                                                             // creates empty /etc/crontab, reads it at startup and executes cronHandler when the time is right
                                                                             // 3 KB stack size is minimal requirement for NTP time synchronization, add more if your cronHandler requires more
 
-  // deleteFile ("/etc/passwd");                                            // contains users' accounts information    - deleting this file would cause creating default one
-  // deleteFile ("/etc/shadow");                                            // contains users' passwords               - deleting this file would cause creating default one
-  initializeUsers ();                                                       // creates user management files with root and webadmin users, if they don't exist yet
+  // fileSystem.deleteFile ("/etc/passwd");                                 // contains users' accounts information    - deleting this file would cause creating default one
+  // fileSystem.deleteFile ("/etc/shadow");                                 // contains users' passwords               - deleting this file would cause creating default one
+  userManagement.initialize ();                                             // creates user management files with root and webadmin users, if they don't exist yet
 
-  // deleteFile ("/network/interfaces");                                    // contation STA(tion) configuration       - deleting this file would cause creating default one
-  // deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");                // contation STA(tion) credentials         - deleting this file would cause creating default one
-  // deleteFile ("/etc/dhcpcd.conf");                                       // contains A(ccess) P(oint) configuration - deleting this file would cause creating default one
-  // deleteFile ("/etc/hostapd/hostapd.conf");                              // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
+  // fileSystem.deleteFile ("/network/interfaces");                         // contation STA(tion) configuration       - deleting this file would cause creating default one
+  // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");     // contation STA(tion) credentials         - deleting this file would cause creating default one
+  // fileSystem.deleteFile ("/etc/dhcpcd.conf");                            // contains A(ccess) P(oint) configuration - deleting this file would cause creating default one
+  // fileSystem.deleteFile ("/etc/hostapd/hostapd.conf");                   // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
   startWiFi ();                                                             // starts WiFi according to configuration files, creates configuration files if they don't exist
 
-  // start web server 
-  httpServer *httpSrv = new httpServer (httpRequestHandler,                 // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                        wsRequestHandler,                   // a callback function that will handle WS requests, NULL to ignore WS requests
-                                        (char *) "0.0.0.0",                 // start HTTP server on all available IP addresses
-                                        80,                                 // default HTTP port
-                                        NULL);                              // we won't use firewallCallback function for HTTP server
-  if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
-
-  // start FTP server
-  ftpServer *ftpSrv = new ftpServer ((char *) "0.0.0.0",                    // start FTP server on all available ip addresses
-                                     21,                                    // default FTP port
-                                     firewallCallback);                     // let's use firewallCallback function for FTP server
-  if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+  #ifdef __HTTP_SERVER__
+    // start web server 
+    httpServer *httpSrv = new (std::nothrow) httpServer (httpRequestHandler,  // a callback function that will handle HTTP requests that are not handled by webServer itself
+                                             wsRequestHandler,                // a callback function that will handle WS requests, NULL to ignore WS requests
+                                             (char *) "0.0.0.0",              // start HTTP server on all available IP addresses
+                                             80,                              // default HTTP port
+                                             NULL);                           // we won't use firewallCallback function for HTTP server
+    if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
+  #endif
   
-  // start telnet server
-  telnetServer *telnetSrv = new telnetServer (telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
-                                              (char *) "0.0.0.0",           // start Telnet server on all available ip addresses 
-                                              23,                           // default Telnet port
-                                              firewallCallback);            // let's use firewallCallback function for Telnet server
-  if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) dmesg ("[telnetServer] did not start.");
+  #ifdef __FTP_SERVER__
+    // start FTP server
+    ftpServer *ftpSrv = new (std::nothrow) ftpServer ((char *) "0.0.0.0",     // start FTP server on all available ip addresses
+                                           21,                                // default FTP port
+                                           firewallCallback);                 // let's use firewallCallback function for FTP server
+    if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+  #endif
 
+  #ifdef __TELNET_SERVER__
+    // start telnet server
+    telnetServer *telnetSrv = new (std::nothrow) telnetServer (telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
+                                                               (char *) "0.0.0.0",           // start Telnet server on all available ip addresses 
+                                                               23,                           // default Telnet port
+                                                               firewallCallback);            // let's use firewallCallback function for Telnet server
+    if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) dmesg ("[telnetServer] did not start.");
+  #endif
 
               // ----- some examples - delete this code if it is not needed -----
 
@@ -297,9 +278,8 @@ void setup () {
               // other examples:
               pinMode (LED_BUILTIN, OUTPUT);         
               digitalWrite (LED_BUILTIN, LOW);
- 
 }
 
 void loop () {
-                           
+
 }

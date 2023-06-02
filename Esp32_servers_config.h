@@ -1,84 +1,11 @@
-# ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
+// Esp32_web_ftp_telnet_server_template configuration
+// you can skip some files #included if you don't need the whole functionality
 
 
-**The template is a quick and easy way to build a user interface for an ESP32 project.
-
-   - You only have to modify the telnetCommandHandlerCallback function to buld the Telnet user interface for your project.
-
-   - You only have to modify the httpRequestHandler function to build the WEB user interface for your project. If you want a nice stylish look and feel there is also a FTP server built into the template so you can upload larger HTML files.
-
-   - Dmesg message logging is built-in which can help you see what is going on at run-time and debug your project (accessible through Telnet server).
-
-   - A Web-based Oscilloscope is already built-in which can help you see the signals on your Esp32 pins at run-time (accessible through Http server).
-
-Demo ESP32 server is available at [193.77.159.208](http://193.77.159.208)**
+// uncomment the following line to get additional compile-time information about how the project gets compiled
+// #define SHOW_COMPILE_TIME_INFORMATION
 
 
-
-## The latest changes
-
-
-The latest changes are mainly stability improvements and memory optimization. A separate configuration file is added so most of the configuration can be done in one place.
-
-I tried to make the code more comprehensive. For this reason some module functions changed their names a little bit. Please see the working template code to get around it if your old code doesn't compile at first.
-
-![Screenshot](presentation.gif)
-
-
-
-## HTTP server
-
-
-HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to certain extent. Demo HTTP server is available at 193.77.159.208.
-
-**HTTP server performance** 
-
-![HTTP server performance](performance.gif)
-
-
-## Telnet server
-
-
-Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in, mainly for editing small configuration files. Demo Telnet server is available at 193.77.159.208 (login as root with default password rootpassword).
-
-
-## FTP server
-
-
-FTP server is needed for uploading configuration files, .html files, ... to ESP32 file system. Both active and passive modes are supported.
-
-
-## Time zones
-
-
-time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the supported time zones or modify timeToLocalTime function yourself. 
-
-
-## Configuration files
-
-
-```C++
-/etc/passwd                               - contains users' accounts information
-/etc/shadow                               - contains hashed users' passwords
-/network/interfaces                       - contains WiFi STA(tion) configuration
-/etc/wpa_supplicant/wpa_supplicant.conf   - contains WiFi STA(tion) credentials
-/etc/dhcpcd.conf                          - contains WiFi A(ccess) P(oint) configuration
-/etc/hostapd/hostapd.conf                 - contains WiFi A(ccess) P(oint) credentials
-/etc/ntp.conf                             - contains NTP time servers names
-/etc/crontab                              - contains scheduled tasks
-/etc/mail/sendmail.cf                     - contains sendMail default settings
-/etc/ftp/ftpclient.cf                     - contains ftpPut and ftpGet default settings
-```
-
-
-## Setup instructions
-
-
-1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
-2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
-3. modify (some or all) the default #definitions in Esp32_servers_config.h file (that will be later written to configuration files) **before** the sketch is run for the first time:
-
-```C++
 // include version_of_servers.h to include version information
 #include "./servers/version_of_servers.h"
 // include dmesg_functions.h which is useful for run-time debugging - for dmesg telnet command
@@ -148,34 +75,13 @@ time_functions.h provides GMT to local time conversion from 35 different time zo
 #include "./servers/telnetServer.hpp"               // needs almost all the above files for whole functionality, but can also work without them
 #include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h
 #include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
-```
-
-4. Select one of SPIFFS partition schemas (Tool | Partition Scheme).
-5. Compile the sketch and run it on your ESP32. Doing this the following will happen:
-
-   - ESP32 flash memory will be formatted with the LittleFs file system. WARNING: every information you have stored into ESP32�s flash memory will be lost.
-   - Configuration files will be created with the default settings.
-   - Two users will be created: **root** with **rootpassword** and **webadmin** with **webadminpassword**.
-
-At this point, you can already test if everything is going on as planned by http, FTP or telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to be done.
-
-6. FTP (demo and example: index.html, ...) files from html directory to ESP32's /var/www/html/ directory.
-7. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
 
 
-## Debugging the code 
+// backward compatibility
 
+[[deprecated("Replaced by fileSystem.mount(bool)")]]
+bool mountFileSystem (bool formatIfUnformatted) { return fileSystem.mount (formatIfUnformatted); }
 
-Telnet server provides Unix/Linux like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with a USB cable. In your C++ code use dmesg () function to insert important messages about the state of your code into a circular queue. When you want to view it, connect to your ESP32 with Telnet client and type dmesg command.
+[[deprecated("Replaced by userManagement.initialize()")]]
+void initializeUsers () { userManagement.initialize (); }
 
-
-![Screenshot](dmesg.png)
-
-
-## Debugging the signals
-
-
-ESP32 oscilloscope is a web-based application included in Esp32_web_ftp_telnet_server_template. It is accessible through a web browser once oscilloscope.html is uploaded to ESP32's /var/www/html directory.
-
-
-![Screenshot](oscilloscope.png)
