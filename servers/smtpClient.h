@@ -4,7 +4,7 @@
  
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    August, 12, 2021, Bojan Jurca
+    April 1, 2023, Bojan Jurca
 
 */
 
@@ -14,14 +14,16 @@
     #include <WiFi.h>
     // base64 encoding
     #include <mbedtls/base64.h>
+    // fixed size strings
+    #include "fsString.h"
 
 
 #ifndef __SMTP_CLIENT__
-  #define __SMTP_CLIENT__
+    #define __SMTP_CLIENT__
 
     // ----- functions and variables in this modul -----
 
-    String sendMail (char *, char *, char *, char *, char *, char *, int, char *);
+    string sendMail (char *, char *, char *, char *, char *, char *, int, char *);
     
     
     // TUNNING PARAMETERS
@@ -29,7 +31,10 @@
     #define SMTP_TIME_OUT 1500                    // 1500 ms = 1,5 sec 
     #define SMTP_BUFFER_SIZE 256                  // constructing SMTP commands and reading SMTP reply
     #ifndef HOSTNAME
-      #define "MyESP32Server"                     // use default if not defined previously
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "HOSTNAME was not defined previously, #defining the default MyESP32Server in smtpClient.h"
+        #endif
+        #define "MyESP32Server"                     // use default if not defined previously
     #endif
     #define MAX_ETC_MAIL_SENDMAIL_CF 1 * 1024     // 1 KB will usually do - sendmail reads the whole /etc/mail/sendmail.cf file in the memory 
 
@@ -40,7 +45,9 @@
 
        
     // sends message, returns error or success text (from SMTP server)
-    String __sendMail__ (char *message, char *subject, char *to, char *from, char *password, char *userName, int smtpPort, char *smtpServer) {
+    string __sendMail__ (char *message, char *subject, char *to, char *from, char *password, char *userName, int smtpPort, char *smtpServer) {
+        // DEBUG: Serial.printf ("__sendMail__:\nsmtpServer=%s\nsmtpPort=%i\nusername=%s\npassword=%s\nfrom=%s\nto=%s\nsubject=%s\nmessage=%s\n", smtpServer, smtpPort, userName, password, from, to, subject, message);
+
       // get server address
       struct hostent *he = gethostbyname (smtpServer);
       if (!he) {
@@ -234,28 +241,34 @@
 
       // send DATA content to SMTP server and read its reply
       {
-        String s = "From:" + String (from) + "\r\n"
-                   "To:" +  String (to) + "\r\n";
+        string  s = "From:";
+                s += from;
+                s += "\r\nTo:";
+                s += to;
+                s += "\r\n";
         #ifdef __TIME_FUNCTIONS__
           time_t now = getGmt ();
           if (now) { // if we know the time than add this information also
             struct tm structNow = timeToStructTime (now);
             char stringNow [128];
             strftime (stringNow, sizeof (stringNow), "%a, %d %b %Y %H:%M:%S %Z", &structNow);
-            s += "Date:" + String (stringNow) + "\r\n";
+                s += "Date:";
+                s += stringNow;
+                s += "\r\n";
           }
         #endif
-        s += String ("Subject:") + subject + "\r\n"
-             "Content-Type: text/html; charset=\"utf8\"\r\n" // add this directive to enable HTML content of message
-             "\r\n" + 
-             String (message) + 
-             "\r\n.\r\n"; // end-of-message mark
-        if (sendAll (connectionSocket, (char *) s.c_str (), s.length (), SMTP_TIME_OUT) <= 0) {
+                s += "Subject:";
+                s += subject;
+                s += "\r\nContent-Type: text/html; charset=\"utf8\"\r\n" // add this directive to enable HTML content of message
+                     "\r\n";
+                s += message;
+                s += "\r\n.\r\n"; // end-of-message mark
+        if (sendAll (connectionSocket, s, SMTP_TIME_OUT) <= 0) {
           dmesg ("[smtpClient] send error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";        
         }
-        if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
+        if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, "\n", SMTP_TIME_OUT) <= 0) { 
           dmesg ("[smtpClient] read error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";
@@ -269,37 +282,51 @@
   }
 
   // sends message, returns error or success text, fills empty parameters with the ones from configuration file /etc/mail/sendmail.cf
-  String sendMail (char *message = (char *) "", char *subject = (char *) "", char *to = (char *) "", char *from = (char *) "", char *password = (char *) "", char *userName = (char *) "", int smtpPort = 0, char *smtpServer = (char *) "") {
+  string sendMail (char *message = (char *) "", char *subject = (char *) "", char *to = (char *) "", char *from = (char *) "", char *password = (char *) "", char *userName = (char *) "", int smtpPort = 0, char *smtpServer = (char *) "") {
+      // DEBUG: Serial.printf ("sendMail (call):\nsmtpServer=%s\nsmtpPort=%i\nusername=%s\npassword=%s\nfrom=%s\nto=%s\nsubject=%s\nmessage=%s\n", smtpServer, smtpPort, userName, password, from, to, subject, message);
 
     #ifdef __FILE_SYSTEM__
-      if (__fileSystemMounted__) { 
+      if (fileSystem.mounted ()) { 
         char buffer [MAX_ETC_MAIL_SENDMAIL_CF + 1];
         strcpy (buffer, "\n");
-        if (readConfigurationFile (buffer + 1, sizeof (buffer) - 2, (char *) "/etc/mail/sendmail.cf")) {
+        if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 2, (char *) "/etc/mail/sendmail.cf")) {
           strcat (buffer, "\n");
+          // DEBUG: Serial.printf ("/etc/mail/sendmail.cf:%s", buffer);
           char *p = NULL;
           char *q;
-          if (!*smtpServer) if ((smtpServer = strstr (buffer, "\nsmtpServer "))) smtpServer += 12;
-          if (!smtpPort)    if ((p = strstr (buffer, "\nsmtpPort ")))            p += 10;
-          if (!*userName)   if ((userName = strstr (buffer, "\nuserName ")));    userName += 10;
-          if (!*password)   if ((password = strstr (buffer, "\npassword ")));    password += 10;
-          if (!*from)       if ((from = strstr (buffer, "\nfrom ")));            from += 6;
-          if (!*to)         if ((to = strstr (buffer, "\nto ")));                to += 4;
-          if (!*subject)    if ((subject = strstr (buffer, "\nsubject ")));      subject += 9;
-          if (!*message)    if ((message = strstr (buffer, "\nmessage ")));      message += 9;
-          
-          if ((q = strstr (smtpServer, "\n"))) *q = 0;
-          if (p && (q = strstr (p, "\n"))) { *q = 0; smtpPort = atoi (p); }
-          if ((q = strstr (userName, "\n"))) *q = 0;
-          if ((q = strstr (password, "\n"))) *q = 0;
-          if ((q = strstr (from, "\n"))) *q = 0;
-          if ((q = strstr (to, "\n"))) *q = 0;
-          if ((q = strstr (subject, "\n"))) *q = 0;
-          if ((q = strstr (message, "\n"))) *q = 0;
+          if (!*smtpServer) if ((smtpServer = strstr (buffer, "\nsmtpServer ")))  { smtpServer += 12; 
+                                                                                    // DEBUG: Serial.printf ("smtpServer from .cf=%s\n", smtpServer); delay (1000);
+                                                                                  }
+          if (!smtpPort)    if ((p = strstr (buffer, "\nsmtpPort ")))             { p += 10;
+                                                                                    // DEBUG: Serial.printf ("smtpPort from .cf=%s\n", p); delay (1000);
+                                                                                  }
+          if (!*userName)   if ((userName = strstr (buffer, "\nuserName ")))      { userName += 10;
+                                                                                    // DEBUG: Serial.printf ("userName from .cf=%s\n", userName); delay (1000);
+                                                                                  }
+          if (!*password)   if ((password = strstr (buffer, "\npassword ")))      { password += 10;
+                                                                                    // DEBUG: Serial.printf ("password from .cf=%s\n", password); delay (1000);
+                                                                                  }
+          if (!*from)       if ((from = strstr (buffer, "\nfrom ")))              { from += 6;
+                                                                                    // DEBUG: Serial.printf ("from from .cf=%s\n", from); delay (1000);
+                                                                                  }
+          if (!*to)         if ((to = strstr (buffer, "\nto ")))                  { to += 4;
+                                                                                    // DEBUG: Serial.printf ("to from .cf=%s\n", to); delay (1000);
+                                                                                  }          
+          if (!*subject)    if ((subject = strstr (buffer, "\nsubject ")))        { subject += 9;
+                                                                                    // DEBUG: Serial.printf ("subject from .cf=%s\n", subject); delay (1000);
+                                                                                  }
+          if (!*message)    if ((message = strstr (buffer, "\nmessage ")))        { message += 9;
+                                                                                    // DEBUG: Serial.printf ("message from .cf=%s\n", message); delay (1000);
+                                                                                  }
+          for (q = buffer; *q; q++)
+            if (*q < ' ') *q = 0;
+          if (p) smtpPort = atoi (p);
         }
       } else {
           dmesg ("[smtpCient] file system not mounted, can't read /etc/mail/sendmail.cf");
       }
+
+      // DEBUG: Serial.printf ("sendMail (filled missing information):\nsmtpServer=%s\nsmtpPort=%i\nusername=%s\npassword=%s\nfrom=%s\nto=%s\nsubject=%s\nmessage=%s\n", smtpServer, smtpPort, userName, password, from, to, subject, message);
     #endif
 
     if (!*to || !*from || !*password || !*userName || !smtpPort || !*smtpServer) {

@@ -30,7 +30,9 @@
   #define __TIME_FUNCTIONS__
 
   #ifndef __FILE_SYSTEM__
-    #pragma message "Compiling time_functions.h without file system (file_system.h), time_functions.h will not use configuration files"
+      #ifdef SHOW_COMPILE_TIME_INFORMATION
+          #pragma message "Compiling time_functions.h without file system (fileSystem.hpp), time_functions.h will not use configuration files"
+      #endif
   #endif
 
 
@@ -53,7 +55,6 @@
     bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, char *, bool);
     bool cronTabAdd (char *, bool);
     int cronTabDel (char *);
-    String cronTab ();
     void startCronDaemon (void (* cronHandler) (char *), size_t);
 
   
@@ -99,22 +100,32 @@
           #define CHAMORRO_TIMEZONE 44                // GMT + 10               
           // ... add more time zones or change timeToLocalTime function yourself
     #ifndef TIMEZONE
+      #ifdef SHOW_COMPILE_TIME_INFORMATION
+          #pragma message "TIMEZONE was not defined previously, #defining the default CET_TIMEZONE in time_finctions.h"
+      #endif
       #define TIMEZONE                CET_TIMEZONE    // one of the above
     #endif
 
     // NTP servers that ESP32 server is going to sinchronize its time with
     #ifndef DEFAULT_NTP_SERVER_1
-      #pragma message "DEFAULT_NTP_SERVER_1 was not defined previously, #defining the default 1.si.pool.ntp.org"
-      #define DEFAULT_NTP_SERVER_1    "1.si.pool.ntp.org"
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "DEFAULT_NTP_SERVER_1 was not defined previously, #defining the default 1.si.pool.ntp.org in time_finctions.h"
+        #endif
+        #define DEFAULT_NTP_SERVER_1    "1.si.pool.ntp.org"
     #endif
     #ifndef DEFAULT_NTP_SERVER_2
-      #pragma message "DEFAULT_NTP_SERVER_2 was not defined previously, #defining the default 2.si.pool.ntp.org"
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "DEFAULT_NTP_SERVER_2 was not defined previously, #defining the default 2.si.pool.ntp.org in time_finctions.h"
+        #endif
       #define DEFAULT_NTP_SERVER_2    "2.si.pool.ntp.org"
     #endif
     #ifndef DEFAULT_NTP_SERVER_3
-      #pragma message "DEFAULT_NTP_SERVER_3 was not defined previously, #defining the default 3.si.pool.ntp.org"
-      #define DEFAULT_NTP_SERVER_3    "3.si.pool.ntp.org"
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "DEFAULT_NTP_SERVER_3 was not defined previously, #defining the default 3.si.pool.ntp.org in time_finctions.h"
+        #endif
+        #define DEFAULT_NTP_SERVER_3    "3.si.pool.ntp.org"
     #endif
+
     #define MAX_ETC_NTP_CONF_SIZE 1 * 1024            // 1 KB will usually do - initialization reads the whole /etc/ntp.conf file in the memory 
                                                       
     // crontab definitions
@@ -315,30 +326,6 @@
     return cnt;
   }
 
-  String cronTab () { // returns the whole crontab content as a string
-    String s = "";
-    xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
-      if (!__cronTabEntries__) {
-        s = "crontab is empty.";
-      } else {
-        for (int i = 0; i < __cronTabEntries__; i ++) {
-          if (s != "") s += "\r\n";
-          char c [4]; 
-          if (__cronEntry__ [i].second == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second);      s += String (c); }
-          if (__cronEntry__ [i].minute == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute);      s += String (c); }
-          if (__cronEntry__ [i].hour == ANY)        s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour);        s += String (c); }
-          if (__cronEntry__ [i].day == ANY)         s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day);         s += String (c); }
-          if (__cronEntry__ [i].month == ANY)       s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month);       s += String (c); }
-          if (__cronEntry__ [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += String (c); }
-          if (__cronEntry__ [i].lastExecuted)       s += " " + timeToString (__cronEntry__ [i].lastExecuted) + " "; else s += " (not executed yet)  ";
-          if (__cronEntry__ [i].readFromFile)       s += " from /etc/crontab  "; else s += " entered from code  ";
-          s += __cronEntry__ [i].cronCommand;
-        }
-      }
-    xSemaphoreGiveRecursive (__cronSemaphore__);
-    return s;    
-  }
-
   void __cronDaemon__ (void *ptrCronHandler) { // it does two things: it synchronizes time with NTP servers once a day and executes cron commands from cron table when the time is right
     dmesg ("[cronDaemon] started");
     do {     // try to set/synchronize the time, retry after 1 minute if unsuccessfull 
@@ -415,14 +402,14 @@
   void startCronDaemon (void (* cronHandler) (char *)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default one
     Serial.printf ("[%10lu] [cronDaemon] starting ...\n", millis ());
     #ifdef __FILE_SYSTEM__
-      if (__fileSystemMounted__) {
+      if (fileSystem.mounted ()) {
         // read NTP configuration from /etc/ntp.conf, create a new one if it doesn't exist
-        if (!isFile ("/etc/ntp.conf")) {
+        if (!fileSystem.isFile ("/etc/ntp.conf")) {
           // create directory structure
-          if (!isDirectory ("/etc")) { fileSystem.mkdir ("/etc"); }
+          if (!fileSystem.isDirectory ("/etc")) { fileSystem.makeDirectory ("/etc"); }
           Serial.printf ("[%10lu] [cronDaemon] /etc/ntp.conf does not exist, creating default one ... ", millis ());
           bool created = false;
-          File f = fileSystem.open ("/etc/ntp.conf", FILE_WRITE);
+          File f = fileSystem.open ("/etc/ntp.conf", "w", true);
           if (f) {
             String defaultContent = F ("# configuration for NTP - reboot for changes to take effect\r\n\r\n"
                                        "server1 " DEFAULT_NTP_SERVER_1 "\r\n"
@@ -430,9 +417,9 @@
                                        "server3 " DEFAULT_NTP_SERVER_3 "\r\n");
             created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
             f.close ();
-            #ifdef __PERFMON__
-              __perfFSBytesWritten__ += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-            #endif            
+
+            diskTrafficInformation.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
           }
           Serial.printf (created ? "created\n" : "error\n");
         }
@@ -441,7 +428,7 @@
           // parse configuration file if it exists
           char buffer [MAX_ETC_NTP_CONF_SIZE];
           strcpy (buffer, "\n");
-          if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/ntp.conf")) {
+          if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/ntp.conf")) {
             Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
             strcat (buffer, "\n");
             strBetween (__ntpServer1__, sizeof (__ntpServer1__), buffer, "\nserver1 ", "\n");
@@ -451,12 +438,12 @@
         } 
         
         // read scheduled tasks from /etc/crontab
-        if (!isFile ("/etc/crontab")) {
+        if (!fileSystem.isFile ("/etc/crontab")) {
           // create directory structure
-          if (!isDirectory ("/etc")) { fileSystem.mkdir ("/etc"); }          
+          if (!fileSystem.isDirectory ("/etc")) { fileSystem.makeDirectory ("/etc"); }          
           Serial.printf ("[%10lu] [cronDaemon] /etc/crontab does not exist, creating default one ... ", millis ());
           bool created = false;
-          File f = fileSystem.open ("/etc/crontab", FILE_WRITE);          
+          File f = fileSystem.open ("/etc/crontab", "w", true);
           if (f) {
             String defaultContent = F( "# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
                                        "#\r\n"
@@ -472,9 +459,9 @@
 
             created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
             f.close ();
-            #ifdef __PERFMON__
-              __perfFSBytesWritten__ += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-            #endif                        
+
+            diskTrafficInformation.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
           }
           Serial.printf (created ? "created\n" : "error\n");
 
@@ -484,7 +471,7 @@
           // parse scheduled tasks if /etc/crontab exists
           char buffer [MAX_ETC_CRONTAB_SIZE];
           strcpy (buffer, "\n");
-          if (readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/crontab")) {
+          if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/crontab")) {
                         Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
 
             strcat (buffer, "\n");

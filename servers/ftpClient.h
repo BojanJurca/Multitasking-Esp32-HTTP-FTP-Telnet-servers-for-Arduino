@@ -4,7 +4,7 @@
  
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    October, 23, 2022, Bojan Jurca
+    April 1, 2023, Bojan Jurca
 
 */
 
@@ -12,31 +12,30 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    // fixed size strings
+    #include "fsstring.h"
 
 
 #ifndef __FTP_CLIENT__
-  #define __FTP_CLIENT__
+    #define __FTP_CLIENT__
 
-  #ifndef __FILE_SYSTEM__
-    #error "You can't use ftpClient.h without file_system.h. Either #include file_system.h prior to including ftpClient.h or exclude ftpClient.h"
-  #endif
-  #ifndef __PERFMON__
-    #pragma message "Compiling ftpClient.h without performance monitors (perfMon.h)"
-  #endif
+    #ifndef __FILE_SYSTEM__
+        #error "You can't use ftpClient.h without file_system.h. Either #include file_system.h prior to including ftpClient.h or exclude ftpClient.h"
+    #endif
 
 
     // ----- functions and variables in this modul -----
 
-    String ftpPut (char *, char *, char *, char *, int, char *);
-    String ftpGet (char *, char *, char *, char *, int, char *);
+    string ftpPut (char *, char *, char *, char *, int, char *);
+    string ftpGet (char *, char *, char *, char *, int, char *);
 
     
     // TUNNING PARAMETERS
 
     #define FTP_CLIENT_TIME_OUT 3000              // 3000 ms = 3 sec 
     #define FTP_CMD_BUFFER_SIZE 300               // sending FTP commands and readinf replies from the server
-    #define FTP_CLIENT_BUFFER_SIZE TCP_SND_BUF    // for file transfer, 5744 bytes is maximum block that ESP32 can send
-    #define MAX_ETC_FTP_FTPCLIENT_CF 1 * 1024     // 1 KB will usually do - sendmail reads the whole /etc/mail/sendmail.cf file in the memory 
+    // ftpClientBuffer will be used first to read configuration file /etc/mail/sendmail.cf file in the memory and then for data transmission, fro both purposes 1 KB seems OK
+    #define FTP_CLIENT_BUFFER_SIZE 1024           // MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1024 seems a good trade-off
 
 
     // ----- CODE -----
@@ -44,23 +43,23 @@
     #include "dmesg_functions.h"
 
        
-    // sends or receives a file via FTP, ftpCommand is eighter "PUT" or "GET", returns error or success text from FTP server
-    String __ftpClient__ (char *ftpCommand, char *clientFile, char *serverFile, char *password, char *userName, int ftpPort, char *ftpServer) {
+    // sends or receives a file via FTP, ftpCommand is eighter "PUT" or "GET", returns error or success text from FTP server, uses ftpClientBuffer that should be allocated in advance
+    string __ftpClient__ (char *ftpCommand, char *clientFile, char *serverFile, char *password, char *userName, int ftpPort, char *ftpServer, char *ftpClientBuffer) {
       // get server address
       struct hostent *he = gethostbyname (ftpServer);
       if (!he) {
-        return "gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);
+        return string ("gethostbyname error: ") + string (h_errno) + " " + hstrerror (h_errno);
       }
       // create socket
       int controlConnectionSocket = socket (PF_INET, SOCK_STREAM, 0);
       if (controlConnectionSocket == -1) {
-        return "socket() error: " + String (errno) + " " + strerror (errno);
+        return string ("socket error: ") + string (errno) + " " + strerror (errno);
       }
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (controlConnectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        String e = String (errno) + " " + strerror (errno);
+        string e = string (errno) + " " + strerror (errno);
         close (controlConnectionSocket);
-        return "fcntl() error: " + e;
+        return string ("fcntl error: ") + e;
       }
       // connect to server
       struct sockaddr_in serverAddress;
@@ -69,23 +68,23 @@
       serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
       if (connect (controlConnectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
         if (errno != EINPROGRESS) {
-          String e = String (errno) + " " + strerror (errno); 
+          string e = string (errno) + " " + strerror (errno); 
           close (controlConnectionSocket);
-          return "connect() error: " + e;
+          return string ("connect error: ") + e;
         }
       } // it is likely that socket is not connected yet at this point
 
-      char buffer [FTP_CMD_BUFFER_SIZE]; 
+      char buffer [FTP_CMD_BUFFER_SIZE];
       int dataConnectionSocket = -1;
      
       // read and process FTP server replies in an endless loop
       int receivedTotal = 0;
       do {
-        receivedTotal = recvAll (controlConnectionSocket, buffer + receivedTotal, sizeof (buffer) - 1 - receivedTotal, (char *) "\n", FTP_CLIENT_TIME_OUT);
+        receivedTotal = recvAll (controlConnectionSocket, buffer + receivedTotal, sizeof (buffer) - 1 - receivedTotal, "\n", FTP_CLIENT_TIME_OUT);
         if (receivedTotal <= 0) {
-          String e = String (errno) + " " + strerror (errno);
+          string e = string (errno) + " " + strerror (errno);
           close (controlConnectionSocket);
-          return "recv() error: " + e;
+          return string ("recv error: ") + e;
         }
         // DEBUG: Serial.printf ("ftpServerReply = |%s|\n", buffer);
         char *endOfCommand = strstr (buffer, "\n");
@@ -97,32 +96,32 @@
             #define ftpReplyIs(X) (strstr (buffer, X) == buffer)
 
                   if (ftpReplyIs ("220 "))  { // server wants client to log in
-                                              String s = "USER " + String (userName) + "\r\n";
-                                              if (sendAll (controlConnectionSocket, (char *) s.c_str (), s.length (), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e = String (errno) + " " + strerror (errno);
+                                              string s = string ("USER ") + userName + "\r\n";
+                                              if (sendAll (controlConnectionSocket, s, FTP_CLIENT_TIME_OUT) == -1) {
+                                                string e = string (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
-                                                return "send() error: " + e;
+                                                return string ("send error: ") + e;
                                               }
                                             }
             else if (ftpReplyIs ("331 "))   { // server wants client to send password
-                                              String s = "PASS " + String (password) + "\r\n";
-                                              if (sendAll (controlConnectionSocket, (char *) s.c_str (), s.length (), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e = String (errno) + " " + strerror (errno);
+                                              string s = string ("PASS ") + password + "\r\n";
+                                              if (sendAll (controlConnectionSocket, s, FTP_CLIENT_TIME_OUT) == -1) {
+                                                string e = string (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
-                                                return "send() error: " + e;
+                                                return string ("send error: ") + e;
                                               }
                                             }
             else if (ftpReplyIs ("230 "))   { // server said that we have logged in, initiate pasive data connection
-                                              if (sendAll (controlConnectionSocket, (char *) "PASV\r\n", strlen ("PASV\r\n"), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e = String (errno) + " " + strerror (errno);
+                                              if (sendAll (controlConnectionSocket, "PASV\r\n", FTP_CLIENT_TIME_OUT) == -1) {
+                                                string e = string (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
-                                                return "send() error: " + e;
+                                                return string ("send error: ") + e;
                                               }
                                             }
             else if (ftpReplyIs ("227 "))   { // server send connection information like 227 entering passive mode (10,18,1,66,4,1)
                                               // open data connection
                                               int ip1, ip2, ip3, ip4, p1, p2; // get FTP server IP and port
-                                              if (6 != sscanf (buffer, "%*[^(](%i,%i,%i,%i,%i,%i)", &ip1, &ip2, &ip3, &ip4, &p1, &p2)) { // shoul always succeed
+                                              if (6 != sscanf (buffer, "%*[^(](%i,%i,%i,%i,%i,%i)", &ip1, &ip2, &ip3, &ip4, &p1, &p2)) { // should always succeed
                                                 close (controlConnectionSocket);
                                                 return buffer; 
                                               }
@@ -140,16 +139,16 @@
                                               // create socket
                                               dataConnectionSocket = socket (PF_INET, SOCK_STREAM, 0);
                                               if (dataConnectionSocket == -1) {
-                                                String e = String (errno) + " " + strerror (errno);
+                                                string e = string (errno) + " " + strerror (errno);
                                                 close (controlConnectionSocket);
-                                                return "socket() error: " + e; 
+                                                return string ("socket error: ") + e; 
                                               }
                                               // make the socket not-blocking so that time-out can be detected
                                               if (fcntl (dataConnectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                String e = String (errno) + " " + strerror (errno);
+                                                string e = string (errno) + " " + strerror (errno);
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return "fcntl() error: " + e; 
+                                                return string ("fcntl error: ") + e; 
                                               }
                                               // connect to client that acts as a data server 
                                               struct sockaddr_in serverAddress;
@@ -164,7 +163,7 @@
                                                 if (retVal != -1) break; // success
                                                 if (errno == EINPROGRESS && millis () - startMillis < FTP_CLIENT_TIME_OUT) delay (1); // continue waiting
                                                 else {
-                                                  String e (errno);
+                                                  string e (errno);
                                                   close (dataConnectionSocket);
                                                   close (controlConnectionSocket);
                                                   return ("connect() error: " + e);                                                 
@@ -173,29 +172,29 @@
                                               */
                                               if (connect (dataConnectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
                                                 if (errno != EINPROGRESS) {
-                                                  String e = String (errno) + " " + strerror (errno);
+                                                  string e = string (errno) + " " + strerror (errno);
                                                   close (dataConnectionSocket);
                                                   close (controlConnectionSocket);
-                                                  return "connect() error: " + e;
+                                                  return string ("connect error: ") + e;
                                                 } 
                                               }
                                               // it is likely that socket is not connected yet at this point (the socket is non-blocking)
                                               // are we GETting or PUTting the file?
-                                              String s;
+                                              string s;
                                                       if (!strcmp (ftpCommand, "GET")) {
-                                                        s = "RETR " + String (serverFile) + "\r\n";
+                                                        s = string ("RETR ") + serverFile + "\r\n";
                                               } else if (!strcmp (ftpCommand, "PUT")) {
-                                                        s = "STOR " + String (serverFile) + "\r\n";
+                                                        s = string ("STOR ") + serverFile + "\r\n";
                                               } else  {
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return "Unknown FTP command " + String (ftpCommand); 
+                                                return string ("Unknown FTP command ") + ftpCommand; 
                                               }
-                                              if (sendAll (controlConnectionSocket, (char *) s.c_str (), s.length (), FTP_CLIENT_TIME_OUT) == -1) {
-                                                String e = String (errno) + " " + strerror (errno);
+                                              if (sendAll (controlConnectionSocket, s, FTP_CLIENT_TIME_OUT) == -1) {
+                                                string e = string (errno) + " " + strerror (errno);
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return "send() error: " + e;
+                                                return string ("send error: ") + e;
                                               }
                                             }
 
@@ -204,84 +203,65 @@
                                                       if (!strcmp (ftpCommand, "GET")) {
                                                         
                                                           int bytesRecvTotal = 0; int bytesWrittenTotal = 0;
-                                                          File f = fileSystem.open (clientFile, FILE_WRITE);
+                                                          File f = fileSystem.open (clientFile, "w", true);
                                                           if (f) {
                                                             // read data from data connection and store it to the file
-                                                            #define BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
-                                                            char *buff = (char *) malloc (BUFF_SIZE);
-                                                            if (!buff) {
-                                                              close (dataConnectionSocket);
-                                                              close (controlConnectionSocket);
-                                                              return "Out of memory.";
-                                                            }
                                                             do {
-                                                              int bytesRecvThisTime = recvAll (dataConnectionSocket, buff, BUFF_SIZE, NULL, FTP_CLIENT_TIME_OUT);
+                                                              int bytesRecvThisTime = recvAll (dataConnectionSocket, ftpClientBuffer, FTP_CLIENT_BUFFER_SIZE, NULL, FTP_CLIENT_TIME_OUT);
                                                               if (bytesRecvThisTime < 0)  { bytesRecvTotal = -1; break; } // to detect error later
                                                               if (bytesRecvThisTime == 0) { break; } // finished, success
                                                               bytesRecvTotal += bytesRecvThisTime;
-                                                              int bytesWrittenThisTime = f.write ((uint8_t *) buff, bytesRecvThisTime);
+                                                              int bytesWrittenThisTime = f.write ((uint8_t *) ftpClientBuffer, bytesRecvThisTime);
                                                               bytesWrittenTotal += bytesWrittenThisTime;
                                                               if (bytesWrittenThisTime != bytesRecvThisTime) { bytesRecvTotal = -1; break; } // to detect error later
                                                             } while (true);
                                                             f.close ();
-                                                            free (buff);
                                                           } else {
                                                             close (dataConnectionSocket);
                                                             close (controlConnectionSocket);
-                                                            return "Can't open " + String (clientFile) + " for writting";
+                                                            return string ("Can't open ") + clientFile + " for writting";
                                                           }
                                                           if (bytesWrittenTotal != bytesRecvTotal) {
                                                             close (dataConnectionSocket);
                                                             close (controlConnectionSocket);
-                                                            return "Can't write " + String (clientFile);
+                                                            return string ("Can't write ") + clientFile;
                                                           }
                                                           close (dataConnectionSocket);
-                                                          #ifdef __PERFMON__
-                                                            __perfFSBytesWritten__ += bytesWrittenTotal; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                                          #endif
+
+                                                          diskTrafficInformation.bytesWritten += bytesWrittenTotal; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                               } else if (!strcmp (ftpCommand, "PUT")) {
-
                                                           int bytesReadTotal = 0; int bytesSentTotal = 0;
-                                                          File f = fileSystem.open (clientFile, FILE_READ);
+                                                          File f = fileSystem.open (clientFile, "r", false);
                                                           if (f) {
                                                             // read data from file and transfer it through data connection
-                                                            #define BUFF_SIZE TCP_SND_BUF // TCP_SND_BUF = 5744, a maximum block size that ESP32 can send 
-                                                            char *buff = (char *) malloc (BUFF_SIZE);
-                                                            if (!buff) {
-                                                              close (dataConnectionSocket);
-                                                              close (controlConnectionSocket);
-                                                              return "Out of memory.";
-                                                            }
                                                             do {
-                                                              int bytesReadThisTime = f.read ((uint8_t *) buff, BUFF_SIZE);
+                                                              int bytesReadThisTime = f.read ((uint8_t *) ftpClientBuffer, FTP_CLIENT_BUFFER_SIZE);
                                                               if (bytesReadThisTime == 0) { break; } // finished, success
                                                               bytesReadTotal += bytesReadThisTime;
-                                                              int bytesSentThisTime = sendAll (dataConnectionSocket, buff, bytesReadThisTime, FTP_CLIENT_TIME_OUT);
+                                                              int bytesSentThisTime = sendAll (dataConnectionSocket, ftpClientBuffer, bytesReadThisTime, FTP_CLIENT_TIME_OUT);
                                                               if (bytesSentThisTime != bytesReadThisTime) { bytesSentTotal = -1; break; } // to detect error later
                                                               bytesSentTotal += bytesSentThisTime;
                                                             } while (true);
                                                             f.close ();
-                                                            free (buff);
                                                           } else {
                                                             close (dataConnectionSocket);
                                                             close (controlConnectionSocket);
-                                                            return "Can't open " + String (clientFile) + " for reading";
+                                                            return string ("Can't open ") + clientFile + " for reading";
                                                           }
                                                           if (bytesSentTotal != bytesReadTotal) {
                                                             close (dataConnectionSocket);
                                                             close (controlConnectionSocket);
-                                                            return "Can't send " + String (clientFile);                                                            
+                                                            return string ("Can't send ") + clientFile;                                                            
                                                           }
                                                           close (dataConnectionSocket);
-                                                          #ifdef __PERFMON__
-                                                            __perfFSBytesRead__ += bytesReadTotal; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                                          #endif
+
+                                                          diskTrafficInformation.bytesRead += bytesReadTotal; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
                                                        
                                               } else  {
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
-                                                return "Unknown FTP command " + String (ftpCommand); 
+                                                return string ("Unknown FTP command ") + ftpCommand; 
                                               }
                                             }
             else                            {
@@ -302,53 +282,49 @@
   }
 
   // sends file, returns error or success text, fills empty parameters with the ones from configuration file /etc/ftp/ftpclient.cf
-  String ftpPut (char *localFileName = (char *) "", char *remoteFileName = (char *) "", char *password = (char *) "", char *userName = (char *) "", int ftpPort = 0, char *ftpServer = (char *) "") {
-    // DEBUG:
-    Serial.printf ("entering: ftpPut (%s, %s, %s, %s, %i, %s)\n", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
-    if (__fileSystemMounted__) { 
-      char buffer [MAX_ETC_FTP_FTPCLIENT_CF + 1];
-      strcpy (buffer, "\n");
-      if (readConfigurationFile (buffer + 1, sizeof (buffer) - 2, (char *) "/etc/ftp/ftpclient.cf")) {
-        strcat (buffer, "\n");
+  string ftpPut (char *localFileName = "", char *remoteFileName = "", char *password = "", char *userName = "", int ftpPort = 0, char *ftpServer = "") {
+    char ftpClientBuffer [FTP_CLIENT_BUFFER_SIZE]; // ftpClientBuffer will be used first to read configuration file /etc/mail/sendmail.cf file in the memory and then for data transmission, fro both purposes 1 KB seems OK
+    // DEBUG: Serial.printf ("entering: ftpPut (%s, %s, %s, %s, %i, %s)\n", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
+    if (fileSystem.mounted ()) { 
+      strcpy (ftpClientBuffer, "\n");
+      if (fileSystem.readConfigurationFile (ftpClientBuffer + 1, sizeof (ftpClientBuffer) - 2, "/etc/ftp/ftpclient.cf")) {
+        strcat (ftpClientBuffer, "\n");
         char *p = NULL;
         char *q;
-        if (!*ftpServer) if ((ftpServer = strstr (buffer, "\nftpServer "))) ftpServer += 11;
-        if (!ftpPort)    if ((p = strstr (buffer, "\nftpPort ")))           p += 9;
-        if (!*userName)  if ((userName = strstr (buffer, "\nuserName ")));  userName += 10;
-        if (!*password)  if ((password = strstr (buffer, "\npassword ")));  password += 10;
+        if (!*ftpServer) if ((ftpServer = strstr (ftpClientBuffer, "\nftpServer "))) ftpServer += 11;
+        if (!ftpPort)    if ((p = strstr (ftpClientBuffer, "\nftpPort ")))           p += 9;
+        if (!*userName)  if ((userName = strstr (ftpClientBuffer, "\nuserName ")))   userName += 10;
+        if (!*password)  if ((password = strstr (ftpClientBuffer, "\npassword ")))   password += 10;
 
-        if ((q = strstr (ftpServer, "\n"))) *q = 0;
-        if (p && (q = strstr (p, "\n"))) { *q = 0; ftpPort = atoi (p); }
-        if ((q = strstr (userName, "\n"))) *q = 0;
-        if ((q = strstr (password, "\n"))) *q = 0;
+        for (q = ftpClientBuffer; *q; q++)
+          if (*q < ' ') *q = 0;
+        if (p) ftpPort = atoi (p);
       }
     } else {
         dmesg ("[ftpClient] file system not mounted, can't read /etc/ftp/ftpclient.cf");
     }
-    // DEBUG:
-    Serial.printf ("defaults filled in\n");
-    Serial.printf ("with defaults: ftpPut (%s, %s, %s, %s, %i, %s)\n", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
+    // DEBUG: Serial.printf ("defaults filled in\n"); Serial.printf ("with defaults: ftpPut (%s, %s, %s, %s, %i, %s)\n", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
     if (!*password || !*userName || !ftpPort || !*ftpServer) {
       dmesg ("[ftpClient] not all the arguments are set, if you want to use the default values, write them to /etc/ftp/ftpclient.cf");
       return "Not all the arguments are set, if you want to use ftpPut default values, write them to /etc/ftp/ftpclient.cf";
     } else {
-      return __ftpClient__ ((char *) "PUT", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
+      return __ftpClient__ ("PUT", localFileName, remoteFileName, password, userName, ftpPort, ftpServer, ftpClientBuffer);
     }
   }
 
   // retrieves file, returns error or success text, fills empty parameters with the ones from configuration file /etc/ftp/ftpclient.cf
-  String ftpGet (char *localFileName = (char *) "", char *remoteFileName = (char *) "", char *password = (char *) "", char *userName = (char *) "", int ftpPort = 0, char *ftpServer = (char *) "") {
-    if (__fileSystemMounted__) { 
-      char buffer [MAX_ETC_FTP_FTPCLIENT_CF + 1];
-      strcpy (buffer, "\n");
-      if (readConfigurationFile (buffer + 1, sizeof (buffer) - 2, (char *) "/etc/ftp/ftpclient.cf")) {
-        strcat (buffer, "\n");
+  string ftpGet (char *localFileName = "", char *remoteFileName = "", char *password = "", char *userName = "", int ftpPort = 0, char *ftpServer = "") {
+    char ftpClientBuffer [FTP_CLIENT_BUFFER_SIZE]; // ftpClientBuffer will be used first to read configuration file /etc/mail/sendmail.cf file in the memory and then for data transmission, fro both purposes 1 KB seems OK
+    if (fileSystem.mounted ()) {
+      strcpy (ftpClientBuffer, "\n");
+      if (fileSystem.readConfigurationFile (ftpClientBuffer + 1, sizeof (ftpClientBuffer) - 2, "/etc/ftp/ftpclient.cf")) {
+        strcat (ftpClientBuffer, "\n");
         char *p = NULL;
         char *q;
-        if (!*ftpServer) if ((ftpServer = strstr (buffer, "\nftpServer "))) ftpServer += 11;
-        if (!ftpPort)    if ((p = strstr (buffer, "\nftpPort ")))           p += 9;
-        if (!*userName)  if ((userName = strstr (buffer, "\nuserName ")));  userName += 10;
-        if (!*password)  if ((password = strstr (buffer, "\npassword ")));  password += 10;
+        if (!*ftpServer) if ((ftpServer = strstr (ftpClientBuffer, "\nftpServer "))) ftpServer += 11;
+        if (!ftpPort)    if ((p = strstr (ftpClientBuffer, "\nftpPort ")))           p += 9;
+        if (!*userName)  if ((userName = strstr (ftpClientBuffer, "\nuserName ")));  userName += 10;
+        if (!*password)  if ((password = strstr (ftpClientBuffer, "\npassword ")));  password += 10;
 
         if ((q = strstr (ftpServer, "\n"))) *q = 0;
         if (p && (q = strstr (p, "\n"))) { *q = 0; ftpPort = atoi (p); }
@@ -362,7 +338,7 @@
       dmesg ("[ftpClient] not all the arguments are set, if you want to use the default values, write them to /etc/ftp/ftpclient.cf");
       return "Not all the arguments are set, if you want to use ftpPut default values, write them to /etc/ftp/ftpclient.cf";
     } else {
-      return __ftpClient__ ((char *) "GET", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
+      return __ftpClient__ ("GET", localFileName, remoteFileName, password, userName, ftpPort, ftpServer, ftpClientBuffer);
     }
   }
 

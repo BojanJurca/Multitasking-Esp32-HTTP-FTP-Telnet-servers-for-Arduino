@@ -1,38 +1,82 @@
 // this file is here just to make development of server files easier, it is not part of any project
 
 #include <WiFi.h>
+// fixed size strings
+#include "fsString.h"
+#define string fsString<300>                                // max number of characters in fixes size strings used here
+
 
 #define HOSTNAME                  "MyESP32Server"
 #define MACHINETYPE               "ESP32 Dev Modue"
 #define DEFAULT_STA_SSID          "YOUR_STA_SSID"
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
-#define DEFAULT_AP_SSID           "" // HOSTNAME 
+#define DEFAULT_AP_SSID           "" // HOSTNAME
 #define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"
 
 
+// uncomment one of the tests at a time
+#define TEST_FS
 // #define TEST_FTP
+// #define TEST_TELNET
+// #define TEST_SMTP_CLIENT
+// #define TEST_USER_MANAGEMENT
+// #define TEST_TIME_FUNCTIONS
+// #define TEST_HTTP_SERVER_AND_CLIENT
+
+
+
+
+
+#ifdef TEST_FS // TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS 
+
+    #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // or FILE_SYSTEM_LITTLEFS
+    #include "fileSystem.hpp"
+    #include "network.h"
+    #include "telnetServer.hpp"
+    #include "ftpServer.hpp"
+    #include "httpServer.hpp"
+
+    void setup () {
+      Serial.begin (115200);
+
+      fileSystem.format ();
+      // fileSystem.formatFAT ();
+      fileSystem.formatLittleFs ();
+      fileSystem.mount (true);
+      // fileSystem.mountFAT (true);
+      fileSystem.mountLittleFs (true);
+    }
+
+    void loop () {
+      
+    }
+
+#endif // TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS 
+
+
+
+
+
 #ifdef TEST_FTP // TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP
 
+    #define NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+
     #include "dmesg_functions.h"
-    #include "perfMon.h"
-    
-    #include "network.h"
-    
-    #include "file_system.h"
-
+    #include "fileSystem.hpp"
     #include "time_functions.h"
-      #define NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
-    #include "user_management.h"
-  #include "ftpServer.hpp"
+    #include "network.h"
+    #define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+    #include "userManagement.hpp"
+  
+    #include "ftpServer.hpp"
+    #include "ftpClient.h"
 
-  #include "ftpClient.h"
-
-  ftpServer *myFtpServer = NULL;
+    ftpServer *myFtpServer = NULL;
 
   void setup () {
     Serial.begin (115200);
 
-    mountFileSystem (true);
+    fileSystem.mount (true);
 
     startWiFi ();
     startCronDaemon (NULL);
@@ -42,13 +86,13 @@
       Serial.printf (":(\n");
     } else {
       Serial.printf (":)\n");
-    }    
+    }
 
     while (WiFi.localIP ().toString () == "0.0.0.0") { delay (1000); Serial.printf ("   .\n"); } // wait until we get IP from router
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
     delay (100);
 
-    Serial.println (__ftpClient__ ("PUT", "/b", "/a", (char *) "root", (char *) "root", 21, (char *) "10.18.1.200"));  
+    Serial.println (ftpPut ("/b", "/a", (char *) "root", (char *) "root", 21, (char *) "10.18.1.200"));  
   }
 
   void loop () {
@@ -61,24 +105,21 @@
 
 
 
-#define TEST_TELNET 
 #ifdef TEST_TELNET  // TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET 
 
   // include all .h files telnet server is using to test the whole functionality
       #include "dmesg_functions.h"
-      #include "perfMon.h"
         // #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
-      #include "file_system.h"
+      #include "fileSystem.hpp"
       #include "network.h"
       #include "time_functions.h"
       #include "httpClient.h"
       #include "ftpClient.h"
       #include "smtpClient.h"
+      #define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+      #include "userManagement.hpp"
 
-        #define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
-      #include "user_management.h"
-
-  #include "telnetServer.hpp"
+      #include "telnetServer.hpp"
 
   String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *tcn) {
 
@@ -108,9 +149,11 @@
   void setup () {
     Serial.begin (115200); Serial.printf ("\r\n\r\n\r\n\r\n");
 
-    mountFileSystem (true); 
+    // fileSystem.format ();
+
+    fileSystem.mount (true); 
     startWiFi ();
-    startCronDaemon (NULL);
+    startCronDaemon (NULL); 
 
     myTelnetServer = new telnetServer (telnetCommandHandlerCallback, (char *) "0.0.0.0", 23, firewall);
     if (myTelnetServer->state () != telnetServer::RUNNING) {
@@ -131,18 +174,16 @@
 
 
 
-
-// #define TEST_SMTP_CLIENT
 #ifdef TEST_SMTP_CLIENT // TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT 
 
+  #include "fileSystem.hpp"
   #include "network.h"
-  #include "file_system.h"
   #include "smtpClient.h"
   
   void setup () {
     Serial.begin (115200);
 
-    mountFileSystem (false);
+    fileSystem.mount (false);
     startWiFi (); // for some strange reason you can't set time if WiFi is not initialized
 
     while (WiFi.localIP ().toString () == "0.0.0.0") { delay (1000); Serial.printf ("   .\n"); } // wait until we get IP from router
@@ -164,24 +205,26 @@
 
 
 
-// #define TEST_USER_MANAGEMENT
 #ifdef TEST_USER_MANAGEMENT // TEST_USER_MANAGEMENT TEST_USER_MANAGEMENT TEST_USER_MANAGEMENT TEST_USER_MANAGEMENT TEST_USER_MANAGEMENT TEST_USER_MANAGEMENT 
 
-  #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT  
+  #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT  
 
-  #include "user_management.h"
+  #include "fileSystem.hpp"
+  #include "userManagement.hpp"
   
   void setup () {
     Serial.begin (115200);
 
-    mountFileSystem (false);
-    initializeUsers ();
+    fileSystem.mount (false);
+    userManagement.initialize ();
 
-    Serial.printf ("checkUserNameAndPassword (root, rootpassword) = %i\n", checkUserNameAndPassword ((char *) "root", (char *) "rootpassword"));
-    Serial.println ("getUserHomeDirectory (root) = " + getUserHomeDirectory ((char *) "root"));  
+    Serial.printf ("checkUserNameAndPassword (root, rootpassword) = %i\n", userManagement.checkUserNameAndPassword ((char *) "root", (char *) "rootpassword"));
+    char s [FILE_PATH_MAX_LENGTH + 1];
+    userManagement.getHomeDirectory (s, sizeof (s), (char *) "root");
+    Serial.print ("getUserHomeDirectory (root) = ");  Serial.println (s);  
 
-    Serial.printf ("userAdd (bojan, 1123, /home/bojan) = %s\n", userAdd ((char *) "bojan", (char *) "1123", (char *) "/home/bojan"));
-    Serial.printf ("userDel (bojan) = %s\n", userDel ((char *) "bojan"));
+    Serial.printf ("userAdd (bojan, 1123, /home/bojan) = %s\n", userManagement.userAdd ((char *) "bojan", (char *) "1123", (char *) "/home/bojan"));
+    Serial.printf ("userDel (bojan) = %s\n", userManagement.userDel ((char *) "bojan"));
   }
 
   void loop () {
@@ -194,11 +237,11 @@
 
 
 
-// #define TEST_TIME_FUNCTIONS
 #ifdef TEST_TIME_FUNCTIONS // TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS
 
+  #include "fileSystem.hpp" // include fileSystem.hpp if you want cronDaemon to access /etc/ntp.conf and /etc/crontab
   #include "network.h"
-  #include "file_system.h" // include file_system.h if you want cronDaemon to access /etc/ntp.conf and /etc/crontab
+
 
   void cronHandler (char *cronCommand) {
   
@@ -226,7 +269,6 @@
             Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_DEFAULT), heap_caps_get_minimum_free_size (MALLOC_CAP_DEFAULT), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
             Serial.printf ("|  %6u  %6u  %6u|\n", heap_caps_get_free_size (MALLOC_CAP_EXEC), heap_caps_get_minimum_free_size (MALLOC_CAP_EXEC), heap_caps_get_largest_free_block (MALLOC_CAP_EXEC));      
 
-      Serial.println (cronTab ());
       return;
     }
 
@@ -241,7 +283,7 @@
     __TEST_DST_TIME_CHANGE__ ();
     
 
-    mountFileSystem (false);
+    fileSystem.mount (false);
     startWiFi (); // for some strange reason you can't set time if WiFi is not initialized
 
     startCronDaemon (cronHandler);
@@ -262,12 +304,11 @@
 
 
 
-// #define TEST_HTTP_SERVER_AND_CLIENT
 #ifdef TEST_HTTP_SERVER_AND_CLIENT // TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT 
 
   #include "dmesg_functions.h"
+  #include "fileSystem.hpp" // include fileSystem.hpp if you want httpServer to server .html and other files as well
   #include "network.h"
-  #include "file_system.h" // include file_system.h if you want httpServer to server .html and other files as well
   #include "perfMon.h"  // include perfMon.h if you want to monitor performance
   #include "httpServer.hpp"
   #include "httpClient.h"
@@ -294,9 +335,9 @@
 
     if (httpRequestStartsWith ("GET / ")) {
                                             // play with cookies
-                                            String s = hcn->getHttpRequestCookie ((char *) "refreshCount");
-                                            Serial.println ("This page has been refreshed " + s + " times");
-                                            hcn->setHttpReplyCookie ("refreshCount", String (s.toInt () + 1));
+                                            string s = hcn->getHttpRequestCookie ("refreshCount");
+                                            Serial.printf ("This page has been refreshed %s times\n", s);
+                                            hcn->setHttpReplyCookie ("refreshCount", string (atoi (s) + 1));
                                             // return large HTML reply from memory (9 KB in this case)
                                             return F("<html>\n"
                                                      "  <head>\n"
@@ -431,8 +472,9 @@
     
   void setup () {
     Serial.begin (115200);
-    
-    mountFileSystem (true); 
+
+    fileSystem.format ();
+    fileSystem.mount (true); 
     startWiFi ();
 
     myHttpServer = new httpServer (httpRequestHandler, wsRequestHandler, (char *) "0.0.0.0", 80, firewall);
@@ -482,9 +524,9 @@
 
     {
       String r1 = httpClient ((char *) "127.0.0.1", 80, "/upTime");
-      if (r1.length ()) Serial.printf ("Got a reply from local loopback: %i bytes\n", r1.length ());
+      if (r1.length ()) Serial.printf ("Got a reply from local loopback: %i bytes, %s\n", r1.length (), r1.c_str ());
       String r2 = httpClient ((char *) "Yoga13", 80, "/");
-      if (r2.length ()) Serial.printf ("Got a reply from my computer, %i bytes\n", r2.length ());
+      if (r2.length ()) Serial.printf ("Got a reply from my computer, %i bytes, %s\n", r2.length (), r2.c_str ());
     }
 
   }

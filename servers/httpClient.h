@@ -6,7 +6,7 @@
   
     HTTP client combines a HTTP request from server, page and method and returns a HTTP reply or "" if there is none.
   
-    October, 23, 2022, Bojan Jurca
+    April 1, 2023, Bojan Jurca
          
 */
 
@@ -14,14 +14,12 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    // fixed size strings
+    #include "fsString.h"
     
 
 #ifndef __HTTP_CLIENT__
   #define __HTTP_CLIENT__
-
-  #ifndef __PERFMON__
-    #pragma message "Compiling httpClient.h without performance monitors (perfMon.h)"
-  #endif  
 
 
     // ----- functions and variables in this modul -----
@@ -31,8 +29,8 @@
 
     // ----- TUNNING PARAMETERS -----
 
-    #define HTTP_REPLY_TIME_OUT 1500              // 1500 ms = 1,5 sec for HTTP requests
-    #define HTTP_REPLY_BUFFER_SIZE 1 * 1024       // reading HTTP reply
+    #define HTTP_REPLY_TIME_OUT 3000              // 1500 ms = 1,5 sec for HTTP requests
+    #define HTTP_REPLY_BUFFER_SIZE 1500           // reading HTTP reply, MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1500 seems the best option
 
 
     // ----- CODE -----
@@ -63,24 +61,18 @@
 
     // ----- HTTP client -----
 
-    String httpClient (char *serverName, int serverPort, String httpRequest, String httpMethod = "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
+    String httpClient (char *serverName, int serverPort, char *httpAddress, char *httpMethod = "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
       // get server address
       struct hostent *he = gethostbyname (serverName);
-      if (!he) {
-        dmesg ("[httpClient] gethostbyname() error: ", h_errno, hstrerror (h_errno));
-        return "";
-      }
+      if (!he) return "[httpClient] gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);
       // create socket
       int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
-      if (connectionSocket == -1) {
-        dmesg ("[httpClient] socket() error: ", errno, strerror (errno));
-        return "";
-      }
+      if (connectionSocket == -1) return "[httpClient] socket() error: " + String (errno) + " " + strerror (errno);
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        dmesg ("[httpClient] fcntl() error: ", errno, strerror (errno));
+        int e = errno;
         close (connectionSocket);
-        return "";
+        return "[httpClient] fcnt() error: " + String (e) + " " + strerror (e);
       }
       // connect to server
       struct sockaddr_in serverAddress;
@@ -89,21 +81,30 @@
       serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
       if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
         if (errno != EINPROGRESS) {
-          dmesg ("[httpClient] connect() error: ", errno, strerror (errno)); 
+          int e = errno;
           close (connectionSocket);
-          return "";
-        }
-      } // it is likely that socket is not connected yet at this point
+          return "[httpClient] connect() error: " + String (e) + " " + strerror (e);
+        } // it is likely that socket is not connected yet at this point
+      }
 
       // construct and send minimal HTTP request (or almost minimal, IIS for example, requires Host field)
       char serverIP [46];
       inet_ntoa_r (serverAddress.sin_addr, serverIP, sizeof (serverIP));
-      httpRequest = httpMethod + " " + httpRequest + " HTTP/1.0\r\nHost: " + String (serverIP) + "\r\n\r\n"; // 1.0 HTTP does not know keep-alive directive  - we want the server to close the connection immediatelly after sending the reply
-      // DEBUG: Serial.print ("[httpClient] httpRequest = " + httpRequest);
-      if (sendAll (connectionSocket, (char *) httpRequest.c_str (), httpRequest.length (), timeOut) == -1) {
-        dmesg ("[httpClient] send() error: ", errno, strerror (errno)); 
-        close (connectionSocket);
-        return "";        
+      string httpRequest;
+      httpRequest += httpMethod;
+      httpRequest += " ";
+      httpRequest += httpAddress;
+      httpRequest += " HTTP/1.0\r\nHost: ";
+      httpRequest += serverIP;
+      httpRequest += "\r\n\r\n"; // 1.0 HTTP does not know keep-alive directive - we want the server to close the connection immediatelly after sending the reply
+      if (httpRequest.error ()) {
+          close (connectionSocket);
+          return "Out of memory";
+      }
+      if (sendAll (connectionSocket, (char *) httpRequest, timeOut) == -1) {
+          int e = errno;
+          close (connectionSocket);
+          return "[httpClient] send() error: " + String (e) + " " + strerror (e);
       }
       // read HTTP reply  
       char __httpReply__ [HTTP_REPLY_BUFFER_SIZE];
@@ -112,37 +113,43 @@
       String httpReply ("");
       while (true) { // read blocks of incoming data
         switch (receivedThisTime = recv (connectionSocket, __httpReply__, HTTP_REPLY_BUFFER_SIZE - 1, 0)) {
-          case -1:
-            if ((errno == EAGAIN || errno == ENAVAIL) && HTTP_REPLY_TIME_OUT && millis () - lastActive < HTTP_REPLY_TIME_OUT) break; // not time-out yet
-            dmesg ("[httpClient] recv() error: ", errno, strerror (errno));
-            close (connectionSocket);  
-            return ""; // return empty reply - error
-          case 0: // connection closed by peer
-            close (connectionSocket);  
-            if (stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:")) return ""; // Content-lenght does not match
-            else return httpReply; // return what we have recived without checking if HTTP reply is OK
+          case -1: {    // error
+                        if ((errno == EAGAIN || errno == ENAVAIL) && HTTP_REPLY_TIME_OUT && millis () - lastActive < HTTP_REPLY_TIME_OUT) break; // not time-out yet
+                        int e = errno;
+                        close (connectionSocket);
+                        return "[httpClient] recv() error: " + String (e) + " " + strerror (e);
+                    }
+          case 0:       // connection closed by peer
+                        close (connectionSocket);  
+                        if (stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:")) return ""; // Content-lenght does not match
+                        else return httpReply; // return what we have recived without checking if HTTP reply is OK
           default:
-            #ifdef __PERFMON__ 
-              __perfWiFiBytesReceived__ += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-            #endif                        
-            __httpReply__ [receivedThisTime] = 0;
-            httpReply += __httpReply__;
-            // DEBUG: Serial.print ("[httpClient] httpReply = " + httpReply);            
-            lastActive = millis ();
-            // check if HTTP reply is complete
-            char *p = stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:");
-            if (p) {
-              p += 16;
-              unsigned int contentLength;
-              if (sscanf (p, "%u", &contentLength) == 1) {
-                p = strstr (p, "\r\n\r\n"); // after this comes the content
-                if (p && contentLength == strlen (p + 4)) {
-                  close (connectionSocket);
-                  return httpReply;
-                }
-              }
-            }
-            // else continue reading
+
+                        networkTrafficInformation.bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                        socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET].bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
+                        __httpReply__ [receivedThisTime] = 0;
+                          int bl = httpReply.length ();
+                        httpReply += __httpReply__;
+                          if (httpReply.length () != bl + strlen (__httpReply__)) {
+                            close (connectionSocket);
+                            return "Out of memory";
+                          }
+                        lastActive = millis ();
+                        // check if HTTP reply is complete
+                        char *p = stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:");
+                        if (p) {
+                          p += 16;
+                          unsigned int contentLength;
+                          if (sscanf (p, "%u", &contentLength) == 1) {
+                            p = strstr (p, "\r\n\r\n"); // the content comes afterwards
+                            if (p && contentLength == strlen (p + 4)) {
+                              close (connectionSocket);
+                              return httpReply;
+                            }
+                          }
+                        }
+                        // else continue reading
         }
       }
       // never executes
