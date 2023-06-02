@@ -3,7 +3,7 @@
 
 ## The template is a quick and easy way to build a user interface for an ESP32 project.
 
-   - You only have to modify the telnetCommandHandlerCallback function to buld the Telnet user interface for your project.
+   - You only have to modify the telnetCommandHandlerCallback function to build the Telnet user interface for your project.
 
    - You only have to modify the httpRequestHandler function to build the WEB user interface for your project. If you want a nice stylish look and feel there is also a FTP server built into the template so you can upload larger HTML files.
 
