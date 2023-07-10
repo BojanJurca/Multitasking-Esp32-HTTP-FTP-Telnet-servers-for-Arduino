@@ -18,9 +18,7 @@ Demo ESP32 server is available at [193.77.159.208](http://193.77.159.208)
 ## The latest changes
 
 
-The latest changes are mainly stability improvements and memory optimization. A separate configuration file is added so most of the configuration can be done in one place.
-
-I tried to make the code more comprehensive. For this reason some module functions changed their names a little bit. Please see the working template code to get around it if your old code doesn't compile at first.
+The latest changes are mainly about time zones. The servers now rely on TZ environment variable (set by setenv () and tzset () functions), so all the time zones form https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
 
 ![Screenshot](presentation.gif)
 
@@ -51,13 +49,14 @@ FTP server is needed for uploading configuration files, .html files, ... to ESP3
 ## Time zones
 
 
-time_functions.h provides GMT to local time conversion from 35 different time zones. #define TIMEZONE to one of the supported time zones or modify timeToLocalTime function yourself. 
+All the time zones form https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
 
 
 ## Configuration files
 
 
 ```C++
+/usr/share/zoneinfo                       - contains (POSIX) timezone information
 /etc/passwd                               - contains users' accounts information
 /etc/shadow                               - contains hashed users' passwords
 /network/interfaces                       - contains WiFi STA(tion) configuration
@@ -151,15 +150,17 @@ time_functions.h provides GMT to local time conversion from 35 different time zo
 ```
 
 4. Select one of SPIFFS partition schemas (Tool | Partition Scheme).
+
 5. Compile the sketch and run it on your ESP32. Doing this the following will happen:
 
-   - ESP32 flash memory will be formatted with the LittleFs file system. WARNING: every information you have stored into ESP32�s flash memory will be lost.
+   - ESP32 flash memory will be formatted with the LittleFs file system. FAT file system is supported as well. It is faster but uses (approximately 40 KB) more memory. WARNING: every information you have stored into ESP32's flash memory will be lost.
    - Configuration files will be created with the default settings.
    - Two users will be created: **root** with **rootpassword** and **webadmin** with **webadminpassword**.
 
 At this point, you can already test if everything is going on as planned by http, FTP or telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to be done.
 
 6. FTP (demo and example: index.html, ...) files from html directory to ESP32's /var/www/html/ directory.
+
 7. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
 
 

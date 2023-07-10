@@ -19,7 +19,7 @@
     #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"   // <- replace with your information
     #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"   // <- replace with your information
     // define time zone to calculate local time from GMT
-    #define TIMEZONE                                  CET_TIMEZONE          // or another one out of 35 time zones implemented in time_functions.h
+    #define TZ                                        "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana, or select another (POSIX) time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
 
 // 2. FILE SYSTEM:     #define which file system you want to use 

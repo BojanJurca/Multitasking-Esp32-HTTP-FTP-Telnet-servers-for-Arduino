@@ -138,10 +138,10 @@ void wsRequestHandler (char *wsRequest, WebSocket *webSocket) {
                                                                             unsigned long startMillis = millis ();
                                                                             char c;
                                                                             do {
-                                                                              if (millis () - startMillis >= 300000) {
-                                                                                webSocket->sendString ("WebScket is automatically closed after 5 minutes for demonstration purpose.");
-                                                                                // return;
-                                                                              }
+                                                                              // if (millis () - startMillis >= 300000) {
+                                                                              //  webSocket->sendString ("WebScket is automatically closed after 5 minutes for demonstration purpose.");
+                                                                              // return;
+                                                                              // }
                                                                               delay (100);
                                                                               int i = WiFi.RSSI ();
                                                                               c = (char) i;
@@ -195,15 +195,15 @@ void cronHandler (char *cronCommand) {
           // ----- examples: handle your cron commands/events here - delete this code if it is not needed -----
           
           if (cronCommandIs ("gotTime"))                        { // triggers only once - the first time ESP32 sets its clock (when it gets time from NTP server for example)
-                                                                  time_t t = getLocalTime ();
-                                                                  struct tm st = timeToStructTime (t);
-                                                                  Serial.println ("Got time at " + timeToString (t) + " (local time), do whatever needs to be done the first time the time is known.");
+                                                                  char buf [26]; // 26 bytes are needed
+                                                                  ascTime (localTime (time ()), buf);
+                                                                  Serial.println ("Got time at " + String (buf) + " (local time), do whatever needs to be done the first time the time is known.");
                                                                 }           
           if (cronCommandIs ("newYear'sGreetingsToProgrammer")) { // triggers at the beginning of each year
                                                                   Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
                                                                 }
           if (cronCommandIs ("onMinute"))                       { // triggers each minute
-                                                                  struct tm st = timeToStructTime (getLocalTime ()); 
+                                                                  struct tm st = localTime (time ()); 
                                                                   freeHeap.addMeasurement (st.tm_min, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB 
                                                                   httpRequestCount.addCounterToMeasurements (st.tm_min);          // take sample of number of web connections that arrived last minute 
                                                                 }
@@ -216,14 +216,17 @@ void setup () {
     
   Serial.begin (115200);
 
-  Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
+  Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
 
-  // fileSystem.formatFAT (); Serial.printf ("\nFormatting file system ...\n\n"); // format flash disk to start everithing from the scratch
-  #ifdef __FILE_SYSTEM__
-    fileSystem.mountLittleFs (true);                                        // this is the first thing to do - all configuration files reside on the file system
-    // fileSystem.mountFAT (true);
+  // fileSystem.format (); Serial.printf ("\nFormatting file system ...\n\n"); // format flash disk to start everithing from the scratch
+  #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+      fileSystem.mountLittleFs (true);                                      // this is the first thing to do - all configuration files reside on the file system
   #endif
+  #if FILE_SYSTEM == FILE_SYSTEM_FAT
+      fileSystem.mountFAT (true);                                           // this is the first thing to do - all configuration files reside on the file system
+  #endif  
 
+  // fileSystem.deleteFile ("/usr/share/zoneinfo");                         // contains timezone information           - deleting this file would cause creating default one
   // fileSystem.deleteFile ("/etc/ntp.conf");                               // contains ntp server names for time sync - deleting this file would cause creating default one
   // fileSystem.deleteFile ("/etc/crontab");                                // contains cheduled tasks                 - deleting this file would cause creating empty one
   startCronDaemon (cronHandler);                                            // creates /etc/ntp.conf with default NTP server names and syncronize ESP32 time with them once a day
