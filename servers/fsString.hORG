@@ -288,7 +288,7 @@
 
 
             // + operator
-            fsString operator + (const char *other) {           // for adding C string to fsString, like: a + "abc";
+            fsString operator + (char *other) {                 // for adding C string to fsString, like: a + "abc";
                 #ifdef __FSSTRING_H_DEBUG__
                     if (other) Serial.printf ("fsString<%i> + const char * operator, other = ''%s''\n", N, other); else Serial.printf ("fsString<%i> + const char * operator, other = NULL\n", N);
                 #endif
@@ -362,7 +362,7 @@
 
             static const size_t npos = (size_t) 0xFFFFFFFFFFFFFFFF;
 
-            size_t find (const char *str, size_t pos = 0) {
+            size_t find (char *str, size_t pos = 0) {
                 char *p = strstr (__c_str__ + pos, str);
                 if (p)  return p - __c_str__;
                 return npos;
@@ -409,7 +409,7 @@
                 return r;
             }
 
-            int indexOf (const char *str, size_t pos = 0) {
+            int indexOf (char *str, size_t pos = 0) {
                 char *p = strstr (__c_str__ + pos, str);
                 if (p)  return p - __c_str__;
                 return -1;

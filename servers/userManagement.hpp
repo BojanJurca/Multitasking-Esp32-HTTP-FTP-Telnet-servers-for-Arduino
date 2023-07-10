@@ -150,16 +150,16 @@
                         return; // if there is no file system, we can not write configuration files and read from them
                     }
                     // create dirctory structure
-                    if (!fileSystem.isDirectory ("/etc")) { fileSystem.makeDirectory ("/etc"); }
+                    if (!fileSystem.isDirectory ((char *) "/etc")) { fileSystem.makeDirectory ((char *) "/etc"); }
                     // create /etc/passwd if it doesn't exist
                     {
-                        if (!fileSystem.isFile ("/etc/passwd")) {
+                        if (!fileSystem.isFile ((char *) "/etc/passwd")) {
                             Serial.printf ("[%10lu] [user_management] /etc/passwd does not exist, creating default one ... ", millis ());
                             bool created = false;
-                            File f = fileSystem.open ("/etc/passwd", "w", true);
+                            File f = fileSystem.open ((char *) "/etc/passwd", "w", true);
                             if (f) {
-                                char *defaultContent = "root:x:0:::/:\r\n"
-                                                       "webadmin:x:1000:::/var/www/html/:\r\n";
+                                char *defaultContent = (char *) "root:x:0:::/:\r\n"
+                                                                "webadmin:x:1000:::/var/www/html/:\r\n";
                                 created = (f.printf (defaultContent) == strlen (defaultContent));                                
                                 f.close ();
 
@@ -171,10 +171,10 @@
                     }
                     // create /etc/shadow if it doesn't exist
                     {
-                        if (!fileSystem.isFile ("/etc/shadow")) {
+                        if (!fileSystem.isFile ((char *) "/etc/shadow")) {
                             Serial.printf ("[%10lu] [user_management] /etc/shadow does not exist, creating default one ... ", millis ());
                             bool created = false;
-                            File f = fileSystem.open ("/etc/shadow", "w", true);
+                            File f = fileSystem.open ((char *) "/etc/shadow", "w", true);
                             if (f) {
                                 char rootpassword [USER_PASSWORD_MAX_LENGTH + 1]; __sha256__ (rootpassword, sizeof (rootpassword), DEFAULT_ROOT_PASSWORD);
                                 char webadminpassword [USER_PASSWORD_MAX_LENGTH + 1]; __sha256__ (webadminpassword, sizeof (webadminpassword), DEFAULT_WEBADMIN_PASSWORD);

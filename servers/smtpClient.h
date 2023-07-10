@@ -4,7 +4,7 @@
  
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    April 1, 2023, Bojan Jurca
+    June 25, 2023, Bojan Jurca
 
 */
 
@@ -247,9 +247,10 @@
                 s += to;
                 s += "\r\n";
         #ifdef __TIME_FUNCTIONS__
-          time_t now = getGmt ();
+          time_t now = time (NULL);
           if (now) { // if we know the time than add this information also
-            struct tm structNow = timeToStructTime (now);
+            struct tm structNow;
+            gmtime_r (&now, &structNow);
             char stringNow [128];
             strftime (stringNow, sizeof (stringNow), "%a, %d %b %Y %H:%M:%S %Z", &structNow);
                 s += "Date:";
@@ -268,7 +269,7 @@
           close (connectionSocket);
           return "";        
         }
-        if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, "\n", SMTP_TIME_OUT) <= 0) { 
+        if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
           dmesg ("[smtpClient] read error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";

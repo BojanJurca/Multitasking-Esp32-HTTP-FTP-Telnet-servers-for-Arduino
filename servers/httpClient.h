@@ -6,7 +6,7 @@
   
     HTTP client combines a HTTP request from server, page and method and returns a HTTP reply or "" if there is none.
   
-    April 1, 2023, Bojan Jurca
+    June 25, 2023, Bojan Jurca
          
 */
 
@@ -61,7 +61,7 @@
 
     // ----- HTTP client -----
 
-    String httpClient (char *serverName, int serverPort, char *httpAddress, char *httpMethod = "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
+    String httpClient (char *serverName, int serverPort, char *httpAddress, char *httpMethod = (char *) "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
       // get server address
       struct hostent *he = gethostbyname (serverName);
       if (!he) return "[httpClient] gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);

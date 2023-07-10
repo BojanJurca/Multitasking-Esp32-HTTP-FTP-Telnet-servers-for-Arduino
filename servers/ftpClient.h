@@ -4,7 +4,7 @@
  
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    April 1, 2023, Bojan Jurca
+    June 25, 2023, Bojan Jurca
 
 */
 
@@ -48,16 +48,16 @@
       // get server address
       struct hostent *he = gethostbyname (ftpServer);
       if (!he) {
-        return string ("gethostbyname error: ") + string (h_errno) + " " + hstrerror (h_errno);
+        return string ("gethostbyname error: ") + string (h_errno) + (char *) " " + hstrerror (h_errno);
       }
       // create socket
       int controlConnectionSocket = socket (PF_INET, SOCK_STREAM, 0);
       if (controlConnectionSocket == -1) {
-        return string ("socket error: ") + string (errno) + " " + strerror (errno);
+        return string ("socket error: ") + string (errno) + (char *) " " + strerror (errno);
       }
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (controlConnectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        string e = string (errno) + " " + strerror (errno);
+        string e = string (errno) + (char *) " " + strerror (errno);
         close (controlConnectionSocket);
         return string ("fcntl error: ") + e;
       }
@@ -68,7 +68,7 @@
       serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
       if (connect (controlConnectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
         if (errno != EINPROGRESS) {
-          string e = string (errno) + " " + strerror (errno); 
+          string e = string (errno) + (char *) " " + strerror (errno); 
           close (controlConnectionSocket);
           return string ("connect error: ") + e;
         }
@@ -80,9 +80,9 @@
       // read and process FTP server replies in an endless loop
       int receivedTotal = 0;
       do {
-        receivedTotal = recvAll (controlConnectionSocket, buffer + receivedTotal, sizeof (buffer) - 1 - receivedTotal, "\n", FTP_CLIENT_TIME_OUT);
+        receivedTotal = recvAll (controlConnectionSocket, buffer + receivedTotal, sizeof (buffer) - 1 - receivedTotal, (char *) "\n", FTP_CLIENT_TIME_OUT);
         if (receivedTotal <= 0) {
-          string e = string (errno) + " " + strerror (errno);
+          string e = string (errno) + (char *) " " + strerror (errno);
           close (controlConnectionSocket);
           return string ("recv error: ") + e;
         }
@@ -96,24 +96,24 @@
             #define ftpReplyIs(X) (strstr (buffer, X) == buffer)
 
                   if (ftpReplyIs ("220 "))  { // server wants client to log in
-                                              string s = string ("USER ") + userName + "\r\n";
+                                              string s = string ("USER ") + userName + (char *) "\r\n";
                                               if (sendAll (controlConnectionSocket, s, FTP_CLIENT_TIME_OUT) == -1) {
-                                                string e = string (errno) + " " + strerror (errno);
+                                                string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return string ("send error: ") + e;
                                               }
                                             }
             else if (ftpReplyIs ("331 "))   { // server wants client to send password
-                                              string s = string ("PASS ") + password + "\r\n";
+                                              string s = string ("PASS ") + password + (char *) "\r\n";
                                               if (sendAll (controlConnectionSocket, s, FTP_CLIENT_TIME_OUT) == -1) {
-                                                string e = string (errno) + " " + strerror (errno);
+                                                string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return string ("send error: ") + e;
                                               }
                                             }
             else if (ftpReplyIs ("230 "))   { // server said that we have logged in, initiate pasive data connection
-                                              if (sendAll (controlConnectionSocket, "PASV\r\n", FTP_CLIENT_TIME_OUT) == -1) {
-                                                string e = string (errno) + " " + strerror (errno);
+                                              if (sendAll (controlConnectionSocket, (char *) "PASV\r\n", FTP_CLIENT_TIME_OUT) == -1) {
+                                                string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return string ("send error: ") + e;
                                               }
@@ -139,13 +139,13 @@
                                               // create socket
                                               dataConnectionSocket = socket (PF_INET, SOCK_STREAM, 0);
                                               if (dataConnectionSocket == -1) {
-                                                string e = string (errno) + " " + strerror (errno);
+                                                string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return string ("socket error: ") + e; 
                                               }
                                               // make the socket not-blocking so that time-out can be detected
                                               if (fcntl (dataConnectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-                                                string e = string (errno) + " " + strerror (errno);
+                                                string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
                                                 return string ("fcntl error: ") + e; 
@@ -172,7 +172,7 @@
                                               */
                                               if (connect (dataConnectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
                                                 if (errno != EINPROGRESS) {
-                                                  string e = string (errno) + " " + strerror (errno);
+                                                  string e = string (errno) + (char *) " " + strerror (errno);
                                                   close (dataConnectionSocket);
                                                   close (controlConnectionSocket);
                                                   return string ("connect error: ") + e;
@@ -182,16 +182,16 @@
                                               // are we GETting or PUTting the file?
                                               string s;
                                                       if (!strcmp (ftpCommand, "GET")) {
-                                                        s = string ("RETR ") + serverFile + "\r\n";
+                                                        s = string ("RETR ") + serverFile + (char *) "\r\n";
                                               } else if (!strcmp (ftpCommand, "PUT")) {
-                                                        s = string ("STOR ") + serverFile + "\r\n";
+                                                        s = string ("STOR ") + serverFile + (char *) "\r\n";
                                               } else  {
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
                                                 return string ("Unknown FTP command ") + ftpCommand; 
                                               }
                                               if (sendAll (controlConnectionSocket, s, FTP_CLIENT_TIME_OUT) == -1) {
-                                                string e = string (errno) + " " + strerror (errno);
+                                                string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (dataConnectionSocket);
                                                 close (controlConnectionSocket);
                                                 return string ("send error: ") + e;
@@ -219,7 +219,7 @@
                                                           } else {
                                                             close (dataConnectionSocket);
                                                             close (controlConnectionSocket);
-                                                            return string ("Can't open ") + clientFile + " for writting";
+                                                            return string ("Can't open ") + clientFile + (char *) " for writting";
                                                           }
                                                           if (bytesWrittenTotal != bytesRecvTotal) {
                                                             close (dataConnectionSocket);
@@ -247,7 +247,7 @@
                                                           } else {
                                                             close (dataConnectionSocket);
                                                             close (controlConnectionSocket);
-                                                            return string ("Can't open ") + clientFile + " for reading";
+                                                            return string ("Can't open ") + clientFile + (char *) " for reading";
                                                           }
                                                           if (bytesSentTotal != bytesReadTotal) {
                                                             close (dataConnectionSocket);
@@ -282,12 +282,12 @@
   }
 
   // sends file, returns error or success text, fills empty parameters with the ones from configuration file /etc/ftp/ftpclient.cf
-  string ftpPut (char *localFileName = "", char *remoteFileName = "", char *password = "", char *userName = "", int ftpPort = 0, char *ftpServer = "") {
+  string ftpPut (char *localFileName = (char *) "", char *remoteFileName = (char *) "", char *password = (char *) "", char *userName = (char *) "", int ftpPort = 0, char *ftpServer = (char *) "") {
     char ftpClientBuffer [FTP_CLIENT_BUFFER_SIZE]; // ftpClientBuffer will be used first to read configuration file /etc/mail/sendmail.cf file in the memory and then for data transmission, fro both purposes 1 KB seems OK
     // DEBUG: Serial.printf ("entering: ftpPut (%s, %s, %s, %s, %i, %s)\n", localFileName, remoteFileName, password, userName, ftpPort, ftpServer);
     if (fileSystem.mounted ()) { 
       strcpy (ftpClientBuffer, "\n");
-      if (fileSystem.readConfigurationFile (ftpClientBuffer + 1, sizeof (ftpClientBuffer) - 2, "/etc/ftp/ftpclient.cf")) {
+      if (fileSystem.readConfigurationFile (ftpClientBuffer + 1, sizeof (ftpClientBuffer) - 2, (char *) "/etc/ftp/ftpclient.cf")) {
         strcat (ftpClientBuffer, "\n");
         char *p = NULL;
         char *q;
@@ -308,16 +308,16 @@
       dmesg ("[ftpClient] not all the arguments are set, if you want to use the default values, write them to /etc/ftp/ftpclient.cf");
       return "Not all the arguments are set, if you want to use ftpPut default values, write them to /etc/ftp/ftpclient.cf";
     } else {
-      return __ftpClient__ ("PUT", localFileName, remoteFileName, password, userName, ftpPort, ftpServer, ftpClientBuffer);
+      return __ftpClient__ ((char *) "PUT", localFileName, remoteFileName, password, userName, ftpPort, ftpServer, ftpClientBuffer);
     }
   }
 
   // retrieves file, returns error or success text, fills empty parameters with the ones from configuration file /etc/ftp/ftpclient.cf
-  string ftpGet (char *localFileName = "", char *remoteFileName = "", char *password = "", char *userName = "", int ftpPort = 0, char *ftpServer = "") {
+  string ftpGet (char *localFileName = (char *) "", char *remoteFileName = (char *) "", char *password = (char *) "", char *userName = (char *) "", int ftpPort = 0, char *ftpServer = (char *) "") {
     char ftpClientBuffer [FTP_CLIENT_BUFFER_SIZE]; // ftpClientBuffer will be used first to read configuration file /etc/mail/sendmail.cf file in the memory and then for data transmission, fro both purposes 1 KB seems OK
     if (fileSystem.mounted ()) {
       strcpy (ftpClientBuffer, "\n");
-      if (fileSystem.readConfigurationFile (ftpClientBuffer + 1, sizeof (ftpClientBuffer) - 2, "/etc/ftp/ftpclient.cf")) {
+      if (fileSystem.readConfigurationFile (ftpClientBuffer + 1, sizeof (ftpClientBuffer) - 2, (char *) "/etc/ftp/ftpclient.cf")) {
         strcat (ftpClientBuffer, "\n");
         char *p = NULL;
         char *q;
@@ -338,7 +338,7 @@
       dmesg ("[ftpClient] not all the arguments are set, if you want to use the default values, write them to /etc/ftp/ftpclient.cf");
       return "Not all the arguments are set, if you want to use ftpPut default values, write them to /etc/ftp/ftpclient.cf";
     } else {
-      return __ftpClient__ ("GET", localFileName, remoteFileName, password, userName, ftpPort, ftpServer, ftpClientBuffer);
+      return __ftpClient__ ((char *) "GET", localFileName, remoteFileName, password, userName, ftpPort, ftpServer, ftpClientBuffer);
     }
   }
 

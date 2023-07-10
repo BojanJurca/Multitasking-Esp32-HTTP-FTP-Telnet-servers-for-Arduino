@@ -100,7 +100,7 @@
         __dmesgCircularQueue__ [0].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] CPU0 reset reason: ") + resetReason (rtc_get_reset_reason (0));
         __dmesgCircularQueue__ [1].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] CPU1 reset reason: ") + resetReason (rtc_get_reset_reason (1));
         __dmesgCircularQueue__ [2].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] wakeup reason: ") + wakeupReason ();
-        __dmesgCircularQueue__ [3].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] (re)started ") + fsString<DMESG_MAX_MESSAGE_LENGTH> (++ bootCount) + " times";
+        __dmesgCircularQueue__ [3].message = fsString<DMESG_MAX_MESSAGE_LENGTH> ("[ESP32] (re)started ") + fsString<DMESG_MAX_MESSAGE_LENGTH> (++ bootCount) + (char *) " times";
         return true;      
     }
     bool __initializedDmesgCircularQueue__ = __initializeDmesgCircularQueue__ ();
@@ -130,6 +130,6 @@
     void dmesg (const char *message1)                         { dmesg ((char *) message1, (char *) ""); }
     void dmesg (char *message1, int i)                        { dmesg (message1, fsString<DMESG_MAX_MESSAGE_LENGTH> (i)); }
     void dmesg (const char *message1, int i)                  { dmesg ((char *) message1, i); }
-    void dmesg (const char *message1, int i, char *message2)  { dmesg (message1, fsString<DMESG_MAX_MESSAGE_LENGTH> (i) + " " + message2); }
+    void dmesg (const char *message1, int i, char *message2)  { dmesg (message1, fsString<DMESG_MAX_MESSAGE_LENGTH> (i) + (char *) " " + message2); }
 
 #endif

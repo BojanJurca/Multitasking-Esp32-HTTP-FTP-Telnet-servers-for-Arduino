@@ -5,23 +5,23 @@
 #include "fsString.h"
 #define string fsString<300>                                // max number of characters in fixes size strings used here
 
-
+// #define SHOW_COMPILE_TIME_INFORMATION
 #define HOSTNAME                  "MyESP32Server"
 #define MACHINETYPE               "ESP32 Dev Modue"
 #define DEFAULT_STA_SSID          "YOUR_STA_SSID"
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
-#define DEFAULT_AP_SSID           "" // HOSTNAME
+#define DEFAULT_AP_SSID           "" // HOSTNAME, leave empty if you don't want to use AP
 #define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"
-
+#define TZ "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana or choose another (POSIX) time zone from: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
 // uncomment one of the tests at a time
-#define TEST_FS
+// #define TEST_FS
 // #define TEST_FTP
 // #define TEST_TELNET
 // #define TEST_SMTP_CLIENT
 // #define TEST_USER_MANAGEMENT
 // #define TEST_TIME_FUNCTIONS
-// #define TEST_HTTP_SERVER_AND_CLIENT
+#define TEST_HTTP_SERVER_AND_CLIENT
 
 
 
@@ -39,10 +39,10 @@
     void setup () {
       Serial.begin (115200);
 
-      fileSystem.format ();
+      // fileSystem.format ();
       // fileSystem.formatFAT ();
-      fileSystem.formatLittleFs ();
-      fileSystem.mount (true);
+      // fileSystem.formatLittleFs ();
+      // fileSystem.mount (true);
       // fileSystem.mountFAT (true);
       fileSystem.mountLittleFs (true);
     }
@@ -59,13 +59,12 @@
 
 #ifdef TEST_FTP // TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP
 
-    #define NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+    #define USER_MANAGEMENT NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
 
     #include "dmesg_functions.h"
     #include "fileSystem.hpp"
     #include "time_functions.h"
     #include "network.h"
-    #define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
     #include "userManagement.hpp"
   
     #include "ftpServer.hpp"
@@ -92,7 +91,7 @@
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
     delay (100);
 
-    Serial.println (ftpPut ("/b", "/a", (char *) "root", (char *) "root", 21, (char *) "10.18.1.200"));  
+    Serial.println (ftpPut ((char *) "/b", (char *) "/a", (char *) "root", (char *) "root", 21, (char *) "10.18.1.200"));  
   }
 
   void loop () {
@@ -108,15 +107,17 @@
 #ifdef TEST_TELNET  // TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET 
 
   // include all .h files telnet server is using to test the whole functionality
+  
+      #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
+ 
       #include "dmesg_functions.h"
-        // #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
       #include "fileSystem.hpp"
       #include "network.h"
       #include "time_functions.h"
       #include "httpClient.h"
       #include "ftpClient.h"
       #include "smtpClient.h"
-      #define USER_MANAGEMENT NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+      #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
       #include "userManagement.hpp"
 
       #include "telnetServer.hpp"
@@ -128,7 +129,7 @@
     #define argv2is(X) (argc > 2 && !strcmp (argv[2], X))    
     #define LED_BUILTIN 2
     
-            if (argv0is ("led") && argv1is ("state")) {                    // led state telnet command
+            if (argv0is ("led") && argv1is ("state")) {                  // led state telnet command
               return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
     } else if (argv0is ("turn") && argv1is ("led") && argv2is ("on")) {  // turn led on telnet command
               digitalWrite (LED_BUILTIN, HIGH);
@@ -149,11 +150,13 @@
   void setup () {
     Serial.begin (115200); Serial.printf ("\r\n\r\n\r\n\r\n");
 
-    // fileSystem.format ();
+    // fileSystem.formatLittleFs ();
+    fileSystem.mountLittleFs (true);
 
-    fileSystem.mount (true); 
+    // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA-tic credentials
     startWiFi ();
-    startCronDaemon (NULL); 
+ 
+    startCronDaemon (NULL);
 
     myTelnetServer = new telnetServer (telnetCommandHandlerCallback, (char *) "0.0.0.0", 23, firewall);
     if (myTelnetServer->state () != telnetServer::RUNNING) {
@@ -239,64 +242,75 @@
 
 #ifdef TEST_TIME_FUNCTIONS // TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS
 
-  #include "fileSystem.hpp" // include fileSystem.hpp if you want cronDaemon to access /etc/ntp.conf and /etc/crontab
-  #include "network.h"
+    #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS 
+
+    #define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3" // Europe/Ljubljana, all time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+
+    #include "fileSystem.hpp" // include fileSystem.hpp if you want cronDaemon to access /etc/ntp.conf and /etc/crontab
+    #include "network.h"
+
+    #include "time_functions.h"
 
 
-  void cronHandler (char *cronCommand) {
-  
-    #define cronCommandIs(X) (!strcmp (cronCommand, X))  
+    void cronHandler (char *cronCommand) {
+      
+        #define cronCommandIs(X) (!strcmp (cronCommand, X))  
 
-    if (cronCommandIs ("gotTime")) { // triggers only once - when ESP32 reads time from NTP servers for the first time
-      Serial.println ("Got time, do whatever needs to be done the first time the time is known.");
-      struct tm afterOneHour = timeToStructTime (timeToLocalTime (getGmt () + 60)); // 1 hour = 3600
-      char s [100];
-      sprintf (s, "%i %i %i * * * afterOneHour", afterOneHour.tm_sec, afterOneHour.tm_min, afterOneHour.tm_hour);
-      if (cronTabAdd (s)) Serial.printf ("--- afterOneHour --- added\n"); else Serial.printf ("--- afterOneHour --- NOT added\n"); // change cronTab from within cronHandler
-      return;
-    } 
+        if (cronCommandIs ("gotTime")) { // triggers only once - when ESP32 reads time from NTP servers for the first time
 
-    if (cronCommandIs ("afterOneHour")) { 
-      Serial.println ("Do whatever needs to be done one hour after the time is known.");
-      if (cronTabDel ("afterOneHour")) Serial.printf ("--- afterOneHour --- deleted\n"); else Serial.printf ("--- afterOneHour --- NOT deleted\n"); // change cronTab from within cronHandler
-      return;
-    }
-    
-    if (cronCommandIs ("onMinute")) { // triggers each minute
+            char buf [26]; // 26 bytes are needed
+            ascTime (localTime (time ()), buf);
+
+            Serial.printf ("%s (%s) Got time at %s (local time), ESP32 has been running %lu seconds. Do whatever needs to be done the first time the time is known.\r\n", __func__, cronCommand, buf, getUptime ());
+
+            struct tm afterOneMinute = gmTime (timeToLocalTime (time () + 60)); // 1 min = 60 s
+            char s [100];
+            sprintf (s, "%i %i %i * * * afterOneMinute", afterOneMinute.tm_sec, afterOneMinute.tm_min, afterOneMinute.tm_hour);
+            if (cronTabAdd (s)) Serial.printf ("--- afterOneMinute --- added\n"); else Serial.printf ("--- afterOneMinute --- NOT added\n"); // change cronTab from within cronHandler
+            return;
+        } 
+
+        if (cronCommandIs ("afterOneMinute")) { 
+            Serial.printf ("ESP32 has been running %lu seconds. Do whatever needs to be done one minute after the time is known.\r\n", getUptime ());
+            if (cronTabDel ((char *) "afterOneMinute")) Serial.printf ("--- afterOneMinute --- deleted\n"); else Serial.printf ("--- afterOneMinute --- NOT deleted\n"); // change cronTab from within cronHandler
+            return;
+        }
+
+        if (cronCommandIs ("onMinute")) { // triggers each minute
             Serial.printf ("|  %6u  ", ESP.getFreeHeap ());
             Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_8BIT), heap_caps_get_minimum_free_size (MALLOC_CAP_8BIT), heap_caps_get_largest_free_block (MALLOC_CAP_8BIT));
             Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_32BIT), heap_caps_get_minimum_free_size (MALLOC_CAP_32BIT), heap_caps_get_largest_free_block (MALLOC_CAP_32BIT));
             Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_DEFAULT), heap_caps_get_minimum_free_size (MALLOC_CAP_DEFAULT), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
-            Serial.printf ("|  %6u  %6u  %6u|\n", heap_caps_get_free_size (MALLOC_CAP_EXEC), heap_caps_get_minimum_free_size (MALLOC_CAP_EXEC), heap_caps_get_largest_free_block (MALLOC_CAP_EXEC));      
+            Serial.printf ("|  %6u  %6u  %6u|\n", heap_caps_get_free_size (MALLOC_CAP_EXEC), heap_caps_get_minimum_free_size (MALLOC_CAP_EXEC), heap_caps_get_largest_free_block (MALLOC_CAP_EXEC));
+            return;
+        }
 
-      return;
+        return;
     }
-
-    return;
-  }
-  
-
-  void setup () {
-    Serial.begin (115200);
-
-    // for (default) CET_TIMEZONE
-    __TEST_DST_TIME_CHANGE__ ();
     
 
-    fileSystem.mount (false);
-    startWiFi (); // for some strange reason you can't set time if WiFi is not initialized
+    void setup () {
+        Serial.begin (115200);
 
-    startCronDaemon (cronHandler);
-    cronTabAdd ("* * * * * * gotTime"); 
-    cronTabAdd ("0 * * * * * onMinute"); 
+        // set time zone
+        setenv ("TZ", TIMEZONE, 1); 
+        tzset ();
 
-            Serial.printf ("|free heap| 8 bit free  min  max   |32 bit free  min  max   |default free  min  max  |exec free   min   max   |\n");
-            Serial.printf ("---------------------------------------------------------------------------------------------------------------\n");    
-  }
 
-  void loop () {
+        fileSystem.mount (false);
+        startWiFi (); // for some strange reason you can't set time if WiFi is not initialized
 
-  }
+        startCronDaemon (cronHandler);
+        cronTabAdd ((char *) "* * * * * * gotTime"); 
+        cronTabAdd ((char *) "0 * * * * * onMinute"); 
+
+        Serial.printf ("|free heap| 8 bit free  min  max   |32 bit free  min  max   |default free  min  max  |exec free   min   max   |\n");
+        Serial.printf ("---------------------------------------------------------------------------------------------------------------\n");    
+    }
+
+    void loop () {
+
+    }
 
 #endif // TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS TEST_TIME_FUNCTIONS
 
@@ -306,10 +320,11 @@
 
 #ifdef TEST_HTTP_SERVER_AND_CLIENT // TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT 
 
+  #define FILE_SYSTEM    FILE_SYSTEM_LITTLEFS // or FILE_SYSTEM_FAT
+
   #include "dmesg_functions.h"
   #include "fileSystem.hpp" // include fileSystem.hpp if you want httpServer to server .html and other files as well
   #include "network.h"
-  #include "perfMon.h"  // include perfMon.h if you want to monitor performance
   #include "httpServer.hpp"
   #include "httpClient.h"
   #include "oscilloscope.h"
@@ -335,7 +350,7 @@
 
     if (httpRequestStartsWith ("GET / ")) {
                                             // play with cookies
-                                            string s = hcn->getHttpRequestCookie ("refreshCount");
+                                            string s = hcn->getHttpRequestCookie ((char *) "refreshCount");
                                             Serial.printf ("This page has been refreshed %s times\n", s);
                                             hcn->setHttpReplyCookie ("refreshCount", string (atoi (s) + 1));
                                             // return large HTML reply from memory (9 KB in this case)
@@ -473,8 +488,8 @@
   void setup () {
     Serial.begin (115200);
 
-    fileSystem.format ();
-    fileSystem.mount (true); 
+    // fileSystem.formatLittleFs ();
+    fileSystem.mountLittleFs (true); 
     startWiFi ();
 
     myHttpServer = new httpServer (httpRequestHandler, wsRequestHandler, (char *) "0.0.0.0", 80, firewall);
@@ -523,9 +538,9 @@
             Serial.printf ("|  %6u  %6u  %6u|\n", heap_caps_get_free_size (MALLOC_CAP_EXEC), heap_caps_get_minimum_free_size (MALLOC_CAP_EXEC), heap_caps_get_largest_free_block (MALLOC_CAP_EXEC));
 
     {
-      String r1 = httpClient ((char *) "127.0.0.1", 80, "/upTime");
+      String r1 = httpClient ((char *) "127.0.0.1", 80, (char *) "/upTime");
       if (r1.length ()) Serial.printf ("Got a reply from local loopback: %i bytes, %s\n", r1.length (), r1.c_str ());
-      String r2 = httpClient ((char *) "Yoga13", 80, "/");
+      String r2 = httpClient ((char *) "Yoga13", 80, (char *) "/");
       if (r2.length ()) Serial.printf ("Got a reply from my computer, %i bytes, %s\n", r2.length (), r2.c_str ());
     }
 

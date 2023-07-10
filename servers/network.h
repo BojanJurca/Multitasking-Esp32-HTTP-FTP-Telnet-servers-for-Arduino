@@ -10,10 +10,10 @@
 
       /network/interfaces                       - modify the code below with your IP addresses
       /etc/wpa_supplicant/wpa_supplicant.conf   - modify the code below with your WiFi SSID and password
-      /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses 
+      /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses
       /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
 
-    April 1, 2022, Bojan Jurca
+    June 25, 2023, Bojan Jurca
 
 */
 
@@ -62,7 +62,7 @@
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "HOSTNAME was not defined previously, #defining the default MyESP32Server in network.h"
         #endif
-      #define HOSTNAME                  "MyESP32Server"  // use default if not defined previously, max 32 bytes  ESP_NETIF_HOSTNAME_MAX_SIZE  bbbbbbbbbbb
+      #define HOSTNAME                  "MyESP32Server"  // use default if not defined previously, max 32 bytes  ESP_NETIF_HOSTNAME_MAX_SIZE
     #endif
     // define default STAtion mode parameters to be written to /etc/wpa_supplicant/wpa_supplicant.conf if you want to use ESP as WiFi station
     #ifndef DEFAULT_STA_SSID
@@ -142,12 +142,15 @@
  
     // ----- CODE -----
 
-    #include "dmesg_functions.h"
-
       // log network Traffic information for each socket
       struct networkTrafficInformationType {
+          // statistics
           unsigned long bytesReceived;
           unsigned long  bytesSent;
+          // debug information 
+          unsigned long startMillis; // a time when socket was opened
+          unsigned long lastActiveMillis; // a time when data was last sent or received
+          // ... add more if needed
       };
       networkTrafficInformationType networkTrafficInformation = {}; // measure network Traffic on ESP32 level
       networkTrafficInformationType socketTrafficInformation [MEMP_NUM_NETCONN] = {}; // there are MEMP_NUM_NETCONN available sockets measure network Traffic on each socket level
@@ -155,41 +158,43 @@
       // missing hstrerror function
       #include <lwip/netdb.h>
       char *hstrerror (int h_errno) {
-        switch (h_errno) {
-          case EAI_NONAME:      return "Name or service is unknown";
-          case EAI_SERVICE:     return "Service not supported for 'ai_socktype'";
-          case EAI_FAIL:        return "Non-recoverable failure in name res";
-          case EAI_MEMORY:      return "Memory allocation failure";
-          case EAI_FAMILY:      return "'ai_family' not supported";
-          case HOST_NOT_FOUND:  return "The specified host is unknown";
-          case NO_DATA:         return "The requested name is valid but does not have an IP address";
-          case NO_RECOVERY:     return "The requested name is valid but does not have an IP address";
-          case TRY_AGAIN:       return "A temporary error occurred on an authoritative name server. Try again later";
-          default:              return "Invalid h_errno code";
-        }
+          switch (h_errno) {
+              case EAI_NONAME:      return (char *) "Name or service is unknown";
+              case EAI_SERVICE:     return (char *) "Service not supported for 'ai_socktype'";
+              case EAI_FAIL:        return (char *) "Non-recoverable failure in name res";
+              case EAI_MEMORY:      return (char *) "Memory allocation failure";
+              case EAI_FAMILY:      return (char *) "'ai_family' not supported";
+              case HOST_NOT_FOUND:  return (char *) "The specified host is unknown";
+              case NO_DATA:         return (char *) "The requested name is valid but does not have an IP address";
+              case NO_RECOVERY:     return (char *) "The requested name is valid but does not have an IP address";
+              case TRY_AGAIN:       return (char *) "A temporary error occurred on an authoritative name server. Try again later";
+              default:              return (char *) "Invalid h_errno code";
+          }
       }
-    
+
       // returns len which is the number of bytes actually sent or 0 indicatig an error, buf is send in separate blocks of size TCP_SND_BUF (the maximum size that ESP32 can send)
       int sendAll (int sockfd, char *buf, size_t len, unsigned long timeOut) {
-        size_t writtenTotal = 0;
-        size_t writtenThisTime;
-        size_t toWriteThisTime;
+        size_t sentTotal = 0;
+        size_t sentThisTime;
+        size_t toSendThisTime;
         unsigned long lastActive = millis ();
         while (true) {
-          toWriteThisTime = len - writtenTotal; if (toWriteThisTime > TCP_SND_BUF) toWriteThisTime = TCP_SND_BUF; // 5744
-          switch ((writtenThisTime = send (sockfd, buf + writtenTotal, toWriteThisTime, 0))) {
+          toSendThisTime = len - sentTotal; if (toSendThisTime > TCP_SND_BUF) toSendThisTime = TCP_SND_BUF; // 5744
+          switch ((sentThisTime = send (sockfd, buf + sentTotal, toSendThisTime, 0))) {
             case -1:
-              if ((errno == EAGAIN || errno == ENAVAIL) && (millis () - lastActive < timeOut || !timeOut)) break; // not time-out yet
-              return - 1;
+                if ((errno == EAGAIN || errno == ENAVAIL) && (millis () - lastActive < timeOut || !timeOut)) break; // not time-out yet
+                else return - 1;
             case 0:   // connection closed by peer
-              return 0;
+                return 0;
             default:
 
-              networkTrafficInformation.bytesSent += writtenThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-              socketTrafficInformation [sockfd - LWIP_SOCKET_OFFSET].bytesSent += writtenThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+              networkTrafficInformation.bytesSent += sentThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+              socketTrafficInformation [sockfd - LWIP_SOCKET_OFFSET].bytesSent += sentThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+              socketTrafficInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+              // DEBUG: Serial.printf ("[%10lu] [network] socket %i sent %i bytes\n", millis (), sockfd, sentThisTime);
 
-              writtenTotal += writtenThisTime;
-              if (writtenTotal == len) return writtenTotal;
+              sentTotal += sentThisTime;
+              if (sentTotal == len) return sentTotal;
               lastActive = millis ();
               break;
           }
@@ -207,26 +212,31 @@
         while (true) { // read blocks of incoming data
           switch (receivedThisTime = recv (sockfd, buf + receivedTotal, len - 1 - receivedTotal, 0)) {
             case -1:
-              if ((errno == EAGAIN || errno == ENAVAIL) && (millis () - lastActive < timeOut || !timeOut)) break; // not time-out yet 
-              return -1;
+                if ((errno == EAGAIN || errno == ENAVAIL) && (millis () - lastActive < timeOut || !timeOut)) break; // not time-out yet 
+                else return -1;
             case 0: // connection closed by peer
-              return 0;
+                return 0;
             default:
 
               networkTrafficInformation.bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
               socketTrafficInformation [sockfd - LWIP_SOCKET_OFFSET].bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+              socketTrafficInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+              // DEBUG: Serial.printf ("[%10lu] [network] socket %i received %i bytes\n", millis (), sockfd, receivedThisTime);
 
               receivedTotal += receivedThisTime;
-              buf [receivedTotal] = 0; // close string
+              buf [receivedTotal] = 0; // close C string
               if (endingString) {
-                if (strstr (buf, endingString)) return receivedTotal; // check if whole request or reply has arrived
-                if (receivedTotal >= len - 1) { // the endingStirng has not arrived yet and there is no place left in the buffer for it
-                  dmesg ("[recvAll] buffer too small");
-                  return 0;
-                  // return receivedTotal; // let the calling routine check the ending string again
-                }                
+                  if (strstr (buf, endingString)) return receivedTotal; // check if whole request or reply has arrived (if there is an ending string in it)
+                  if (receivedTotal >= len - 1) { // the endingStirng has not arrived yet and there is no place left in the buffer for it
+                      #ifdef __DMESG__
+                          dmesg ("[network][recvAll] buffer too small");
+                      #endif
+                      Serial.printf ("[%10lu] [network][recvAll] buffer too small\r\n", millis ());
+                      return 0;
+                      // return receivedTotal; // let the calling routine check the ending string again
+                  }                
               } else {
-                if (receivedTotal > 0) return receivedTotal; // if there is no ending string each block we receive will be ok 
+                  return receivedTotal; // if there is no ending string specified, each block we receive should be ok 
               }
               lastActive = millis ();
               break;
@@ -235,47 +245,6 @@
         }
         return 0; // never executes
       }
-
-  #ifndef __STR_BETWEEN__  
-    #define __STR_BETWEEN__
-      String strBetween (String input, String openingBracket, String closingBracket) { // returns content inside of opening and closing brackets
-        int i = input.indexOf (openingBracket);
-        if (i >= 0) {
-          input = input.substring (i +  openingBracket.length ());
-          i = input.indexOf (closingBracket);
-          if (i >= 0) {
-            input = input.substring (0, i);
-            input.trim ();
-            return input;
-          }
-        }
-        return "";
-      }
-
-        char *strBetween (char *buffer, size_t bufferSize, char *src, const char *left, const char *right) { // copies substring of src between left and right to buffer or "" if not found or buffer too small, return bufffer
-          *buffer = 0;
-          char *l, *r;
-
-          if (*left) l = strstr (src, left);
-          else l = src;
-          
-          if (l) {  
-            l += strlen (left);
-
-            if (*right) r = strstr (l, right);
-            else r = l + strlen (l);
-            
-            if (r) { 
-              int len = r - l;
-              if (len < bufferSize - 1) { 
-                strncpy (buffer, l, len); 
-                buffer [len] = 0; 
-              }
-            }
-          }    
-          return buffer;                                                     
-        }
-    #endif
 
     // converts dotted (text) IP address to IPAddress structure
     IPAddress __IPAddressFromString__ (char *ipAddress) { 
@@ -369,12 +338,12 @@
       #ifdef __FILE_SYSTEM__
         if (fileSystem.mounted ()) { 
           // read interfaces configuration from /network/interfaces, create a new one if it doesn't exist
-          if (!fileSystem.isFile ("/network/interfaces")) {
+          if (!fileSystem.isFile ((char *) "/network/interfaces")) {
             // create directory structure
-            if (!fileSystem.isDirectory ("/network")) { fileSystem.makeDirectory ("/network"); }
+            if (!fileSystem.isDirectory ((char *) "/network")) { fileSystem.makeDirectory ((char *) "/network"); }
             Serial.printf ("[%10lu] [network] /network/interfaces does not exist, creating default one ... ", millis ());
             bool created = false;
-            File f = fileSystem.open ("/network/interfaces", "w", true);          
+            File f = fileSystem.open ((char *) "/network/interfaces", "w", true);          
             if (f) {
               #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
                 String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
@@ -437,7 +406,7 @@
             char buffer [MAX_INTERFACES_SIZE];
             strcpy (buffer, "\n");
             if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/network/interfaces")) {
-              Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+              Serial.printf ("\n%s\n\n", buffer + 1);
               strcat (buffer, "\n");
               if (strstr (buffer, "iface STA inet static")) {
                 strBetween (staIP, sizeof (staIP), buffer, "\naddress ", "\n");
@@ -457,12 +426,12 @@
 
 
           // read STAtion credentials from /etc/wpa_supplicant/wpa_supplicant.conf, create a new one if it doesn't exist
-          if (!fileSystem.isFile ("/etc/wpa_supplicant/wpa_supplicant.conf")) {
+          if (!fileSystem.isFile ((char *) "/etc/wpa_supplicant/wpa_supplicant.conf")) {
             // create directory structure
-            if (!fileSystem.isDirectory ("/etc/wpa_supplicant")) { fileSystem.makeDirectory ("/etc"); fileSystem.makeDirectory ("/etc/wpa_supplicant"); }
+            if (!fileSystem.isDirectory ((char *) "/etc/wpa_supplicant")) { fileSystem.makeDirectory ((char *) "/etc"); fileSystem.makeDirectory ((char *) "/etc/wpa_supplicant"); }
             Serial.printf ("[%10lu] [network] /etc/wpa_supplicant/wpa_supplicant.conf does not exist, creating default one ... ", millis ());
             bool created = false;
-            File f = fileSystem.open ("/etc/wpa_supplicant/wpa_supplicant.conf", "w", true);          
+            File f = fileSystem.open ((char *) "/etc/wpa_supplicant/wpa_supplicant.conf", "w", true);          
             if (f) {
               String defaultContent = F ("# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
                                           #ifdef DEFAULT_STA_SSID
@@ -490,7 +459,7 @@
               char buffer [MAX_WPA_SUPPLICANT_SIZE];
               strcpy (buffer, "\n");
               if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/wpa_supplicant/wpa_supplicant.conf")) {
-                  Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+                  Serial.printf ("\n%s\n\n", buffer + 1);
                   strcat (buffer, "\n");
                   strBetween (staSSID, sizeof (staSSID), buffer, "\nssid ", "\n");
                   strBetween (staPassword, sizeof (staPassword), buffer, "\npsk ", "\n");
@@ -501,12 +470,12 @@
           }
 
           // read A(ccess) P(oint) configuration from /etc/dhcpcd.conf, create a new one if it doesn't exist
-          if (!fileSystem.isFile ("/etc/dhcpcd.conf")) {
+          if (!fileSystem.isFile ((char *) "/etc/dhcpcd.conf")) {
             // create directory structure
-            if (!fileSystem.isDirectory ("/etc")) fileSystem.makeDirectory ("/etc");
+            if (!fileSystem.isDirectory ((char *) "/etc")) fileSystem.makeDirectory ((char *) "/etc");
             Serial.printf ("[%10lu] [network] /etc/dhcpcd.conf does not exist, creating default one ... ", millis ());
             bool created = false;
-            File f = fileSystem.open ("/etc/dhcpcd.conf", "w", true);          
+            File f = fileSystem.open ((char *) "/etc/dhcpcd.conf", "w", true);          
             if (f) {
               String defaultContent = F ("# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
                                          "iface AP\r\n"
@@ -540,7 +509,7 @@
             char buffer [MAX_DHCPCD_SIZE];
             strcpy (buffer, "\n");
             if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/dhcpcd.conf")) {
-              Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+              Serial.printf ("\n%s\n\n", buffer + 1);
               strcat (buffer, "\n");
               strBetween (apIP, sizeof (apIP), buffer, "\nstatic ip_address ", "\n");          
               strBetween (apSubnetMask, sizeof (apSubnetMask), buffer, "\nnetmask ", "\n");
@@ -550,12 +519,12 @@
 
 
           // read A(ccess) P(oint) credentials from /etc/hostapd/hostapd.conf, create a new one if it doesn't exist
-          if (!fileSystem.isFile ("/etc/hostapd/hostapd.conf")) {
+          if (!fileSystem.isFile ((char *) "/etc/hostapd/hostapd.conf")) {
             // create directory structure
-            if (!fileSystem.isDirectory ("/etc/hostapd")) { fileSystem.makeDirectory ("/etc"); fileSystem.makeDirectory ("/etc/hostapd"); }
+            if (!fileSystem.isDirectory ((char *) "/etc/hostapd")) { fileSystem.makeDirectory ((char *) "/etc"); fileSystem.makeDirectory ((char *) "/etc/hostapd"); }
             Serial.printf ("[%10lu] [network] /etc/hostapd/hostapd.conf does not exist, creating default one ... ", millis ());
             bool created = false;
-            File f = fileSystem.open ("/etc/hostapd/hostapd.conf", "w", true);          
+            File f = fileSystem.open ((char *) "/etc/hostapd/hostapd.conf", "w", true);
             if (f) {
               String defaultContent = F ("# WiFi AP credentials - reboot for changes to take effect\r\n\r\n"
                                          "iface AP\r\n"
@@ -585,7 +554,7 @@
               char buffer [MAX_HOSTAPD_SIZE];
               strcpy (buffer, "\n");
               if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/hostapd/hostapd.conf")) {
-                  Serial.printf ("----------------------------------------\n%s\n----------------------------------------\n", buffer + 1);
+                  Serial.printf ("\n%s\n\n", buffer + 1);
                   strcat (buffer, "\n");
                   strBetween (apSSID, sizeof (apSSID), buffer, "\nssid ", "\n");          
                   strBetween (apPassword, sizeof (apSubnetMask), buffer, "\nwpa_passphrase ", "\n");
@@ -607,57 +576,78 @@
         static bool staStarted = false; // to prevent unneccessary messages
         switch (event) {
             case SYSTEM_EVENT_WIFI_READY:           // do not report this event - it is too frequent
-                                                    // dmesg ("[network] WiFi interface ready");
                                                     break;
-            case SYSTEM_EVENT_SCAN_DONE:            dmesg ("[network] [STA] completed scan for access points");
+            case SYSTEM_EVENT_SCAN_DONE:            Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] completed scan for access points");
                                                     break;
             case SYSTEM_EVENT_STA_START:            if (!staStarted) {
                                                       staStarted = true;
-                                                      dmesg ("[network] [STA] WiFi client started");
+                                                      Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] WiFi client started");
                                                     }
                                                     break;
-            case SYSTEM_EVENT_STA_STOP:             dmesg ("[network] [STA] WiFi clients stopped");
+            case SYSTEM_EVENT_STA_STOP:             Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] WiFi clients stopped");
                                                     break;
-            case SYSTEM_EVENT_STA_CONNECTED:        dmesg ("[network] [STA] connected to WiFi ", (char *) WiFi.SSID ().c_str ());
+            case SYSTEM_EVENT_STA_CONNECTED:        Serial.printf ("[%10lu] %s%s\r\n", millis (), "[network][STA] connected to WiFi ", (char *) WiFi.SSID ().c_str ());
                                                     break;
             case SYSTEM_EVENT_STA_DISCONNECTED:     if (staStarted) {
                                                       staStarted = false;
-                                                      dmesg ("[network] [STA] disconnected from WiFi");
+                                                      #ifdef __DMESG__
+                                                          dmesg ("[network][STA] disconnected from WiFi");
+                                                      #endif
+                                                      Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] disconnected from WiFi");
                                                     }
                                                     break;
-            case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:  dmesg ("[network] [STA] authentication mode has changed");
+            case SYSTEM_EVENT_STA_AUTHMODE_CHANGE:  Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] authentication mode has changed");
                                                     break;
-            case SYSTEM_EVENT_STA_GOT_IP:           dmesg ("[network] [STA] got IP address: ", (char *) WiFi.localIP ().toString ().c_str ());
+            case SYSTEM_EVENT_STA_GOT_IP:           
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network][STA] got IP address: ", (char *) WiFi.localIP ().toString ().c_str ());
+                                                    #endif
+                                                    Serial.printf ("[%10lu] %s%s\r\n", millis (), "[network][STA] got IP address: ", (char *) WiFi.localIP ().toString ().c_str ());
                                                     break;
-            case SYSTEM_EVENT_STA_LOST_IP:          dmesg ("[network] [STA] lost IP address. IP address reset to 0");
+            case SYSTEM_EVENT_STA_LOST_IP:
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network][STA] lost IP address. IP address reset to 0.0.0.0");
+                                                    #endif
+                                                    Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] lost IP address. IP address reset to 0.0.0.0");
                                                     break;
-            case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:   dmesg ("[network] [STA] WiFi Protected Setup (WPS): succeeded in enrollee mode");
+            case SYSTEM_EVENT_STA_WPS_ER_SUCCESS:   Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] WiFi Protected Setup (WPS): succeeded in enrollee mode");
                                                     break;
-            case SYSTEM_EVENT_STA_WPS_ER_FAILED:    dmesg ("[network] [STA] WiFi Protected Setup (WPS): failed in enrollee mode");
+            case SYSTEM_EVENT_STA_WPS_ER_FAILED:    Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] WiFi Protected Setup (WPS): failed in enrollee mode");
                                                     break;
-            case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:   dmesg ("[network] [STA] WiFi Protected Setup (WPS): timeout in enrollee mode");
+            case SYSTEM_EVENT_STA_WPS_ER_TIMEOUT:   Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] WiFi Protected Setup (WPS): timeout in enrollee mode");
                                                     break;
-            case SYSTEM_EVENT_STA_WPS_ER_PIN:       dmesg ("[network] [STA] WiFi Protected Setup (WPS): pin code in enrollee mode");
+            case SYSTEM_EVENT_STA_WPS_ER_PIN:       Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] WiFi Protected Setup (WPS): pin code in enrollee mode");
                                                     break;
-            case SYSTEM_EVENT_AP_START:             dmesg ("[network] [AP] WiFi access point started");
+            case SYSTEM_EVENT_AP_START:             
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network][AP] WiFi access point started");
+                                                    #endif
+                                                    Serial.printf ("[%10lu] %s\r\n", millis (), "[network][AP] WiFi access point started");
                                                     // AP hostname can't be set until AP interface is mounted 
-                                                    { esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); if (e != ESP_OK) dmesg ("[network] couldn't change AP adapter hostname."); } // outdated, use: esp_netif_set_hostname
+                                                    { 
+                                                        esp_err_t e = tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME); // outdated, use: esp_netif_set_hostname
+                                                        if (e != ESP_OK) {
+                                                            #ifdef __DMESG__
+                                                                dmesg ("[network][AP] couldn't change AP adapter hostname"); 
+                                                            #endif
+                                                            Serial.printf ("[%10lu] %s\r\n", millis (), "[network][AP] couldn't change AP adapter hostname");
+                                                        }
+                                                    } 
                                                     break;
-            case SYSTEM_EVENT_AP_STOP:              dmesg ("[network] [AP] WiFi access point stopped");
+            case SYSTEM_EVENT_AP_STOP:              
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network][AP] WiFi access point stopped");
+                                                    #endif
+                                                    Serial.printf ("[%10lu] %s\r\n", millis (), "[network][AP] WiFi access point stopped");
                                                     break;
             case SYSTEM_EVENT_AP_STACONNECTED:      // do not report this event - it is too frequent
-                                                    // dmesg ("[network] [AP] client connected");
                                                     break;
             case SYSTEM_EVENT_AP_STADISCONNECTED:   // do not report this event - it is too frequent
-                                                    // dmesg ("[network] [AP] client disconnected");
                                                     break;
             case SYSTEM_EVENT_AP_STAIPASSIGNED:     // do not report this event - it is too frequent
-                                                    // dmesg ("[network] [AP] assigned IP address to client");
                                                     break;
-            case SYSTEM_EVENT_AP_PROBEREQRECVED:    dmesg ("[network] [AP] received probe request");
-                                                    break;
-            case SYSTEM_EVENT_GOT_IP6:              dmesg ("[network] IPv6 is preferred");
-                                                    break;
+            case SYSTEM_EVENT_AP_PROBEREQRECVED:    break;
+            case SYSTEM_EVENT_GOT_IP6:              break;
             /*
             case SYSTEM_EVENT_ETH_START:            dmesg ("[network] ethernet started");
                                                     break;
@@ -670,25 +660,38 @@
             case SYSTEM_EVENT_ETH_GOT_IP:           dmesg ("[network] ethernet got IP address");
                                                     break;        
             */
-            default:                                dmesg ("[network] event: ", event); // shouldn't happen
+            default:                                
+                                                    #ifdef __DMESG__
+                                                        dmesg ("[network] event: ", event); // shouldn't happen
+                                                    #endif
+                                                    Serial.printf ("[%10lu] %s%i\r\n", millis (), "[network] event: ", event);
                                                     break;
         }
       });    
   
-      dmesg ("[network] starting WiFi");
       // connect STA and AP 
       if (*staSSID) { 
-  
-        if (*staIP) { 
-          dmesg ("[network] [STA] connecting STAtion to router with static IP: ", (char *) (String (staIP) + " GW: " + String (staGateway) + " MSK: " + String (staSubnetMask) + " DNS: " + String (staDns1) + ", " + String (staDns2)).c_str ());
-          WiFi.config (__IPAddressFromString__ (staIP), __IPAddressFromString__ (staGateway), __IPAddressFromString__ (staSubnetMask), *staDns1 ? __IPAddressFromString__ (staDns1) : IPAddress (255, 255, 255, 255), *staDns2 ? __IPAddressFromString__ (staDns2) : IPAddress (255, 255, 255, 255)); // INADDR_NONE == 255.255.255.255
-        } else { 
-          dmesg ("[network] [STA] connecting STAtion to router using DHCP, SSID = ", staSSID);
-        }
-        // Serial.printf ("[%10lu] [network] staSSID = %s, staPassword = %s\n", millis (), staSSID, staPassword);
-        WiFi.begin (staSSID, staPassword);
+          #ifdef __DMESG__
+              dmesg ("[network][STA] connecting to router: ", staSSID);
+          #endif
+          Serial.printf ("[%10lu] %s%s\r\n", millis (), "[network][STA] connecting to router: ", staSSID);
 
-      }    
+          if (*staIP) { 
+              // dmesg ("[network][STA] connecting STAtion to router with static IP: ", (char *) (String (staIP) + " GW: " + String (staGateway) + " MSK: " + String (staSubnetMask) + " DNS: " + String (staDns1) + ", " + String (staDns2)).c_str ());
+              #ifdef __DMESG__
+                  dmesg ("[network][STA] using static IP: ", staIP);
+              #endif
+              Serial.printf ("[%10lu] %s%s\r\n", millis (), "[network][STA] using static IP: ", staIP);
+              WiFi.config (__IPAddressFromString__ (staIP), __IPAddressFromString__ (staGateway), __IPAddressFromString__ (staSubnetMask), *staDns1 ? __IPAddressFromString__ (staDns1) : IPAddress (255, 255, 255, 255), *staDns2 ? __IPAddressFromString__ (staDns2) : IPAddress (255, 255, 255, 255)); // INADDR_NONE == 255.255.255.255
+          } else { 
+              #ifdef __DMESG__
+                  dmesg ("[network][STA] using DHCP");
+              #endif
+              Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] using DHCP");
+          }
+          // Serial.printf ("[%10lu] [network][STA] staSSID = %s, staPassword = %s\n", millis (), staSSID, staPassword);
+          WiFi.begin (staSSID, staPassword);
+      }
 
       // set hostname for all netifs: https://github.com/espressif/esp-idf/blob/master/components/esp_netif/include/esp_netif.h
       // esp_netif_t *netif = esp_netif_next (NULL);
@@ -699,34 +702,54 @@
       // }
 
       if (*apSSID) { // setup AP
+          #ifdef __DMESG__
+              dmesg ("[network][AP] settint up access point: ", apSSID);
+          #endif
+          Serial.printf ("[%10lu] %s%s\r\n", millis (), "[network][AP] settint up access point: ", apSSID);
 
           if (WiFi.softAP (apSSID, apPassword)) { 
-            dmesg ("[network] [AP] initializing access point: ", (char *) (String (apSSID) + "/" + String (apPassword) + ", " + String (apIP) + ", " + String (apGateway) + ", " + String (apSubnetMask)).c_str ()); 
-            WiFi.softAPConfig (__IPAddressFromString__ (apIP), __IPAddressFromString__ (apGateway), __IPAddressFromString__ (apSubnetMask));
-            Serial.printf ("[%10lu] [network] apSSID = %s, apPassword = %s\n", millis (), apSSID, apPassword);
-            WiFi.begin ();
-            dmesg ("[network] [AP] access point IP: ", (char *) WiFi.softAPIP ().toString ().c_str ());
+              // dmesg ("[network] [AP] initializing access point: ", (char *) (String (apSSID) + "/" + String (apPassword) + ", " + String (apIP) + ", " + String (apGateway) + ", " + String (apSubnetMask)).c_str ()); 
+              WiFi.softAPConfig (__IPAddressFromString__ (apIP), __IPAddressFromString__ (apGateway), __IPAddressFromString__ (apSubnetMask));
+              WiFi.begin ();
+              #ifdef __DMESG__
+                  dmesg ("[network][AP] access point IP: ", (char *) WiFi.softAPIP ().toString ().c_str ());
+              #endif
+              Serial.printf ("[%10lu] %s%s\r\n", millis (), "[network][AP] access point IP: ", (char *) WiFi.softAPIP ().toString ().c_str ());
           } else {
-            // ESP.restart ();
-            dmesg ("[network] [AP] failed to initialize access point mode"); 
+              // ESP.restart ();
+              #ifdef __DMESG__
+                  dmesg ("[network][AP] failed to initialize access point"); 
+              #endif
+              Serial.printf ("[%10lu] %s\r\n", millis (), "[network][AP] failed to initialize access point");
           }
-          
       } 
 
       // set WiFi mode
       if (*staSSID) { 
         if (*apSSID) {
 
-            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME) != ESP_OK) // outdated, use: esp_netif_set_hostname
-                dmesg ("[network] couldn't change AP adapter hostname");
-            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME) != ESP_OK) // outdated, use: esp_netif_set_hostname
-                dmesg ("[network] couldn't change STA adapter hostname"); 
+            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME) != ESP_OK) { // outdated, use: esp_netif_set_hostname
+                #ifdef __DMESG__
+                    dmesg ("[network][AP] couldn't change AP adapter hostname"); 
+                #endif
+                Serial.printf ("[%10lu] %s\r\n", millis (), "[network][AP] couldn't change AP adapter hostname");
+            }
+            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME) != ESP_OK) { // outdated, use: esp_netif_set_hostname
+                #ifdef __DMESG__
+                    dmesg ("[network][STA] couldn't change STA adapter hostname"); 
+                #endif
+                Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] couldn't change STA adapter hostname");
+            } 
             WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
 
         } else {
 
-            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME) != ESP_OK) // outdated, use: esp_netif_set_hostname
-                dmesg ("[network] couldn't change STA adapter hostname"); 
+            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_STA, HOSTNAME) != ESP_OK) { // outdated, use: esp_netif_set_hostname
+                #ifdef __DMESG__
+                    dmesg ("[network][STA] couldn't change STA adapter hostname"); 
+                #endif
+                Serial.printf ("[%10lu] %s\r\n", millis (), "[network][STA] couldn't change STA adapter hostname");
+            }
             WiFi.mode (WIFI_STA); // only STA mode
 
         }
@@ -734,8 +757,12 @@
         
         if (*apSSID) {
 
-            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME) != ESP_OK) // outdated, use: esp_netif_set_hostname
-                dmesg ("[network] couldn't change AP adapter hostname");
+            if (tcpip_adapter_set_hostname (TCPIP_ADAPTER_IF_AP, HOSTNAME) != ESP_OK) { // outdated, use: esp_netif_set_hostname
+                #ifdef __DMESG__
+                    dmesg ("[network][AP] couldn't change AP adapter hostname"); 
+                #endif
+                Serial.printf ("[%10lu] %s\r\n", millis (), "[network][AP] couldn't change AP adapter hostname");
+            }
             WiFi.mode (WIFI_AP); // only AP mode
         
         }
@@ -745,9 +772,9 @@
     }
   
     wifi_mode_t getWiFiMode () {
-      wifi_mode_t retVal = WIFI_OFF;
-      if (esp_wifi_get_mode (&retVal) != ESP_OK) {;} // dmesg ("[network] couldn't get WiFi mode");
-      return retVal;
+        wifi_mode_t retVal = WIFI_OFF;
+        if (esp_wifi_get_mode (&retVal) != ESP_OK); // dmesg ("[network] couldn't get WiFi mode");
+        return retVal;
     }
 
     // ----- arp reference:  https://github.com/yarrick/lwip/blob/master/src/core/ipv4/etharp.c -----
@@ -908,17 +935,17 @@
                 s += "\r\n";
         
                 // display the following information for STA interface
-                if (!strcmp (ip_addr, (char *) WiFi.localIP ().toString ().c_str ())) { // bbbb
+                if (!strcmp (ip_addr, (char *) WiFi.localIP ().toString ().c_str ())) {
                     if (WiFi.status () == WL_CONNECTED) {
                         if (telnetSocket >= 0) { // display intermediate result if called from telnetServer for 350 string characters may not be enough to return the whole result
                             sendAll (telnetSocket, s, 1000); // display intermediate result                
                             s = "";
                         }
                         int rssi = WiFi.RSSI ();
-                        char *rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi < -90) */ rssiDescription = "unusable";
+                        char *rssiDescription = (char *) ""; if (rssi == 0) rssiDescription = (char *) "not available"; else if (rssi >= -30) rssiDescription = (char *) "excelent"; else if (rssi >= -67) rssiDescription = (char *) "very good"; else if (rssi >= -70) rssiDescription = (char *) "okay"; else if (rssi >= -80) rssiDescription = (char *) "not good"; else if (rssi >= -90) rssiDescription = (char *) "bad"; else /* if (rssi < -90) */ rssiDescription = (char *) "unusable";
                         s += "           STAtion is connected to router:\r\n\n"
                              "              inet addr: ";
-                        s += WiFi.gatewayIP ().toString ().c_str (); // bbbb
+                        s += WiFi.gatewayIP ().toString ().c_str ();
                         s += "     RSSI: ";
                         s += string (rssi);
                         s += " dBm (";
@@ -951,7 +978,7 @@
                             s += "              inet addr: ";
                             s += ip_addr;
                             int rssi = __sniffWiFiForRssi__ (__mac_ntos__ ((byte *) &station.mac, NETIF_MAX_HWADDR_LEN));
-                            char *rssiDescription = ""; if (rssi == 0) rssiDescription = "not available"; else if (rssi >= -30) rssiDescription = "excelent"; else if (rssi >= -67) rssiDescription = "very good"; else if (rssi >= -70) rssiDescription = "okay"; else if (rssi >= -80) rssiDescription = "not good"; else if (rssi >= -90) rssiDescription = "bad"; else /* if (rssi < -90) */ rssiDescription = "unusable";
+                            char *rssiDescription = (char *) ""; if (rssi == 0) rssiDescription = (char *) "not available"; else if (rssi >= -30) rssiDescription = (char *) "excelent"; else if (rssi >= -67) rssiDescription = (char *) "very good"; else if (rssi >= -70) rssiDescription = (char *) "okay"; else if (rssi >= -80) rssiDescription = (char *) "not good"; else if (rssi >= -90) rssiDescription = (char *) "bad"; else /* if (rssi < -90) */ rssiDescription = (char *) "unusable";
                             s += "     RSSI: ";
                             s += rssi;
                             s += " dBm (";
@@ -1206,8 +1233,10 @@
       // get target address
       struct hostent *he = gethostbyname (targetName);
       if (!he) {
-        dmesg ("[ping] gethostbyname() error: ", h_errno, hstrerror (h_errno));
-        if (telnetSocket >= 0) sendAll (telnetSocket, (char *) "gethostbyname() error", strlen ("gethostbyname() error"), 1000); // if called from Telnet server
+        #ifdef __DMESG__
+            dmesg ("[network][ping] gethostbyname () error: ", h_errno, hstrerror (h_errno));
+        #endif
+        if (telnetSocket >= 0) sendAll (telnetSocket, (char *) "gethostbyname () error", strlen ("gethostbyname () error"), 1000); // if called from Telnet server
         return 0;
       }
 

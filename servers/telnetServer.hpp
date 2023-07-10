@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    March 12, 2023, Bojan Jurca
+    June 25, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -55,7 +55,7 @@
             #pragma message "Compiling telnetServer.h without file system (fileSystem.hpp), some commands, like ls, vi, pwd, ... will not be available"  
         #endif
         #ifndef __TIME_FUNCTIONS__
-            #pragma message "Compiling telnetServer.h without time functions (time_functions.h), some commands, date, ntpdate, crontab, ... will not be available"  
+            #pragma message "Compiling telnetServer.h without time functions (time_functions.h), some commands, like ntpdate, crontab, ... will not be available"  
         #endif
         #ifndef __NETWORK__
             #pragma message "Compiling telnetServer.h without network functions (network.h), some commands, ping, ifconfig, arp, ... will not be available"  
@@ -97,7 +97,7 @@
     #include "vector.h"                                     // for vi command only
 
     #include "version_of_servers.h"                         // version of this software, used in uname command
-    #define UNAME string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__ // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
+    #define UNAME string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__ // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
 
 
     // ----- CODE -----
@@ -165,10 +165,13 @@
                             strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
                             // handle connection in its own thread (task)       
                             #define tskNORMAL_PRIORITY 1
-                            if (pdPASS != xTaskCreate (__connectionTask__, "telnetConnection", TELNET_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL)) {
-                              dmesg ("[telnetConnection] xTaskCreate error");
+                            xTaskHandle taskHandle;
+                            socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET] = {};
+                            if (pdPASS != xTaskCreate (__connectionTask__, "telnetConnection", TELNET_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, &taskHandle)) {
+                                dmesg ("[telnetConnection] xTaskCreate error");
                             } else {
-                              __state__ = RUNNING;                            
+                                __state__ = RUNNING;
+                                socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET].startMillis = millis ();
                             }
 
                           }
@@ -302,7 +305,7 @@
                 case 127: // in Windows telent.exe this is del key, but putty reports backspace with code 127, so let's treat it the same way as backspace
                           if (characters && buf [characters - 1] >= ' ') {
                             buf [-- characters] = 0;
-                            if (__echo__ && sendTelnet ("\x08 \x08") <= 0) return 0; // delete the last character from the screen
+                            if (__echo__ && sendTelnet ((char *) "\x08 \x08") <= 0) return 0; // delete the last character from the screen
                           }
                           break;                            
                 case 10:  // LF
@@ -310,7 +313,7 @@
                             while (buf [0] == ' ') strcpy (buf, buf + 1); // ltrim
                             int i; for (i = 0; buf [i] > ' '; i++); buf [i] = 0; // rtrim
                           }
-                          if (__echo__ && sendTelnet ("\r\n") <= 0) return 0; // echo CRLF to the screen
+                          if (__echo__ && sendTelnet ((char *) "\r\n") <= 0) return 0; // echo CRLF to the screen
                           return 10;
                 case 13:  // CR
                           break; // ignore 
@@ -391,7 +394,7 @@
                 // if (!ths->__userName__ [0]) endOfConnection;
                 char password [USER_PASSWORD_MAX_LENGTH + 1] = "";
                 ths->__echo__ = false;
-                if (ths->sendTelnet ("password: ") <= 0) goto endOfConnection;
+                if (ths->sendTelnet ((char *) "password: ") <= 0) goto endOfConnection;
                 if (ths->recvTelnetLine (password, sizeof (password)) != 10) { 
                   goto endOfConnection;                
                 }
@@ -401,7 +404,7 @@
                 if (!userManagement.checkUserNameAndPassword (ths->__userName__, password)) { 
                   dmesg ("[telnetConnection] user failed to login: ", ths->__userName__);
                   delay (100);
-                  ths->sendTelnet ("\r\nUsername and/or password incorrect.");
+                  ths->sendTelnet ((char *) "\r\nUsername and/or password incorrect.");
                   goto endOfConnection;                                
                 }
                 dmesg ("[telnetConnection] user logged in: ", ths->__userName__);
@@ -425,7 +428,7 @@
                 // read command line
                 switch (ths->recvTelnetLine (ths->__cmdLine__, sizeof (ths->__cmdLine__), false)) {
                   case 3:   { // Ctrl-C, end the connection
-                              ths->sendTelnet ("\r\nCtrl-C");
+                              ths->sendTelnet ((char *) "\r\nCtrl-C");
                               goto endOfConnection;
                             }
                   case 10:  { // Enter, parse command line
@@ -455,7 +458,7 @@
                                 String s;
                                 if (ths->__telnetCommandHandlerCallback__) s = ths->__telnetCommandHandlerCallback__ (argc, argv, ths);
                                 if (!s) { // out of memory                               
-                                  if (ths->sendTelnet ("Out of memory") <= 0) goto endOfConnection;
+                                  if (ths->sendTelnet ((char *) "Out of memory") <= 0) goto endOfConnection;
                                 } else if (s != "") { // __telnetCommandHandlerCallback__ returned a reply                
                                   if (ths->sendTelnet ((char *) s.c_str ()) <= 0) goto endOfConnection;
                                 } else { // // __telnetCommandHandlerCallback__ returned "" - handle the command internally
@@ -470,7 +473,7 @@
                               break;
                             }
                   case 0:   {
-                              if (errno == EAGAIN || errno == ENAVAIL) ths->sendTelnet ("\r\nTime-out");
+                              if (errno == EAGAIN || errno == ENAVAIL) ths->sendTelnet ((char *) "\r\nTime-out");
                               goto endOfConnection;                
                             }
                   default:  // ignore
@@ -519,7 +522,7 @@
                                                 if (argc == 2) {
                                                     int n = atoi (argv [1]); if (n >= LWIP_SOCKET_OFFSET && n < LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN) return __kill__ (n);
                                                 }
-                                                return string ("Wrong syntax, use kill <socket>   (where ") + string (LWIP_SOCKET_OFFSET) + " <= socket <= " + string (LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 1) + ")";
+                                                return string ("Wrong syntax, use kill <socket>   (where ") + string (LWIP_SOCKET_OFFSET) + (char *) " <= socket <= " + string (LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 1) + (char *) ")";
                                               }
                                               else return "Only root may close sockets.";
                                           }
@@ -540,15 +543,15 @@
                                       
           else if (argv0Is ("quit"))      { return argc == 1 ? __quit__ () : "Wrong syntax, use quit"; }
 
-        #ifdef __TIME_FUNCTIONS__
-
-          else if (argv0Is ("uptime"))    { return argc == 1 ? __uptime__ () : "Wrong syntax, use uptime"; }
-
           else if (argv0Is ("date"))      {
                                               if (argc == 1)                                              return __getDateTime__ ();
                                                   if (argc == 4 && (argv1Is ("-s") || argv1Is ("-set")))  return __setDateTime__ (argv [2], argv [3]);
                                               return "Wrong syntax, use date [-set YYYY/MM/DD hh:mm:ss] (use hh in 24 hours time format)";
                                           }
+
+        #ifdef __TIME_FUNCTIONS__
+
+          else if (argv0Is ("uptime"))    { return argc == 1 ? __uptime__ () : "Wrong syntax, use uptime"; }
 
           else if (argv0Is ("ntpdate"))   {
                                               if (argc == 1) return __ntpdate__ ();
@@ -604,7 +607,7 @@
         #ifdef __HTTP_CLIENT__
 
           else if (argv0Is ("curl"))      { 
-                                              if (argc == 2) return __curl__ ("GET", argv [1], tcn);
+                                              if (argc == 2) return __curl__ ((char *) "GET", argv [1], tcn);
                                               if (argc == 3) return __curl__ (argv [1], argv [2], tcn);
                                               return "Wrong syntax, use curl [method] http://url";
                                           } 
@@ -614,14 +617,14 @@
         #ifdef __SMTP_CLIENT__
 
           else if (argv0Is ("sendmail"))  { 
-                                              char *smtpServer = "";
-                                              char *smtpPort = "";
-                                              char *userName = "";
-                                              char *password = "";
-                                              char *from = "";
-                                              char *to = ""; 
-                                              char *subject = ""; 
-                                              char *message = "";
+                                              char *smtpServer = (char *) "";
+                                              char *smtpPort = (char *) "";
+                                              char *userName = (char *) "";
+                                              char *password = (char *) "";
+                                              char *from = (char *) "";
+                                              char *to = (char *) ""; 
+                                              char *subject = (char *) ""; 
+                                              char *message = (char *) "";
                                             
                                               for (int i = 1; i < argc - 1; i += 2) {
                                                       if (!strcmp (argv [i], "-S")) smtpServer = argv [i + 1];
@@ -643,10 +646,10 @@
         #ifdef __FTP_CLIENT__ 
 
           else if (argv0Is ("ftpput"))    { 
-                                              char *ftpServer = "";
-                                              char *ftpPort = "";
-                                              char *userName = "";
-                                              char *password = "";
+                                              char *ftpServer = (char *) "";
+                                              char *ftpPort = (char *) "";
+                                              char *userName = (char *) "";
+                                              char *password = (char *) "";
                                               char *localFileName = NULL;
                                               char *remoteFileName = NULL;
                                               bool syntaxError = false;
@@ -670,10 +673,10 @@
                                           }
 
           else if (argv0Is ("ftpget"))    { 
-                                              char *ftpServer = "";
-                                              char *ftpPort = "";
-                                              char *userName = "";
-                                              char *password = "";
+                                              char *ftpServer = (char *) "";
+                                              char *ftpPort = (char *) "";
+                                              char *userName = (char *) "";
+                                              char *password = (char *) "";
                                               char *localFileName = NULL;
                                               char *remoteFileName = NULL;
                                               bool syntaxError = false;
@@ -769,8 +772,8 @@
 
           else if (argv0Is ("rmdir"))     { return argc == 2 ? __rmdir__ (argv [1]) : "Wrong syntax, use rmdir <directoryName>"; } 
 
-          else if (argv0Is ("cd"))        { return argc == 2 ? __cd__ (argv [1]) : "Wrong syntax, use cd <directoryName>"; }
-          else if (argv0Is ("cd.."))      { return argc == 1 ? __cd__ ("..")     : "Wrong syntax, use cd <directoryName>"; } 
+          else if (argv0Is ("cd"))        { return argc == 2 ? __cd__ (argv [1])      : "Wrong syntax, use cd <directoryName>"; }
+          else if (argv0Is ("cd.."))      { return argc == 1 ? __cd__ ((char *) "..") : "Wrong syntax, use cd <directoryName>"; } 
 
           else if (argv0Is ("pwd"))       { return argc == 1 ? __pwd__ () : "Wrong syntax, use pwd"; }
 
@@ -812,96 +815,99 @@
         }
 
         const char *__help__ (telnetConnection *tcn) {
-          char *h = "Suported commands:"
-                    "\r\n      help"
-                    "\r\n      clear"
-                    "\r\n      uname"
-                    "\r\n      free [<n>]   (where 0 < n <= 3600)"
-                    "\r\n      nohup [<n>]   (where 0 < n <= 3600)"
-                    "\r\n      quit"
-                  #ifdef __DMESG__
-                    "\r\n  dmesg circular queue:"
-                    "\r\n      dmesg [-follow] [-time]"
-                  #endif
-                  #ifdef __TIME_FUNCTIONS__
-                    "\r\n  time commands:"
-                    "\r\n      uptime"
-                    "\r\n      date [-set <YYYY/MM/DD hh:mm:ss>]"
-                    "\r\n      ntpdate [<ntpServer>]"
-                    "\r\n      crontab"
-                  #endif
-                    "\r\n  network commands:"
-                  #ifdef __NETWORK__
-                    "\r\n      ping <terget computer>"
-                    "\r\n      ifconfig"
-                    "\r\n      arp"
-                    "\r\n      iw"
-                    "\r\n      netstat [<n>]   (where 0 < n <= 3600)"
-                    "\r\n      kill <socket>   (where socket is a valid socket)"
-                  #endif
-                    "\r\n      telnet <server> [port]"
-                  #ifdef __HTTP_CLIENT__
-                    "\r\n      curl [method] http://url"
-                  #endif
-                  #ifdef __FTP_CLIENT__ 
-                    "\r\n      ftpput [-S ftpServer] [-P ftpPort] [-u userName] [-p password] <localFileName> <remoteFileName>"
-                    "\r\n      ftpget [-S ftpServer] [-P ftpPort] [-u userName] [-p password] <localFileName> <remoteFileName>"
-                  #endif
-                  #ifdef __SMTP_CLIENT__
-                    "\r\n      sendmail [-S smtpServer] [-P smtpPort] [-u userName] [-p password] [-f from address] [t to address list] [-s subject] [-m messsage]"
-                  #endif
-                  #ifdef __FILE_SYSTEM__
-                    "\r\n  file commands:"
-                    #if FILE_SYSTEM == FILE_SYSTEM_FAT
-                    "\r\n      mkfs.fat"
-                    #endif
-                    #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
-                    "\r\n      mkfs.littlefs"
-                    #endif
-                    "\r\n      fs_info"
-                    "\r\n      ls [<directoryName>]"
-                    "\r\n      tree [<directoryName>]"
-                    "\r\n      mkdir <directoryName>"
-                    "\r\n      rmdir <directoryName>"
-                    "\r\n      cd <directoryName or ..>"
-                    "\r\n      pwd"
-                    "\r\n      cat [>] <fileName>"
-                    "\r\n      vi <fileName>"
-                    "\r\n      cp <existing fileName> <new fileName>"
-                    "\r\n      mv <existing fileName or directoryName> <new fileName or directoryName>"
-                    "\r\n      rm <fileName>"
-                    "\r\n      diskstat [<n>]   (where 0 < n <= 3600)"
-                  #endif
-                  #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
-                    "\r\n  user management:"                                        
-                    "\r\n       useradd -u <userId> -d <userHomeDirectory> <userName>"
-                    "\r\n       userdel <userName>"
-                    "\r\n       passwd [<userName>]"
-                  #endif
-                  #ifdef __FILE_SYSTEM__
-                    "\r\n  configuration files used by system:"
-                    #ifdef __TIME_FUNCTIONS__
-                      "\r\n      /etc/ntp.conf                             (contains NTP time servers names)"
-                      "\r\n      /etc/crontab                              (contains scheduled tasks)"
-                    #endif
-                    #ifdef __NETWORK__
-                      "\r\n      /network/interfaces                       (contains STA(tion) configuration)"
-                      "\r\n      /etc/wpa_supplicant/wpa_supplicant.conf   (contains STA(tion) credentials)"
-                      "\r\n      /etc/dhcpcd.conf                          (contains A(ccess) P(oint) configuration)"
-                      "\r\n      /etc/hostapd/hostapd.conf                 (contains A(ccess) P(oint) credentials)"
-                    #endif
-                    #ifdef __FTP_CLIENT__
-                      "\r\n      /etc/ftp/ftpclient.cf                     (contains ftpput and ftpget default settings)"
-                    #endif
-                    #ifdef __SMTP_CLIENT__
-                      "\r\n      /etc/mail/sendmail.cf                     (contains sendMail default settings)"
-                    #endif
-                    #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
-                      "\r\n      /etc/passwd                               (contains users' accounts information)"
-                      "\r\n      /etc/shadow                               (contains users' passwords)"
-                    #endif
-                  #endif
-                  ;
+          char *h = (char *)  "Suported commands:"
+                              "\r\n      help"
+                              "\r\n      clear"
+                              "\r\n      uname"
+                              "\r\n      free [<n>]   (where 0 < n <= 3600)"
+                              "\r\n      nohup [<n>]   (where 0 < n <= 3600)"
+                              "\r\n      quit"
+                              #ifdef __DMESG__
+                                "\r\n  dmesg circular queue:"
+                                "\r\n      dmesg [-follow] [-time]"
+                              #endif
+                              "\r\n  time commands:"
+                              #ifdef __TIME_FUNCTIONS__                                
+                                "\r\n      uptime"
+                              #endif
+                              "\r\n      date [-set <YYYY/MM/DD hh:mm:ss>]"
+                              #ifdef __TIME_FUNCTIONS__                                
+                                "\r\n      ntpdate [<ntpServer>]"
+                                "\r\n      crontab"
+                              #endif
+                                "\r\n  network commands:"
+                              #ifdef __NETWORK__
+                                "\r\n      ping <terget computer>"
+                                "\r\n      ifconfig"
+                                "\r\n      arp"
+                                "\r\n      iw"
+                                "\r\n      netstat [<n>]   (where 0 < n <= 3600)"
+                                "\r\n      kill <socket>   (where socket is a valid socket)"
+                              #endif
+                                "\r\n      telnet <server> [port]"
+                              #ifdef __HTTP_CLIENT__
+                                "\r\n      curl [method] http://url"
+                              #endif
+                              #ifdef __FTP_CLIENT__ 
+                                "\r\n      ftpput [-S ftpServer] [-P ftpPort] [-u userName] [-p password] <localFileName> <remoteFileName>"
+                                "\r\n      ftpget [-S ftpServer] [-P ftpPort] [-u userName] [-p password] <localFileName> <remoteFileName>"
+                              #endif
+                              #ifdef __SMTP_CLIENT__
+                                "\r\n      sendmail [-S smtpServer] [-P smtpPort] [-u userName] [-p password] [-f from address] [t to address list] [-s subject] [-m messsage]"
+                              #endif
+                              #ifdef __FILE_SYSTEM__
+                                "\r\n  file commands:"
+                                #if FILE_SYSTEM == FILE_SYSTEM_FAT
+                                "\r\n      mkfs.fat"
+                                #endif
+                                #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+                                "\r\n      mkfs.littlefs"
+                                #endif
+                                "\r\n      fs_info"
+                                "\r\n      ls [<directoryName>]"
+                                "\r\n      tree [<directoryName>]"
+                                "\r\n      mkdir <directoryName>"
+                                "\r\n      rmdir <directoryName>"
+                                "\r\n      cd <directoryName or ..>"
+                                "\r\n      pwd"
+                                "\r\n      cat [>] <fileName>"
+                                "\r\n      vi <fileName>"
+                                "\r\n      cp <existing fileName> <new fileName>"
+                                "\r\n      mv <existing fileName or directoryName> <new fileName or directoryName>"
+                                "\r\n      rm <fileName>"
+                                "\r\n      diskstat [<n>]   (where 0 < n <= 3600)"
+                              #endif
+                              #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
+                                "\r\n  user management:"                                        
+                                "\r\n       useradd -u <userId> -d <userHomeDirectory> <userName>"
+                                "\r\n       userdel <userName>"
+                                "\r\n       passwd [<userName>]"
+                              #endif
+                              #ifdef __FILE_SYSTEM__
+                                "\r\n  configuration files used by system:"
+                                #ifdef __TIME_FUNCTIONS__
+                                  "\r\n      /usr/share/zoneinfo                       (contains (POSIX) timezone information)"
+                                  "\r\n      /etc/ntp.conf                             (contains NTP time servers names)"
+                                  "\r\n      /etc/crontab                              (contains scheduled tasks)"
+                                #endif
+                                #ifdef __NETWORK__
+                                  "\r\n      /network/interfaces                       (contains STA(tion) configuration)"
+                                  "\r\n      /etc/wpa_supplicant/wpa_supplicant.conf   (contains STA(tion) credentials)"
+                                  "\r\n      /etc/dhcpcd.conf                          (contains A(ccess) P(oint) configuration)"
+                                  "\r\n      /etc/hostapd/hostapd.conf                 (contains A(ccess) P(oint) credentials)"
+                                #endif
+                                #ifdef __FTP_CLIENT__
+                                  "\r\n      /etc/ftp/ftpclient.cf                     (contains ftpput and ftpget default settings)"
+                                #endif
+                                #ifdef __SMTP_CLIENT__
+                                  "\r\n      /etc/mail/sendmail.cf                     (contains sendMail default settings)"
+                                #endif
+                                #if USER_MANAGEMENT == UNIX_LIKE_USER_MANAGEMENT
+                                  "\r\n      /etc/passwd                               (contains users' accounts information)"
+                                  "\r\n      /etc/shadow                               (contains users' passwords)"
+                                #endif
+                              #endif
+                              ;
             sendTelnet (h);
             return "";                                            
         }
@@ -928,7 +934,7 @@
                             tcn->recvTelnetChar (false); // read pending character
                             return ""; // return if user pressed Ctrl-C or any key
                         } 
-                        if (tcn->connectionTimeOut ()) { sendTelnet ("\r\nTime-out"); tcn->closeConnection (); return ""; }
+                        if (tcn->connectionTimeOut ()) { sendTelnet ((char *) "\r\nTime-out"); tcn->closeConnection (); return ""; }
                     }
                 }
                 sprintf (s, "\r\n%10lu   %10lu  bytes", (unsigned long) ESP.getFreeHeap (), (unsigned long) heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
@@ -949,7 +955,7 @@
             do {
 
                 // clear screen
-                if (delaySeconds) if (sendTelnet ("\x1b[2J") <= 0) return "";
+                if (delaySeconds) if (sendTelnet ((char *) "\x1b[2J") <= 0) return "";
                 
                 // display totals
                 sprintf (s, "total bytes received and sent:                   %10lu      %10lu\r\n", networkTrafficInformation.bytesReceived - lastNetworkTrafficInformation.bytesReceived, networkTrafficInformation.bytesSent - lastNetworkTrafficInformation.bytesSent);
@@ -961,8 +967,8 @@
 
                 // display header
                 sprintf (s, "\r\n"
-                            "socket  local address      remote address    bytes received      bytes sent\r\n"
-                            "----------------------------------------------------------------------------------------------");
+                            "socket  local address      remote address    bytes received      bytes sent      inactive\r\n"
+                            "-----------------------------------------------------------------------------------------------------------");
                 if (sendTelnet (s) <= 0) return "";
 
                 // scan through sockets
@@ -971,18 +977,20 @@
                     // get server side address first
                     if (getsockname (i, (struct sockaddr *) &socketAddress, &len) != -1) {
                         inet_ntoa_r (socketAddress.sin_addr, socketIP, sizeof (socketIP));
-                        sprintf (s, "\r\n  %2i      %s:%i                                                          ", i, socketIP, ntohs (socketAddress.sin_port));
+                        sprintf (s, "\r\n  %2i      %s:%i                                                                  ", i, socketIP, ntohs (socketAddress.sin_port));
                         // get client side address next
                         if (getpeername (i, (struct sockaddr *) &socketAddress, &len) != -1) {
                             inet_ntoa_r (socketAddress.sin_addr, socketIP, sizeof (socketIP));
                             if (socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived < lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived || socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent < lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent) lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET] = {0, 0};
-                            sprintf (s + 28, "%s:%i       %10lu      %10lu   %s", socketIP, ntohs (socketAddress.sin_port), socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived, socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent,  ((i == tcn->getSocket ()) ? "this connection" : ""));
+                            sprintf (s + 28, "%s:%i               ", socketIP, ntohs (socketAddress.sin_port));
+                            sprintf (s + 53, "%8lu      %10lu      %6lu s  %s", socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived, socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent, (millis () - socketTrafficInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000,  ((i == tcn->getSocket ()) ? "this connection" : ""));
                         } else { // socket without a peer address - it must be a listening socket
-                            sprintf (s + 80, "listening socket");
+                            sprintf (s + 83, "%6lu s  listening socket", (millis () - socketTrafficInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000);
                         }
 
                         // update variables for delta calculation
-                        lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET] = socketTrafficInformation [i - LWIP_SOCKET_OFFSET];
+                        lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived = socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived;
+                        lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent = socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent;
 
                         if (sendTelnet (s) <= 0) return "";
                     }
@@ -996,28 +1004,33 @@
                         tcn->recvTelnetChar (false); // read pending character
                         return ""; // return if user pressed Ctrl-C or any key
                     } 
-                    if (tcn->connectionTimeOut ()) { sendTelnet ("\r\nTime-out"); tcn->closeConnection (); return ""; }
+                    if (tcn->connectionTimeOut ()) { sendTelnet ((char *) "\r\nTime-out"); tcn->closeConnection (); return ""; }
                 }
 
             } while (delaySeconds);
             return "";
         }
 
-        string __kill__ (int i) {
+        string __kill__ (int i) { // i = socket number
           if (close (i) < 0) {
             dmesg ("[telnet] close() error: ", errno, strerror (errno));               
-            return string ("Error: ") + string (errno) + " " + strerror (errno);
+            return string ("Error: ") + string (errno) + (char *) " " + strerror (errno);
           }
+          // if there is a task associated with a socket kill it as well
+          // if (socketTrafficInformation [i - LWIP_SOCKET_OFFSET].taskHandle) {
+          //     delay (1000); // give task a chance to end itself if it finds out that its socket is closed
+          //     vTaskDelete (socketTrafficInformation [i - LWIP_SOCKET_OFFSET].taskHandle);
+          // }
           return "socked closed.";
         }
 
         string __nohup__ (unsigned long timeOutSeconds) {
             __telnet_connection_time_out__ = timeOutSeconds * 1000;
-            return timeOutSeconds ? string ("Time-out set to ") + string (timeOutSeconds) + " seconds." : "Time-out set to infinite.";
+            return timeOutSeconds ? string ("Time-out set to ") + string (timeOutSeconds) + (char *) " seconds." : "Time-out set to infinite.";
         }
 
         const char *__reboot__ (bool softReboot) {
-            sendTelnet ("Rebooting ...");
+            sendTelnet ((char *) "Rebooting ...");
             delay (250);
             if (softReboot) {
                 ESP.restart ();
@@ -1034,39 +1047,15 @@
             closeConnection ();
             return "";  
         }
-
-      #ifdef __TIME_FUNCTIONS__
-
-        string __uptime__ () {
-            string s;
-            char c [15];
-            time_t t = getGmt ();
-            time_t uptime;
-            if (t) { // if time is set
-                struct tm strTime = timeToStructTime (timeToLocalTime (t));
-                sprintf (c, "%02i:%02i:%02i", strTime.tm_hour, strTime.tm_min, strTime.tm_sec);
-                s = string (c) + " up ";     
-            } else { // time is not set (yet), just read how far clock has come untill now
-                s = "Up ";
-            }
-            uptime = getUptime ();
-            int seconds = uptime % 60; uptime /= 60;
-            int minutes = uptime % 60; uptime /= 60;
-            int hours = uptime % 24;   uptime /= 24; // uptime now holds days
-            if (uptime) s += string ((unsigned long) uptime) + " days, ";
-            sprintf (c, "%02i:%02i:%02i", hours, minutes, seconds);
-            s += string (c);
-            return s;
-        }
   
         string __getDateTime__ () {
-            time_t t = getGmt ();
-            if (t) {
-                string r;
-                timeToString (r.c_str (), r.max_size (), timeToLocalTime (t));
-                return r;
-            }
-            return "The time has not been set yet.";  
+            time_t t = time (NULL);
+            if (t < 1687461154) return "The time has not been set yet."; // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
+            struct tm st;
+            localtime_r (&t, &st);
+            string s;
+            sprintf (s.c_str (), "%04i/%02i/%02i %02i:%02i:%02i", 1900 + st.tm_year, 1 + st.tm_mon, st.tm_mday, st.tm_hour, st.tm_min, st.tm_sec);
+            return s;
         }
     
         string __setDateTime__ (char *dt, char *tm) {
@@ -1077,13 +1066,43 @@
                 tm.tm_hour = h; tm.tm_min = m; tm.tm_sec = s;
                 time_t t = mktime (&tm); // time in local time
                 if (t != -1) {
-                    setLocalTime (t);
+                    #ifdef __TIME_FUNCTIONS__
+                        setTimeOfDay (t);
+                    #else
+                        // repeat most of the things what setTimeOfDay does (except setting __startupTime__) here
+                        struct timeval newTime = {t, 0};
+                        settimeofday (&newTime, NULL); 
+                    #endif
                     return __getDateTime__ ();          
                 }
             }
             return "Wrong format of date/time specified.";
         }         
-  
+
+      #ifdef __TIME_FUNCTIONS__
+
+        string __uptime__ () {
+            string s;
+            char c [15];
+            time_t t = time ();
+            time_t uptime;
+            if (t) { // if time is set
+                struct tm strTime = localTime (t);
+                sprintf (c, "%02i:%02i:%02i", strTime.tm_hour, strTime.tm_min, strTime.tm_sec);
+                s = string (c) + (char *) " up ";     
+            } else { // time is not set (yet), just read how far clock has come untill now
+                s = (char *) "Up ";
+            }
+            uptime = getUptime ();
+            int seconds = uptime % 60; uptime /= 60;
+            int minutes = uptime % 60; uptime /= 60;
+            int hours = uptime % 24;   uptime /= 24; // uptime now holds days
+            if (uptime) s += string ((unsigned long) uptime) + (char *) " days, ";
+            sprintf (c, "%02i:%02i:%02i", hours, minutes, seconds);
+            s += string (c);
+            return s;
+        }
+
         string __ntpdate__ (char *ntpServer = NULL) {
             string r;
             if (ntpServer) {
@@ -1093,14 +1112,14 @@
                 char *p = ntpDate ();
                 if (*p) return p; // ntpDate reported an error
             }
-            timeToString (r.c_str (), r.max_size (), getLocalTime ());
-            return string ("Time synchronized, currrent time is ") + r + ".";
+            ascTime (localTime (time (NULL)), r.c_str ());
+            return string ("Time synchronized, currrent time is ") + r + (char *) ".";
         }
 
         const char *__cronTab__ (telnetConnection *tcn) {
             xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
                 if (!__cronTabEntries__) {
-                    sendTelnet ("crontab is empty.");
+                    sendTelnet ((char *) "crontab is empty.");
                 } else {
                     for (int i = 0; i < __cronTabEntries__; i ++) {
                         string s;
@@ -1112,14 +1131,15 @@
                         if (__cronEntry__ [i].month == ANY)       s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month);       s += c; }
                         if (__cronEntry__ [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += c; }
                         if (__cronEntry__ [i].lastExecuted) {
-                                                                  timeToString (c, sizeof (c), __cronEntry__ [i].lastExecuted);
+                                                                  ascTime (gmTime (__cronEntry__ [i].lastExecuted), c);
                                                                   s += " "; s += c; s += " "; 
                                                             } else { 
                                                                   s += " (not executed yet)  "; 
                                                             }
                         if (__cronEntry__ [i].readFromFile)       s += " from /etc/crontab  "; else s += " entered from code  ";
                         s += __cronEntry__ [i].cronCommand;
-                        if (sendTelnet ("crontab is empty.") <= 0) break;
+                                                                  s += "\r\n";
+                        if (sendTelnet (s.c_str ()) <= 0) break;
                     }
                 }
             xSemaphoreGiveRecursive (__cronSemaphore__);
@@ -1146,7 +1166,7 @@
                         char c [25];
                         if (trueTime && __dmesgCircularQueue__ [i].time) {
                             #ifdef __TIME_FUNCTIONS__
-                                struct tm st = timeToStructTime (timeToLocalTime (__dmesgCircularQueue__ [i].time));
+                                struct tm st = localTime (__dmesgCircularQueue__ [i].time);
                             #else
                                 struct tm st = {};
                             #endif
@@ -1167,7 +1187,7 @@
                       tcn->recvTelnetChar (false); // read pending character
                       return ""; // return if user pressed Ctrl-C or any key
                     } 
-                  if (tcn->connectionTimeOut ()) { sendTelnet ("\r\nTime-out"); tcn->closeConnection (); return ""; }
+                  if (tcn->connectionTimeOut ()) { sendTelnet ((char *) "\r\nTime-out"); tcn->closeConnection (); return ""; }
               }
               // __dmesgEnd__ has changed which means that at least one new message has been inserted into dmesg circular queue menawhile
               {
@@ -1178,7 +1198,7 @@
                           char c [25];
                           if (trueTime && __dmesgCircularQueue__ [i].time) {
                               #ifdef __TIME_FUNCTIONS__
-                                  struct tm st = timeToStructTime (timeToLocalTime (__dmesgCircularQueue__ [i].time));
+                                  struct tm st = localTime (__dmesgCircularQueue__ [i].time);
                               #else
                                   struct tm st = {};
                               #endif
@@ -1210,15 +1230,15 @@
         string __telnet__ (char *server, int port, telnetConnection *tcn) {
           // get server address
           struct hostent *he = gethostbyname (server);
-          if (!he) return string ("gethostbyname() error: ") + string (h_errno) + " " + hstrerror (h_errno);
+          if (!he) return string ("gethostbyname() error: ") + string (h_errno) + (char *) " " + hstrerror (h_errno);
           // create socket
           int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
-          if (connectionSocket == -1) return string ("socket() error: ") + string (errno) + " " + strerror (errno);
+          if (connectionSocket == -1) return string ("socket() error: ") + string (errno) + (char *) " " + strerror (errno);
           
           // make the socket not-blocking so that time-out can be detected
           if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
               close (connectionSocket);
-              return string ("fcntl() error: ") + string (errno) + " "  + strerror (errno);
+              return string ("fcntl() error: ") + string (errno) + (char *) " "  + strerror (errno);
           }
           // connect to server
           struct sockaddr_in serverAddress;
@@ -1228,7 +1248,7 @@
           if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
               if (errno != EINPROGRESS) {
                   close (connectionSocket);
-                  return string ("connect() error: ") + string (errno) + " "  + strerror (errno);
+                  return string ("connect() error: ") + string (errno) + (char *) " "  + strerror (errno);
                 }
             } // it is likely that socket is not connected yet at this point
           // send information about IP used to connect to server back to client
@@ -1297,7 +1317,7 @@
           close (connectionSocket);
           // DEBUG: Serial.printf ("[%10lu] [__telnet__] disconnected from %s\n", millis (), server);
           if (sharedMemory.clientTimeOut) { tcn->closeConnection (); return ""; }
-          if (sharedMemory.clientError)   { sendTelnet ("\r\nTime-out"); tcn->closeConnection (); return ""; }
+          if (sharedMemory.clientError)   { sendTelnet ((char *) "\r\nTime-out"); tcn->closeConnection (); return ""; }
           // tell the client to go into character mode, not to echo and send its window size, just in case the other server has changed that
           return IAC WILL ECHO IAC WILL SUPPRESS_GO_AHEAD IAC DO NAWS "\r\nConnection to host lost.";
       }
@@ -1325,11 +1345,11 @@
       #ifdef __FILE_SYSTEM__        
 
         bool telnetUserHasRightToAccessFile (char *fullPath) { return strstr (fullPath, __homeDir__) == fullPath; }
-        bool telnetUserHasRightToAccessDirectory (char *fullPath) { return telnetUserHasRightToAccessFile (string (fullPath) + "/"); }
+        bool telnetUserHasRightToAccessDirectory (char *fullPath) { return telnetUserHasRightToAccessFile (string (fullPath) + (char *) "/"); }
         
         #if FILE_SYSTEM == FILE_SYSTEM_FAT
             const char *__mkfs__ (telnetConnection *tcn) {
-                if (sendTelnet ("formatting FAT file system, please wait ... ") <= 0) return ""; 
+                if (sendTelnet ((char *) "formatting FAT file system, please wait ... ") <= 0) return ""; 
                 fileSystem.unmount ();
                 if (fileSystem.formatFAT ()) {
                                                           return "formatted.";
@@ -1342,7 +1362,7 @@
 
         #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
             const char *__mkfs__ (telnetConnection *tcn) {
-                if (sendTelnet ("formatting LittleFs file system, please wait ... ") <= 0) return ""; 
+                if (sendTelnet ((char *) "formatting LittleFs file system, please wait ... ") <= 0) return ""; 
                 fileSystem.unmount ();
                 if (fileSystem.formatLittleFs ()) {
                                                           return "formatted.";
@@ -1406,7 +1426,7 @@
                         tcn->recvTelnetChar (false); // read pending character
                         return ""; // return if user pressed Ctrl-C or any key
                     } 
-                    if (tcn->connectionTimeOut ()) { sendTelnet ("\r\nTime-out"); tcn->closeConnection (); return ""; }
+                    if (tcn->connectionTimeOut ()) { sendTelnet ((char *) "\r\nTime-out"); tcn->closeConnection (); return ""; }
                 }
 
             } while (delaySeconds);
@@ -1536,9 +1556,9 @@
               switch (c) {
                 case 0: // Error
                 case 3: // Ctrl-C
-                        f.close (); return fp + " not fully written.";
+                        f.close (); return fp + (char *) " not fully written.";
                 case 4: // Ctrl-D or Ctrl-Z
-                        f.close (); return string ("\r\n") + fp + " written.";
+                        f.close (); return string ("\r\n") + fp + (char *) " written.";
                 case 13: // ignore
                         break;
                 case 10: // LF -> CRLF conversion
@@ -1549,7 +1569,7 @@
                         diskTrafficInformation.bytesWritten += 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                         // echo
-                        if (sendTelnet ("\r\n") <= 0) return "";
+                        if (sendTelnet ((char *) "\r\n") <= 0) return "";
                         break;
                 default: // character 
                         if (f.write ((uint8_t *) &c, 1) != 1) { 
@@ -1603,7 +1623,7 @@
                               case '\r':  // ignore
                                           break;
                               case '\n':  // LF-CRLF conversion
-                                          if (sendTelnet ("\r\n") <= 0) { f.close (); return ""; }
+                                          if (sendTelnet ((char *) "\r\n") <= 0) { f.close (); return ""; }
                                           break;
                               default:
                                           if (sendTelnet (&c, sizeof (c)) <= 0) { f.close (); return ""; }
@@ -1627,7 +1647,7 @@
                           f.close ();
                           return ""; // return if user pressed Ctrl-C or any key
                       }
-                      if (tcn->connectionTimeOut ()) { sendTelnet ("\r\nTime-out"); tcn->closeConnection (); return ""; } 
+                      if (tcn->connectionTimeOut ()) { sendTelnet ((char *) "\r\nTime-out"); tcn->closeConnection (); return ""; } 
                       delay (100);
                     }
                 } else {
@@ -1643,7 +1663,7 @@
             if (fp == "")                                   return "Invalid directory name.";
             if (!telnetUserHasRightToAccessDirectory (fp))  return "Access denyed.";
     
-            if (fileSystem.makeDirectory (fp))              return fp + " made.";
+            if (fileSystem.makeDirectory (fp))              return fp + (char *) " made.";
                                                             return string ("Can't make ") + fp;
         }
   
@@ -1655,7 +1675,7 @@
             if (fp == __homeDir__)                          return "You can't remove your home directory.";
             if (fp == __workingDir__)                       return "You can't remove your working directory.";
     
-            if (fileSystem.removeDirectory (fp))            return fp + " removed.";
+            if (fileSystem.removeDirectory (fp))            return fp + (char *) " removed.";
                                                             return string ("Can't remove ") + fp;
         }      
 
@@ -1746,7 +1766,7 @@
             if (fp == "" || !fileSystem.isFile (fp))  return "Invalid file name.";
             if (!telnetUserHasRightToAccessFile (fp)) return "Access denyed.";
 
-            if (fileSystem.deleteFile (fp))           return fp + " deleted.";
+            if (fileSystem.deleteFile (fp))           return fp + (char *) " deleted.";
             else                                      return string ("Can't delete ") + fp;
         }
 
@@ -1764,7 +1784,7 @@
           // 1. create a new file one if it doesn't exist (yet)
           if (!fileSystem.isFile (fp)) {
             File f = fileSystem.open (fp, "w", true);
-            if (f) { f.close (); if (sendTelnet ("\r\nFile created.") <= 0) return ""; }
+            if (f) { f.close (); if (sendTelnet ((char *) "\r\nFile created.") <= 0) return ""; }
             else return string ("Can't create ") + fp;
           }
   
@@ -1791,12 +1811,12 @@
                     case '\r':  break; // ignore
                     case '\n':  if (ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.push_back ("") != lines.OK) { // always leave at least 32 KB free for other things that may be running on ESP32
                                   f.close (); 
-                                  // debug: Serial.printf ("[telnet vi debug] lines read: %i, heap left: %i\n", lines.size (), ESP.getFreeHeap ());
-                                  return fp + " is too long. Out of memory"; 
+                                  // DEBUG: Serial.printf ("[telnet vi debug] lines read: %i, heap left: %i\n", lines.size (), ESP.getFreeHeap ());
+                                  return fp + (char *) " is too long. Out of memory"; 
                                 }
                                 if (lines.size () >= MAX_LINES) { 
                                   f.close (); 
-                                  return fp + " has too many lines for this simple text editor."; 
+                                  return fp + (char *) " has too many lines for this simple text editor."; 
                                 }
                                 break; 
                     case '\t':  if (!lines.size ()) if (lines.push_back ("") != lines.OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
@@ -1819,7 +1839,7 @@
   
           // 4. get information about client window size
           if (__clientWindowWidth__) { // we know that client reports its window size, ask for latest information (the user might have resized the window since beginning of telnet session)
-            if (sendTelnet (IAC DO NAWS) <= 0) return "";
+            if (sendTelnet ((char *) IAC DO NAWS) <= 0) return "";
             // client will reply in the form of: IAC (255) SB (250) NAWS (31) col1 col2 row1 row1 IAC (255) SE (240) but this will be handeled internally by readTelnet function
           } else { // just assume the defaults and hope that the result will be OK
             __clientWindowWidth__ = 80; 
@@ -1838,10 +1858,10 @@
           bool redrawAllLines = true;
           bool redrawLineAtCursor = false; 
           bool redrawFooter = true;
-          string message = string (" ") + string (lines.size ()) + " lines ";
+          string message = string (" ") + string (lines.size ()) + (char *) " lines ";
   
                                 // clear screen
-                                if (sendTelnet ("\x1b[2J") <= 0) return "";  // ESC[2J = clear screen
+                                if (sendTelnet ((char *) "\x1b[2J") <= 0) return "";  // ESC[2J = clear screen
   
           while (true) {
             // a. redraw screen 
@@ -1928,7 +1948,7 @@
             switch (c) {
               case 24:  // Ctrl-X
                         if (dirty) {
-                          string tmp = string ("\x1b[") + string (__clientWindowHeight__) + ";2H Save changes (y/n)? ";
+                          string tmp = string ("\x1b[") + string (__clientWindowHeight__) + (char *)  ";2H Save changes (y/n)? ";
                           if (sendTelnet (tmp) <= 0) return ""; 
                           redrawFooter = true; // overwrite this question at next redraw
                           while (true) {                                                     
@@ -1938,7 +1958,7 @@
                           }
                         } 
                         {
-                          string tmp = string ("\x1b[") + string (__clientWindowHeight__) + ";2H Share and Enjoy ----\r\n";
+                          string tmp = string ("\x1b[") + string (__clientWindowHeight__) + (char *) ";2H Share and Enjoy ----\r\n";
                           if (sendTelnet (tmp) <= 0) return "";
                         }                        
                         return ""; 
@@ -2139,28 +2159,28 @@
           if (!strcmp (__userName__, userName)) { // user changing password for himself
             // read current password
             __echo__ = false;
-            if (sendTelnet ("Enter current password: ") <= 0) return ""; 
-            if (recvTelnetLine (password1, sizeof (password1), true) != 10) { __echo__ = true;  return "\r\nPassword not changed."; }
+            if (sendTelnet ((char *) "Enter current password: ") <= 0)                                    return (char *) ""; 
+            if (recvTelnetLine (password1, sizeof (password1), true) != 10) { __echo__ = true;            return (char *) "\r\nPassword not changed."; }
             __echo__ = true;
             // check if password is valid for user
-            if (!userManagement.checkUserNameAndPassword (userName, password1))                                return "Wrong password."; 
+            if (!userManagement.checkUserNameAndPassword (userName, password1))                           return (char *) "Wrong password."; 
           } else {                         // root is changing password for another user
             // check if user exists with getUserHomeDirectory
             char homeDirectory [FILE_PATH_MAX_LENGTH + 1];
-            if (!userManagement.getHomeDirectory (homeDirectory, sizeof (homeDirectory), userName))        return "User name does not exist."; 
+            if (!userManagement.getHomeDirectory (homeDirectory, sizeof (homeDirectory), userName))       return (char *) "User name does not exist."; 
           }
           // read new password twice
           __echo__ = false;
-          if (sendTelnet ("\r\nEnter new password: ") <= 0) return ""; 
-          if (recvTelnetLine (password1, sizeof (password1), true) != 10)   { __echo__ = true;  return "\r\nPassword not changed."; }
-          if (sendTelnet ("\r\nRe-enter new password: ") <= 0) return ""; 
-          if (recvTelnetLine (password2, sizeof (password2), true) != 10)   { __echo__ = true;  return "\r\nPassword not changed."; }
+          if (sendTelnet ((char *) "\r\nEnter new password: ") <= 0)                                      return (char *) ""; 
+          if (recvTelnetLine (password1, sizeof (password1), true) != 10)   { __echo__ = true;            return (char *) "\r\nPassword not changed."; }
+          if (sendTelnet ((char *) "\r\nRe-enter new password: ") <= 0)                                   return (char *) ""; 
+          if (recvTelnetLine (password2, sizeof (password2), true) != 10)   { __echo__ = true;            return (char *) "\r\nPassword not changed."; }
           __echo__ = true;
           // check passwords
-          if (strcmp (password1, password2))                                                    return "\r\nPasswords do not match.";
+          if (strcmp (password1, password2))                                                              return (char *) "\r\nPasswords do not match.";
           // change password
-          if (userManagement.passwd (userName, password1))                                      return "\r\nPassword changed.";
-          else                                                                                  return "\r\nError changing password.";  
+          if (userManagement.passwd (userName, password1))                                                return (char *) "\r\nPassword changed.";
+          else                                                                                            return (char *) "\r\nError changing password.";  
         }
 
       #endif
@@ -2257,8 +2277,7 @@
                   dmesg ("[telnetServer] bind error: ", errno, strerror (errno));
                } else {
                  // mark socket as listening socket
-                 #define BACKLOG 4
-                 if (listen (ths->__listeningSocket__, TCP_LISTEN_BACKLOG) == -1) {
+                 if (listen (ths->__listeningSocket__, 4) == -1) {
                   dmesg ("[tlnetServer] listen error: ", errno, strerror (errno));
                  } else {
           
@@ -2274,6 +2293,7 @@
                       if (connectingSocket == -1) {
                         if (ths->__listeningSocket__ > -1) dmesg ("[telnetServer] accept error: ", errno, strerror (errno));
                       } else {
+                        socketTrafficInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
                         // prepare network Traffic measurement information
                         socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0};
                         // get client's IP address
@@ -2295,12 +2315,12 @@
                                 telnetConnection *tcn = new (std::nothrow) telnetConnection (connectingSocket, ths->__telnetCommandHandlerCallback__, clientIP, serverIP);
                                 if (!tcn) {
                                   dmesg ("[telnetConnection] service unavaliable");
-                                  sendAll (connectingSocket, telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
+                                  sendAll (connectingSocket, (char *) telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
                                   close (connectingSocket); // normally telnetConnection would do this but if it is not created we have to do it here
                                 } else {
                                   if (tcn->state () != telnetConnection::RUNNING) {
                                     dmesg ("[telnetConnection] service unavaliable");
-                                    sendAll (connectingSocket, telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
+                                    sendAll (connectingSocket, (char *) telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
                                     delete (tcn); // normally telnetConnection would do this but if it is not running we have to do it here
                                   }
                                 }

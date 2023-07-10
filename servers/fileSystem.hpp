@@ -64,12 +64,6 @@
     };
     diskTrafficInformationType diskTrafficInformation = {}; // measure disk Traffic on ESP32 level
 
-    #ifndef __TIME_FUNCTIONS__
-        // forward declaration of two time functions used here
-        time_t timeToLocalTime (time_t t);
-        struct tm timeToStructTime (time_t t);
-    #endif
-
 
     #if FILE_SYSTEM == FILE_SYSTEM_FAT
         #define __fileSystem__ FFat
@@ -95,15 +89,11 @@
             #endif
 
             #if FILE_SYSTEM == FILE_SYSTEM_FAT
-                [[deprecated("Use mountFAT or mountLittleFS instead.")]]  
                 bool mount (bool formatIfUnformatted) { return mountFAT (formatIfUnformatted); }
-
                 bool mountFAT (bool formatIfUnformatted) { 
             #endif
             #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
-                [[deprecated("Use mountFAT or mountLittleFS instead.")]]  
                 bool mount (bool formatIfUnformatted) { return mountLittleFs (formatIfUnformatted); }
-
                 bool mountLittleFs (bool formatIfUnformatted) { 
             #endif
 
@@ -126,8 +116,13 @@
                         }
                     }
                 }
-            
-                if (__mounted__) dmesg ("[fileSystem] mounted"); else dmesg ("[fileSystem] failed to mount");
+
+                #if FILE_SYSTEM == FILE_SYSTEM_FAT
+                    if (__mounted__) dmesg ("[fileSystem] FAT mounted"); else dmesg ("[fileSystem] failed to mount FAT");
+                #endif
+                #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+                    if (__mounted__) dmesg ("[fileSystem] LittleFS mounted"); else dmesg ("[fileSystem] failed to mount LittleFS");
+                #endif                
                 return __mounted__;
             }
 
@@ -156,7 +151,7 @@
 
             // reads entire configuration file in the buffer - returns success
             // it also removes \r characters, double spaces, comments, ...
-            bool readConfigurationFile (char *buffer, size_t bufferSize, char *fileName) {
+            bool readConfigurationFile (char *buffer, size_t bufferSize, const char *fileName) {
                 *buffer = 0;
                 int i = 0; // index in the buffer
                 bool beginningOfLine = true;  // beginning of line
@@ -202,7 +197,7 @@
                 return false; // can't open the file or it is a directory
             }  
 
-            bool deleteFile (char *fileName) {
+            bool deleteFile (const char *fileName) {
                 if (!__fileSystem__.remove (fileName)) {
                     dmesg ("[fileSystem] unable to delete ", fileName); 
                     return false;
@@ -210,7 +205,7 @@
                 return true;    
             }
   
-            bool makeDirectory (char *directory) {
+            bool makeDirectory (const char *directory) {
                 if (!__fileSystem__.mkdir (directory)) {
                     dmesg ("[fileSystem] unable to make ", directory);
                     return false;
@@ -218,7 +213,7 @@
                 return true;    
             }
 
-            bool removeDirectory (char *directory) {
+            bool removeDirectory (const char *directory) {
                 if (!__fileSystem__.rmdir (directory)) {
                     dmesg ("[fileSystem] unable to remove ", directory);
                     return false;
@@ -234,8 +229,8 @@
                 return true; 
             }
 
-            string makeFullPath (char *relativePath, char *workingDirectory) { 
-                char *p = relativePath [0] ? relativePath : (char *) "/"; // relativePath should never be empty
+            string makeFullPath (const char *relativePath, const char *workingDirectory) { 
+                char *p = relativePath [0] ? (char *) relativePath : (char *) "/"; // relativePath should never be empty
 
                 string s;
                 if (p [0] == '/') { // if path begins with / then it is already supposed to be fullPath
@@ -257,7 +252,7 @@
                 // resolve (possibly multiple) ..
                 int i = 0;
                 while (i >= 0) {
-                    switch ((i = s.indexOf ("/.."))) {
+                    switch ((i = s.indexOf ((char *) "/.."))) {
                         case -1:  return s;  // no .. found, nothing to resolve any more
                         case  0:  return ""; // s begins with /.. - error in path
                         default:             // restructure path
@@ -271,7 +266,7 @@
                 return ""; // never executes
             }
 
-            bool isDirectory (char *fullPath) {
+            bool isDirectory (const char *fullPath) {
                 bool b = false;
                 File f = open (fullPath, "r", false);
                 if (f) {
@@ -281,7 +276,7 @@
                 return b;
             }
   
-            bool isFile (char *fullPath) {
+            bool isFile (const char *fullPath) {
                 bool b = false;
                 File f = open (fullPath, "r", false);
                 if (f) {
@@ -291,14 +286,14 @@
                 return b;
             }
 
-            string fileInformation (char *fileOrDirectory, bool showFullPath = false) { // returns UNIX like text with file information
+            string fileInformation (const char *fileOrDirectory, bool showFullPath = false) { // returns UNIX like text with file information
                 string s;
                 File f = open (fileOrDirectory, "r", false);
                 if (f) { 
                     unsigned long fSize = 0;
                     struct tm fTime = {};
-                    time_t lTime = f.getLastWrite (); if (lTime) lTime = timeToLocalTime (lTime);
-                    fTime = timeToStructTime (lTime);
+                    time_t lTime = f.getLastWrite ();
+                    localtime_r (&lTime, &fTime);
                     sprintf (s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // string = fsString<350> so we have enough space
                     strftime (s.c_str () + strlen (s.c_str ()), 25, " %b %d %H:%M      ", &fTime);  
                     #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS  // f.name contains only a file name without a path
@@ -328,11 +323,30 @@
     // create a working instance before including time_functions.h, time_functions.h will use the fileSystem instance
     fileSys fileSystem;
 
-    #ifndef __TIME_FUNCTIONS__
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "Implicitly including time_functions.h (needed to display file times)"
-        #endif
-        #include "time_functions.h"
-    #endif
+    // strBetween function, usefull for parsing configuration files content
+
+    char *strBetween (char *buffer, size_t bufferSize, char *src, const char *left, const char *right) { // copies substring of src between left and right to buffer or "" if not found or buffer too small, return bufffer
+      *buffer = 0;
+      char *l, *r;
+
+      if (*left) l = strstr (src, left);
+      else l = src;
+      
+      if (l) {  
+        l += strlen (left);
+
+        if (*right) r = strstr (l, right);
+        else r = l + strlen (l);
+        
+        if (r) { 
+          int len = r - l;
+          if (len < bufferSize - 1) { 
+            strncpy (buffer, l, len); 
+            buffer [len] = 0; 
+          }
+        }
+      }    
+      return buffer;                                                     
+    }
 
 #endif

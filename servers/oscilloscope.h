@@ -7,7 +7,7 @@
     Issues:
             - when WiFi is in WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
 
-    May 1, 2023, Bojan Jurca
+    June 25, 2023, Bojan Jurca
              
 */
 
@@ -125,7 +125,7 @@
     
           lastSampleTime = unitIsMicroSeconds ? micros () : millis ();
           oscSample lastSample; 
-          if (doAnalogRead) lastSample = {adc1_get_raw (adcchannel1), gpio2 < 100 ? adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid 
+          if (doAnalogRead) lastSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) 0}; else lastSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) 0}; // gpio1 should always be valid 
           
           if (unitIsMicroSeconds) delayMicroseconds (samplingTime); else delay (samplingTime); 
 
@@ -134,7 +134,7 @@
             unsigned long newSampleTime = unitIsMicroSeconds ? micros () : millis ();
             oscSample newSample; 
             // if (doAnalogRead) newSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
-            if (doAnalogRead) newSample = {adc1_get_raw (adcchannel1), gpio2 < 100 ? adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
+            if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, (int16_t) (screenTime = newSampleTime - lastSampleTime)}; // gpio1 should always be valid 
 
             if ((positiveTrigger && lastSample.signal1 < positiveTriggerTreshold && newSample.signal1 >= positiveTriggerTreshold) || (negativeTrigger && lastSample.signal1 > negativeTriggerTreshold && newSample.signal1 <= negativeTriggerTreshold)) { // only gpio1 is used to trigger the sampling 
               // insert both samples into read buffer
@@ -186,7 +186,7 @@
           lastSampleTime = newSampleTime;        
           oscSample newSample; 
           // if (doAnalogRead) newSample = {(int16_t) analogRead (gpio1), gpio2 < 100 ? (int16_t) analogRead (gpio2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
-          if (doAnalogRead) newSample = {adc1_get_raw (adcchannel1), gpio2 < 100 ? adc1_get_raw (adcchannel2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
+          if (doAnalogRead) newSample = {(int16_t) adc1_get_raw (adcchannel1), gpio2 < 100 ? (int16_t) adc1_get_raw (adcchannel2) : (int16_t) -1, deltaTime}; else newSample = {(int16_t) digitalRead (gpio1), gpio2 < 100 ? (int16_t) digitalRead (gpio2) : (int16_t) -1, deltaTime}; // gpio1 should always be valid 
 
           readBuffer->samples [readBuffer->sampleCount] = newSample;
           readBuffer->sampleCount = (readBuffer->sampleCount + 1) & 0b00111111; // 0 .. 63 max (which is inside buffer size) - just in case, the number of samples will never exceed 41  
@@ -271,6 +271,13 @@
       // start analog sampling on GPIO 22, 23 every 100 ms screen width = 400 ms set positive slope trigger to 512 set negative slope trigger to 0
       string s = webSocket->readString (); 
 
+      if (s == "") {
+        #ifdef __DMESG__
+          dmesg ("[oscilloscope] communication does not follow oscilloscope protocol. Expected start oscilloscope parameters.");
+        #endif
+        webSocket->sendString ("[oscilloscope] communication does not follow oscilloscope protocol. Expected start oscilloscope parameters."); // send error also to javascript client
+        return;
+      }
       
       // try to parse what we have got from client
       char posNeg1 [9] = "";
@@ -309,7 +316,7 @@
           case 35: sharedMemory.adcchannel1 = ADC1_CHANNEL_7; break;
           // ADC2 (GPIOs 4, 0, 2, 15, 13, 12, 14, 27, 25, 26), reading blocks when used together with WiFi 
           // other GPIOs do not have ADC
-          default:  webSocket->sendString (string ("[oscilloscope] can't analogRead GPIO ") + string (sharedMemory.gpio1) + "."); // send error also to javascript client
+          default:  webSocket->sendString (string ("[oscilloscope] can't analogRead GPIO ") + string (sharedMemory.gpio1) + (char *) "."); // send error also to javascript client
                     return;  
         }
         switch (sharedMemory.gpio2) {
@@ -326,7 +333,7 @@
           case 255: break;
           // ADC2 (GPIOs 4, 0, 2, 15, 13, 12, 14, 27, 25, 26), reading blocks when used together with WiFi 
           // other GPIOs do not have ADC
-          default:  webSocket->sendString (string ("[oscilloscope] can't analogRead GPIO ") + string (sharedMemory.gpio2) + "."); // send error also to javascript client
+          default:  webSocket->sendString (string ("[oscilloscope] can't analogRead GPIO ") + string (sharedMemory.gpio2) + (char *) "."); // send error also to javascript client
                     return;  
         }        
       }
