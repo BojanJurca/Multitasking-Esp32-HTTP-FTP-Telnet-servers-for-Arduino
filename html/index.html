@@ -17,18 +17,18 @@
 		h1 {font-family: verdana; font-size: 40px; text-align: center}
 
 		/* define grid for controls - we'll use d2 + d5 or d3 + d4 + d5 */
-		div.d1 {position: relative; width: 100%; height: 40px; font-family: verdana; font-size: 30px; color: #2597f4;}
-		div.d2 {position: relative; float: left; width: 60%; font-family: verdana; font-size: 30px; color: gray;}
-		div.d3 {position: relative; float: left; width: 45%; font-family: verdana; font-size: 30px; color: gray;}
-		div.d4 {position: relative; float: left; width: 15%; font-family: verdana; font-size: 30px; color: black;}
-		div.d5 {position: relative; float: left; width: 40%; font-family: verdana; font-size: 30px; color: black;}
+		div.d1 {position: relative; height: 65px; width: 100%; font-family: verdana; font-size: 30px; color: hsl(207, 90%, 30%);}
+		div.d2 {position: relative; float: left;  width:  60%; font-family: verdana; font-size: 30px; color: gray;}
+		div.d3 {position: relative; float: left;  width:  40%; font-family: verdana; font-size: 30px; color: gray;}
+		div.d4 {position: relative; float: left;  width:  20%; font-family: verdana; font-size: 30px; color: black;}
+		div.d5 {position: relative; float: left;  width:  40%; font-family: verdana; font-size: 30px; color: black;}
 
 		/* nice switch control */
 		.switch {position: relative; display: inline-block; width: 60px; height: 34px}
 		.slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
 		.slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
-		input:checked+.slider {background-color: #2196F3}
-		input:focus+.slider {box-shadow: 0 0 1px #2196F3}
+		input:checked+.slider {background-color: hsl(207, 90%, 30%) }
+		input:focus+.slider {box-shadow: 0 0 1px hsl(207, 90%, 30%) }
 		input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
 		.switch input {display: none}
 		.slider.round {border-radius: 34px}
@@ -36,7 +36,7 @@
 		input:disabled+.slider {background-color: #aaa}
 
 		a:link, a:visited {color: gray; text-decoration: none; cursor: auto;}
-		a:hover {color: #2196F3; cursor:pointer; }
+		a:hover {color: hsl(207, 90%, 30%); cursor:pointer; }
 		a:link:active, a:visited:active {color: gray;}
 
 	</style>
@@ -51,27 +51,27 @@
 	</div>
 	<hr />
 	<div class='d1'>
-		<div class='d2'>&nbspBuilt-in LED <small>(the use of nice controls)</small></div>
+		<div class='d2'>&nbsp;Built-in LED<br>&nbsp;<small><small>Use of nice controls.</small></small></div>
 		<div class='d5'>
-			<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed(this.checked)'><div class='slider round'></div></label>
+			<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed (this.checked)'><div class='slider round'></div></label>
 		</div>
 	</div>
 	<hr />
 	<div class='d1'>
-		<div class='d2'>&nbspUp time <small>(test code stability)</small></div>
+		<div class='d2'>&nbsp;Up time<br>&nbsp;<small><small>Test code stability.</small></small></div>
 		<div class='d5' id='upTime'>...</div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px;'>
-		<div class='d3'>&nbspFree heap <small>(find memory leaks)</small></div>
+	<div class='d1'>
+		<div class='d3'>&nbsp;Free heap<br>&nbsp;<small><small>Find memory leaks.</small></small></div>
 		<div class='d4' id='freeHeap'>...</div>
-		<div class='d5'><canvas id='freeHeapGraph' width='480' height='46'></canvas></div>
+		<div class='d5'><canvas id='freeHeapGraph' height='62'></canvas></div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px;'>
-		<div class='d3'>&nbspHTTP requests <small>(measurements)</small></div>
+	<div class='d1'>
+		<div class='d3'>&nbsp;HTTP requests<br>&nbsp;<small><small>Measurements.</small></small></div>
 		<div class='d4' id='httpRequestCount'>...</div>
-		<div class='d5'><canvas id='httpRequestCountGraph' width='480' height='46'></canvas></div>	
+		<div class='d5'><canvas id='httpRequestCountGraph' height='62'></canvas></div>	
 	</div>
 	<hr />
 
@@ -80,22 +80,22 @@
 		<b>HTML/WebSocket <small>data streaming from ESP32</small></b>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px;'>
-		<div class='d3'>&nbspRSSI <small>(find connectivity problems)</small></div>
+	<div class='d1'>
+		<div class='d3'>&nbsp;RSSI<br>&nbsp;<small><small>Find connectivity problems.</small></small></div>
 		<div class='d4' id='rssi'>...</div>
-		<div class='d5'><canvas id='rssiGraph' width='480' height='46'></canvas></div>	
+		<div class='d5'><canvas id='rssiGraph' height='62'></canvas></div>	
 	</div>
 	<hr /> 
 
 	<script type='text/javascript'>
 
-		let freeHeapTO;
-		let httpRequestCountTO;
+		var freeHeapTO;
+		var httpRequestCountTO;
 
 		// correct canvas scaling and sizes
 		function resizeCanvases () {
-			let canvasWidth = document.getElementById ('upTime').clientWidth;
-			let canvasScaleWidth = canvasWidth / 500;
+			var canvasWidth = document.getElementById ('upTime').clientWidth;
+			var canvasScaleWidth = canvasWidth / 500;
 			document.getElementById ('freeHeapGraph').width = canvasWidth;
 			document.getElementById ('httpRequestCountGraph').width = canvasWidth;
 			document.getElementById ('rssiGraph').width = canvasWidth;
@@ -118,37 +118,47 @@
 		});
 
 		// mechanism that makes REST calls and get their replies
-		let httpClient = function () {
+		var httpClient = function () {
 			this.request = function (url, method, callback) {
-				let httpRequest = new XMLHttpRequest ();
-				let httpRequestTimeout;
+				var httpRequest = new XMLHttpRequest ();
+				var httpRequestTimeout = null;
+				
 				httpRequest.onreadystatechange = function () {
 					// console.log (httpRequest.readyState);
 					if (httpRequest.readyState == 1) { // 1 = OPENED, start timing
-						httpRequestTimeout = setTimeout (function () { alert ('Server did not reply (in time).'); }, 3000);
-					}
-					else if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
 						clearTimeout (httpRequestTimeout);
-						if (httpRequest.status == 200) callback (httpRequest.responseText); // 200 = OK
-						else if (httpRequest.status != 0) alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
+						httpRequestTimeout = setTimeout (function () { 
+							alert ('Server did not reply (in time).'); 
+							// errorMessage ('Server did not reply (in time).');
+						}, 5000);
+					}
+					if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
+						clearTimeout (httpRequestTimeout);
+						if (httpRequest.status == 200) {
+							callback (httpRequest.responseText); // 200 = OK
+						} else {
+							alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
+							// errorMessage ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText);
+						}
 					}
 				}
 				httpRequest.open (method, url, true);
 				httpRequest.send (null);
 			}
 		}
-		let client = new httpClient ();
+
+		var client = new httpClient ();
 
 		function getAndRefreshLedState () { // read led state from ESP and refresh GUI
 			client.request ('/builtInLed', 'GET', function (json) {refreshLedState (json);});
 		}
 
 		function turnLed (switchIsOn) { // send desired led state to ESP and refresh GUI
-			client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off' , 'PUT', function (json) {refreshLedState(json);});
+			client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off' , 'PUT', function (json) {refreshLedState (json);});
 		}
 
 		function refreshLedState (json) { // refresh ledSwitch state with latest information from ESP
-			let obj = JSON.parse (json);
+			var obj = JSON.parse (json);
 			document.getElementById ('ledSwitch').disabled = false; 
 			document.getElementById ('ledSwitch').checked = (obj.builtInLed == 'on');
 		}
@@ -161,48 +171,49 @@
 
 		function lineGraph(json,contextId,graphColour){
 
-			let obj=JSON.parse(json);
-			if (obj.value.length==0) return '';
-			let retVal=obj.value[0];
-			let minVal=parseInt(obj.value[0]);
-			let maxVal=parseInt(obj.value[0]);
-			for(i=1;i<obj.value.length;i++){
-				let m=parseInt(obj.value[i]);
-				if (minVal>m) minVal=m;
-				if (maxVal<m) maxVal=m;
+			var obj=JSON.parse (json);
+			if (obj.value.length == 0) return '';
+			var retVal = obj.value [0];
+			var minVal = parseInt (obj.value [0]);
+			var maxVal = parseInt (obj.value [0]);
+			for (i = 1; i < obj.value.length; i++){
+				var m = parseInt (obj.value [i]);
+				if (minVal > m) minVal = m;
+				if (maxVal < m) maxVal = m;
 			}
-			let midVal;
-			if (minVal==maxVal){
-				minVal--;
-				midVal=maxVal;
-				maxVal++;
+			var midVal;
+			if (minVal == maxVal){
+				minVal --;
+				midVal = maxVal;
+				maxVal ++;
 			} else {
-				if ((maxVal-minVal) % 2 == 1) maxVal++;
-				midVal=(minVal+maxVal)/2;
+				if ((maxVal - minVal) % 2 == 1) maxVal ++;
+				midVal=(minVal + maxVal) / 2;
 			}
-			let fx=18; if (obj.value.length>24) fx=7.5;
-			let ox=22;
-			let fy=25/(minVal-maxVal);
-			oy=30-fy*minVal;
-			let c=document.getElementById(contextId);
-			let ctx=c.getContext('2d');
-			ctx.clearRect(0,0,500,c.height); // c.width is not neccessary 500
-			ctx.font='10px Verdana';
-			ctx.fillText(maxVal,10,10);
-			ctx.fillText(midVal,10,22);
-			ctx.fillText(minVal,10,34);
-			for(i=0;i<obj.scale.length;i++){
-				ctx.fillText(obj.scale[i], ox + fx * (i + 1) - 5,46);
+			var c = document.getElementById (contextId);
+			var ctx = c.getContext ('2d');
+
+			var ox = 30;
+			var fx = 18; if (obj.value.length > 24) fx = (c.width - ox - 3) / 60;
+			var fy = (c.height - 20) / (minVal - maxVal);
+			oy = c.height - 20 + 2 - fy * minVal; // leave 2 * text height free, 2 is half of linegraph width
+			ctx.clearRect (0, 0, 500, c.height); // c.width is not neccessary 500
+			ctx.font = '10px Verdana';
+			ctx.fillText (maxVal, 10, 10);
+			ctx.fillText (midVal, 10, c.height / 2);
+			ctx.fillText (minVal, 10, c.height - 10);
+			for (i = 0; i < obj.scale.length; i++) {
+				ctx.fillText (obj.scale [i], ox + fx * (i + 1) - 5, c.height);
 			}
-			ctx.beginPath();
-			ctx.moveTo(ox + fx,oy + fy * parseInt(obj.value[0]));
-			for(i = 1;i < obj.value.length;i++){
-				ctx.lineTo(ox + fx * (i + 1),oy + fy * parseInt(obj.value[i]));
-				retVal=obj.value[i];
+			ctx.beginPath ();
+			ctx.moveTo (ox + fx,oy + fy * parseInt (obj.value [0]));
+			for(i = 1; i < obj.value.length; i++){
+				ctx.lineTo (ox + fx * (i + 1), oy + fy * parseInt (obj.value [i]));
+				retVal = obj.value [i];
 			}
-			ctx.lineWidth=3;
-			ctx.strokeStyle=graphColour;
-			ctx.stroke();
+			ctx.lineWidth = 4;
+			ctx.strokeStyle = graphColour;
+			ctx.stroke ();
 			return retVal;
 		}
 
@@ -227,20 +238,20 @@
 		// a function that dispalys nice graphs from JSON let's just keep all the data in 
 		// JSON
 
-		let rssiSamples = 0;
-		let rssiSeconds = 0;
-		let rssiScaleJson = '';
-		let rssiValueJson = '';
+		var rssiSamples = 0;
+		var rssiSeconds = 0;
+		var rssiScaleJson = '';
+		var rssiValueJson = '';
 
 			if ('WebSocket' in window) {
-				let ws = new WebSocket ('ws://' + self.location.host + '/rssiReader'); // open webSocket connection
+				var ws = new WebSocket ('ws://' + self.location.host + '/rssiReader'); // open webSocket connection
 				ws.onopen = function () {;};
 				ws.onmessage = function (evt) { 
 					if (evt.data instanceof Blob) { // RSSI readings as 1 byte binary data
 						// receive binary data as blob and then convert it into array
-						let myByteArray = null;
-						let myArrayBuffer = null;
-						let myFileReader = new FileReader ();
+						var myByteArray = null;
+						var myArrayBuffer = null;
+						var myFileReader = new FileReader ();
 						myFileReader.onload = function (event) 	{
 							myArrayBuffer = event.target.result;
 							myByteArray = new Int8Array (myArrayBuffer); // <= RSSI information is now in the array of size 1
@@ -261,7 +272,7 @@
 								rssiValueJson += ',"' + myByteArray [0].toString () + '"';
 								if (rssiSamples >= 60) {
 									rssiSamples --;
-									let i;
+									var i;
 									i = rssiScaleJson.indexOf (','); rssiScaleJson = rssiScaleJson.substring (i + 1);
 									i = rssiValueJson.indexOf (','); rssiValueJson = rssiValueJson.substring (i + 1);
 								}
@@ -282,28 +293,28 @@
 	<br><br><h1><small>Web server examples</small></h1><br>
 
 	<hr />
-	<div class='d1' style='color: gray;'>
-		&nbsp&nbsp<a href="/example01.html">example01.html</a>&nbsp&nbsp<small><small>Dynamically generated HTML page.</small></small>
+	<div class='d1' style='height: 48px; color: gray;'>
+		&nbsp;&nbsp;<a href="/example01.html">example01.html</a>&nbsp;&nbsp;<small><small>Dynamically generated HTML page.</small></small>
 	</div>
 	<hr />
-	<div class='d1' style='color: gray;'>
-		&nbsp&nbsp<a href="/example02.html">example02.html</a>&nbsp&nbsp<small><small>Static HTML page (.html file) calling REST functions.</small></small>
+	<div class='d1' style='height: 48px; color: gray;'>
+		&nbsp;&nbsp;<a href="/example02.html">example02.html</a>&nbsp;&nbsp;<small><small>Static HTML page (.html file) calling REST functions.</small></small>
 	</div>
 	<hr />
-	<div class='d1' style='color: gray;'>
-		&nbsp&nbsp<a href="/example03.html">example03.html</a>&nbsp&nbsp<small><small>Checkbox in static HTML page (.html file) calling REST functions.</small></small>
+	<div class='d1' style='height: 48px; color: gray;'>
+		&nbsp;&nbsp;<a href="/example03.html">example03.html</a>&nbsp;&nbsp;<small><small>Checkbox calling REST functions.</small></small>
 	</div>
 	<hr />
-	<div class='d1' style='color: gray;'>
-		&nbsp&nbsp<a href="/example04.html">example04.html</a>&nbsp&nbsp<small><small>Stylish checkbox in static HTML page (.html file) calling REST functions.</small></small>
+	<div class='d1' style='height: 48px; color: gray;'>
+		&nbsp;&nbsp;<a href="/example04.html">example04.html</a>&nbsp;&nbsp;<small><small>Stylish checkbox calling REST functions.</small></small>
 	</div>
 	<hr />
-	<div class='d1' style='color: gray;'>
-		&nbsp&nbsp<a href="/example05.html">example05.html</a>&nbsp&nbsp<small><small>Nice web GUI controls.</small></small>
+	<div class='d1' style='height: 48px; color: gray;'>
+		&nbsp;&nbsp;<a href="/example05.html">example05.html</a>&nbsp;&nbsp;<small><small>Nice web GUI controls.</small></small>
 	</div>
 	<hr />
-	<div class='d1' style='color: gray;'>
-		&nbsp<a href="/oscilloscope.html">oscilloscope.html</a>&nbsp&nbsp<small><small>See what is going on within your ESP32 project.</small></small>
+	<div class='d1' style='height: 48px; color: gray;'>
+		&nbsp;&nbsp;<a href="/oscilloscope.html">oscilloscope.html</a>&nbsp;&nbsp;<small><small>See what is going on within your ESP32 project.</small></small>
 	</div>
 
 	<hr />
