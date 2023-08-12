@@ -23,8 +23,11 @@
 
 
 // 2. FILE SYSTEM:     #define which file system you want to use 
-    // the file system must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
-    #define FILE_SYSTEM    FILE_SYSTEM_LITTLEFS // or FILE_SYSTEM_FAT
+    // the file system must correspond to Tools | Partition scheme setting: FILE_SYSTEM_FAT (for FAT partition scheme), FILE_SYSTEM_LITTLEFS (for SPIFFS partition scheme) or FILE_SYSTEM_SD_CARD (if SC card is attached)
+    // FAT file system can be bitwise combined with FILE_SYSTEM_SD_CARD, like #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+    /// #define FILE_SYSTEM FILE_SYSTEM_FAT
+
+    #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
 
 
 // 3. NETWORK:     #define how ESP32 will use the network
@@ -79,8 +82,10 @@
 
 // backward compatibility
 
-[[deprecated("Replaced by fileSystem.mount(bool)")]]
-bool mountFileSystem (bool formatIfUnformatted) { return fileSystem.mount (formatIfUnformatted); }
+ #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT || (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+    [[deprecated("Replaced by fileSystem.mount(bool)")]]
+    bool mountFileSystem (bool formatIfUnformatted) { return fileSystem.mount (formatIfUnformatted); }
+#endif
 
 [[deprecated("Replaced by userManagement.initialize()")]]
 void initializeUsers () { userManagement.initialize (); }

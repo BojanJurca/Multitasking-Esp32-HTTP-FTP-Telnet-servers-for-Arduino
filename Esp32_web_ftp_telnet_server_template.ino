@@ -9,7 +9,7 @@
 
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
      
-    May 1, 2023, Bojan Jurca
+    August 12, 2023, Bojan Jurca
            
 */
 
@@ -219,12 +219,15 @@ void setup () {
   Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
 
   // fileSystem.format (); Serial.printf ("\nFormatting file system ...\n\n"); // format flash disk to start everithing from the scratch
-  #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+  #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
       fileSystem.mountLittleFs (true);                                      // this is the first thing to do - all configuration files reside on the file system
   #endif
-  #if FILE_SYSTEM == FILE_SYSTEM_FAT
-      fileSystem.mountFAT (true);                                           // this is the first thing to do - all configuration files reside on the file system
+  #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
+     fileSystem.mountFAT (true);                                            // this is the first thing to do - all configuration files reside on the file system
   #endif  
+  #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+      fileSystem.mountSD ("/SD", 5);                                        // SD Card if attached, provice mount poind and CS pin
+  #endif
 
   // fileSystem.deleteFile ("/usr/share/zoneinfo");                         // contains timezone information           - deleting this file would cause creating default one
   // fileSystem.deleteFile ("/etc/ntp.conf");                               // contains ntp server names for time sync - deleting this file would cause creating default one
@@ -249,7 +252,8 @@ void setup () {
                                              wsRequestHandler,                // a callback function that will handle WS requests, NULL to ignore WS requests
                                              (char *) "0.0.0.0",              // start HTTP server on all available IP addresses
                                              80,                              // default HTTP port
-                                             NULL);                           // we won't use firewallCallback function for HTTP server
+                                             NULL,                            // we won't use firewallCallback function for HTTP server
+                                             (char *) "/var/www/html");       // httpServer root directory
     if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
   #endif
   

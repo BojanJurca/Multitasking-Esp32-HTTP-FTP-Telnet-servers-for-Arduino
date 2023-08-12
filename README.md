@@ -11,14 +11,14 @@
 
    - A Web-based Oscilloscope is already built-in which can help you see the signals on your Esp32 pins at run-time (accessible through Http server).
 
-Demo ESP32 server is available at [193.77.159.208](http://193.77.159.208)
+Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.si)
 
 
 
 ## The latest changes
 
 
-The latest changes are mainly about time zones. The servers now rely on TZ environment variable (set by setenv () and tzset () functions), so all the time zones form https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
+The latest changes implement support for SD cards. File system can reside entirely or partially on a SD card. Http server can now look for .html and other files also there.
 
 ![Screenshot](presentation.gif)
 
