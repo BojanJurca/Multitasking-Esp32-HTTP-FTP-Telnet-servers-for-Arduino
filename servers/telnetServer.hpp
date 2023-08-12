@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    June 25, 2023, Bojan Jurca
+    August 12, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -75,6 +75,7 @@
 
     #define TELNET_SERVER_STACK_SIZE 2 * 1024                   // TCP listener
     #define TELNET_CONNECTION_STACK_SIZE 10 * 1024              // each TCP connection
+    // #define TELNET_SERVER_CORE 1 // 1 or 0                   // #define TELNET_SERVER_CORE if you want telnetServer to run on specific core
     #define TELNET_CMDLINE_BUFFER_SIZE 128                      // reading and temporary keeping telnet command lines
     #define TELNET_CONNECTION_TIME_OUT 300000                   // 300000 ms = 5 min
     #define TELNET_SESSION_MAX_ARGC 24                          // max number of arguments in command line
@@ -165,13 +166,15 @@
                             strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
                             // handle connection in its own thread (task)       
                             #define tskNORMAL_PRIORITY 1
-                            xTaskHandle taskHandle;
-                            socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET] = {};
-                            if (pdPASS != xTaskCreate (__connectionTask__, "telnetConnection", TELNET_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, &taskHandle)) {
+                            #ifdef TELNET_SERVER_CORE
+                                BaseType_t taskCreated = xTaskCreatePinnedToCore (__connectionTask__, "telnetConnection", TELNET_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, TELNET_SERVER_CORE);
+                            #else
+                                BaseType_t taskCreated = xTaskCreate (__connectionTask__, "telnetConnection", TELNET_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                            #endif
+                            if (pdPASS != taskCreated) {
                                 dmesg ("[telnetConnection] xTaskCreate error");
                             } else {
                                 __state__ = RUNNING;
-                                socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET].startMillis = millis ();
                             }
 
                           }
@@ -819,8 +822,9 @@
                               "\r\n      help"
                               "\r\n      clear"
                               "\r\n      uname"
-                              "\r\n      free [<n>]   (where 0 < n <= 3600)"
+                              "\r\n      free [<n>]    (where 0 < n <= 3600)"
                               "\r\n      nohup [<n>]   (where 0 < n <= 3600)"
+                              "\r\n      reboot [-h]   (-h for hard reset)"
                               "\r\n      quit"
                               #ifdef __DMESG__
                                 "\r\n  dmesg circular queue:"
@@ -1016,11 +1020,6 @@
             dmesg ("[telnet] close() error: ", errno, strerror (errno));               
             return string ("Error: ") + string (errno) + (char *) " " + strerror (errno);
           }
-          // if there is a task associated with a socket kill it as well
-          // if (socketTrafficInformation [i - LWIP_SOCKET_OFFSET].taskHandle) {
-          //     delay (1000); // give task a chance to end itself if it finds out that its socket is closed
-          //     vTaskDelete (socketTrafficInformation [i - LWIP_SOCKET_OFFSET].taskHandle);
-          // }
           return "socked closed.";
         }
 
@@ -1264,31 +1263,63 @@
           // for client <- ESP32 <- server direction we'll start a new one
           struct __telnetSharedMemory__ sharedMemory = {connectionSocket, __connectionSocket__, __telnet_connection_time_out__, false, false, false, false};
           #define tskNORMAL_PRIORITY 1
-          if (pdPASS != xTaskCreate ( [] (void *param)  { // client <- ESP32 <- server data transfer
-                                                          struct __telnetSharedMemory__ *sharedMemory = (struct __telnetSharedMemory__ *) param;
-                                                          while (!sharedMemory->threadTowardsServerFinished) { // while the other task is running
-                                                              char buffer [512];
-                                                              int readTotal = recvAll (sharedMemory->socketTowardsServer, buffer, sizeof (buffer), NULL, sharedMemory->time_out);
-                                                              if (readTotal <= 0) {
-                                                                  // error while reading data from server, we don't care if it is time-out or something else
-                                                                  break;
-                                                              } else {
-                                                                  if (sendAll (sharedMemory->socketTowardsClient, buffer, readTotal, sharedMemory->time_out) <= 0) {
-                                                                      // error while writing data to client, we don't care if it is time-out or something else
-                                                                      dmesg ("[telnetConnection] send (to other telnet server) error: ", errno, strerror (errno));
-                                                                      break;
-                                                                  }
-                                                              }
-                                                              delay (1);
-                                                          }
-                                                          sharedMemory->threadTowardsClientFinished = true; // signal the other task that this task has stopped
-                                                          vTaskDelete (NULL);
-                                                        }, 
-                                      __func__, 
-                                      4068, 
-                                      &sharedMemory,
-                                      tskNORMAL_PRIORITY,
-                                      NULL)) {
+
+
+          #ifdef TELNET_SERVER_CORE
+              BaseType_t taskCreated = xTaskCreatePinnedToCore ([] (void *param)  { // client <- ESP32 <- server data transfer
+                                                                                    struct __telnetSharedMemory__ *sharedMemory = (struct __telnetSharedMemory__ *) param;
+                                                                                    while (!sharedMemory->threadTowardsServerFinished) { // while the other task is running
+                                                                                        char buffer [512];
+                                                                                        int readTotal = recvAll (sharedMemory->socketTowardsServer, buffer, sizeof (buffer), NULL, sharedMemory->time_out);
+                                                                                        if (readTotal <= 0) {
+                                                                                            // error while reading data from server, we don't care if it is time-out or something else
+                                                                                            break;
+                                                                                        } else {
+                                                                                            if (sendAll (sharedMemory->socketTowardsClient, buffer, readTotal, sharedMemory->time_out) <= 0) {
+                                                                                                // error while writing data to client, we don't care if it is time-out or something else
+                                                                                                dmesg ("[telnetConnection] send (to other telnet server) error: ", errno, strerror (errno));
+                                                                                                break;
+                                                                                            }
+                                                                                        }
+                                                                                        delay (1);
+                                                                                    }
+                                                                                    sharedMemory->threadTowardsClientFinished = true; // signal the other task that this task has stopped
+                                                                                    vTaskDelete (NULL);
+                                                                                  }, 
+                                                                __func__, 
+                                                                4068, 
+                                                                &sharedMemory,
+                                                                tskNORMAL_PRIORITY,
+                                                                NULL,
+                                                                TELNET_SERVER_CORE);
+          #else
+              BaseType_t taskCreated = xTaskCreate ([] (void *param)  { // client <- ESP32 <- server data transfer
+                                                                        struct __telnetSharedMemory__ *sharedMemory = (struct __telnetSharedMemory__ *) param;
+                                                                        while (!sharedMemory->threadTowardsServerFinished) { // while the other task is running
+                                                                            char buffer [512];
+                                                                            int readTotal = recvAll (sharedMemory->socketTowardsServer, buffer, sizeof (buffer), NULL, sharedMemory->time_out);
+                                                                            if (readTotal <= 0) {
+                                                                                // error while reading data from server, we don't care if it is time-out or something else
+                                                                                break;
+                                                                            } else {
+                                                                                if (sendAll (sharedMemory->socketTowardsClient, buffer, readTotal, sharedMemory->time_out) <= 0) {
+                                                                                    // error while writing data to client, we don't care if it is time-out or something else
+                                                                                    dmesg ("[telnetConnection] send (to other telnet server) error: ", errno, strerror (errno));
+                                                                                    break;
+                                                                                }
+                                                                            }
+                                                                            delay (1);
+                                                                        }
+                                                                        sharedMemory->threadTowardsClientFinished = true; // signal the other task that this task has stopped
+                                                                        vTaskDelete (NULL);
+                                                                      }, 
+                                __func__, 
+                                4068, 
+                                &sharedMemory,
+                                tskNORMAL_PRIORITY,
+                                NULL);
+          #endif
+          if (pdPASS != taskCreated) {
             close (connectionSocket);
             return "xTaskCreate error";
           } 
@@ -1347,7 +1378,7 @@
         bool telnetUserHasRightToAccessFile (char *fullPath) { return strstr (fullPath, __homeDir__) == fullPath; }
         bool telnetUserHasRightToAccessDirectory (char *fullPath) { return telnetUserHasRightToAccessFile (string (fullPath) + (char *) "/"); }
         
-        #if FILE_SYSTEM == FILE_SYSTEM_FAT
+        #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
             const char *__mkfs__ (telnetConnection *tcn) {
                 if (sendTelnet ((char *) "formatting FAT file system, please wait ... ") <= 0) return ""; 
                 fileSystem.unmount ();
@@ -1360,7 +1391,7 @@
             }
         #endif
 
-        #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+        #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
             const char *__mkfs__ (telnetConnection *tcn) {
                 if (sendTelnet ((char *) "formatting LittleFs file system, please wait ... ") <= 0) return ""; 
                 fileSystem.unmount ();
@@ -1375,27 +1406,48 @@
   
         string __fs_info__ () {
             if (!fileSystem.mounted ()) return "File system not mounted. You may have to format flash disk first.";
-            string s; // string = fsString<350> so we have enough space
-            #if FILE_SYSTEM == FILE_SYSTEM_FAT
-                sprintf (s, "FAT file system:\r\n"
-                            "Total space:      %10i K bytes\r\n"
-                            "Total space used: %10i K bytes\r\n"
-                            "Free space:       %10i K bytes\r\n",
-                            fileSystem.totalBytes () / 1024, 
-                            fileSystem.usedBytes () / 1024, 
-                            fileSystem.freeBytes () / 1024
+            string s = ""; // string = fsString<350> so we have enough space
+            
+            #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
+                sprintf (s, "FAT file system --------------------\r\n"
+                            "Total space:      %10lu K bytes\r\n"
+                            "Total space used: %10lu K bytes\r\n"
+                            "Free space:       %10lu K bytes\r\n",
+                            FFat.totalBytes () / 1024, 
+                            FFat.usedBytes () / 1024, 
+                            (FFat.totalBytes () - FFat.usedBytes ()) / 1024
                       );
             #endif
-            #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+
+            #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
                 sprintf (s, "LittleFS file system:\r\n"
                             "Total space:      %10i K bytes\r\n"
                             "Total space used: %10i K bytes\r\n"
                             "Free space:       %10i K bytes\r\n",
-                            fileSystem.totalBytes () / 1024, 
-                            fileSystem.usedBytes () / 1024, 
-                            (fileSystem.totalBytes () - fileSystem.usedBytes ()) / 1024
+                            LittleFS.totalBytes () / 1024, 
+                            LittleFS.usedBytes () / 1024, 
+                            (LittleFS.totalBytes () - LittleFS.usedBytes ()) / 1024
                       );
             #endif
+
+            #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                // if (sendTelnet ((char *) s) <= 0) return ""; 
+
+                const char *cardTypeText = "unknown";
+                uint8_t cardType = SD.cardType ();
+                switch (cardType) {
+                    case CARD_NONE: cardTypeText = "no SD card attached"; break;
+                    case CARD_MMC:  cardTypeText = "MMC"; break;
+                    case CARD_SD:   cardTypeText = "SDSC"; break;
+                    case CARD_SDHC: cardTypeText = "SDHC"; break;
+                }
+
+                sprintf ((char *) s + strlen (s), "SD card ----------------------------\r\n"
+                            "Type:   %20s\r\n",
+                            cardTypeText
+                      );
+            #endif
+
             return s;
         } 
 
@@ -2219,7 +2271,12 @@
                         // start listener in its own thread (task)
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
-                        if (pdPASS != xTaskCreate (__listenerTask__, "telnetServer", TELNET_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL)) {
+                        #ifdef TELNET_SERVER_CORE
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "telnetServer", TELNET_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, TELNET_SERVER_CORE);
+                        #else
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "telnetServer", TELNET_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                        #endif
+                        if (pdPASS != taskCreated) {
                           dmesg ("[telnetServer] xTaskCreate error");
                         } else {
                           // wait until listener starts accepting connections
@@ -2283,7 +2340,7 @@
           
                   // listener is ready for accepting connections
                   ths->__state__ = RUNNING;
-                  dmesg ("[telnetServer] started");
+                  dmesg ("[telnetServer] listener is running on core ", xPortGetCoreID ());
                   while (ths->__listeningSocket__ > -1) { // while listening socket is opened
           
                       int connectingSocket;
@@ -2295,7 +2352,7 @@
                       } else {
                         socketTrafficInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
                         // prepare network Traffic measurement information
-                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0};
+                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0, millis (), millis ()};
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
                         // get server's IP address

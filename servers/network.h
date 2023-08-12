@@ -1173,7 +1173,9 @@
       while ((len = recvfrom (s, buf, sizeof (buf), 0, (struct sockaddr *) &from, (socklen_t *) &fromlen)) > 0) {
         if (len >= (int)(sizeof(struct ip_hdr) + sizeof (struct icmp_echo_hdr))) {
 
-          diskTrafficInformation.bytesRead += len; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+          #ifdef __FILE_SYSTEM__
+              diskTrafficInformation.bytesRead += len; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+          #endif
           
           // Register end time
           gettimeofday (&end, NULL);

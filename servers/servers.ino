@@ -29,7 +29,10 @@
 
 #ifdef TEST_FS // TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS TEST_FS 
 
-    #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // or FILE_SYSTEM_LITTLEFS
+    #define SHOW_COMPILE_TIME_INFORMATION 
+
+    // #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
+    #define FILE_SYSTEM FILE_SYSTEM_SD_CARD
     #include "fileSystem.hpp"
     #include "network.h"
     #include "telnetServer.hpp"
@@ -37,14 +40,14 @@
     #include "httpServer.hpp"
 
     void setup () {
-      Serial.begin (115200);
+        Serial.begin (115200);
 
-      // fileSystem.format ();
-      // fileSystem.formatFAT ();
-      // fileSystem.formatLittleFs ();
-      // fileSystem.mount (true);
-      // fileSystem.mountFAT (true);
-      fileSystem.mountLittleFs (true);
+        // fileSystem.format ();
+        // fileSystem.formatFAT ();
+        // fileSystem.formatLittleFs ();
+        // fileSystem.mount (true);
+        // fileSystem.mountFAT (true); // built-in falsh disk
+        fileSystem.mountSD ("/", 5); // SD Card if attached
     }
 
     void loop () {
@@ -60,6 +63,7 @@
 #ifdef TEST_FTP // TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP
 
     #define USER_MANAGEMENT NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+    #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
 
     #include "dmesg_functions.h"
     #include "fileSystem.hpp"
@@ -75,7 +79,8 @@
   void setup () {
     Serial.begin (115200);
 
-    fileSystem.mount (true);
+    fileSystem.mountFAT (true);
+    fileSystem.mountSD ("/SD", 5);
 
     startWiFi ();
     startCronDaemon (NULL);
@@ -108,7 +113,7 @@
 
   // include all .h files telnet server is using to test the whole functionality
   
-      #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT // FILE_SYSTEM_LITTLEFS
+      #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
  
       #include "dmesg_functions.h"
       #include "fileSystem.hpp"
@@ -117,7 +122,7 @@
       #include "httpClient.h"
       #include "ftpClient.h"
       #include "smtpClient.h"
-      #define USER_MANAGEMENT HARDCODED_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+      #define USER_MANAGEMENT NO_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
       #include "userManagement.hpp"
 
       #include "telnetServer.hpp"
@@ -150,8 +155,10 @@
   void setup () {
     Serial.begin (115200); Serial.printf ("\r\n\r\n\r\n\r\n");
 
-    // fileSystem.formatLittleFs ();
-    fileSystem.mountLittleFs (true);
+    // fileSystem.formatFAT ();
+    fileSystem.mountFAT (true);
+    fileSystem.mountSD ("/SD", 5);
+    // fileSystem.mountSD ("/", 5);
 
     // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA-tic credentials
     startWiFi ();
@@ -316,11 +323,14 @@
 
 
 
-
-
 #ifdef TEST_HTTP_SERVER_AND_CLIENT // TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT 
 
-  #define FILE_SYSTEM    FILE_SYSTEM_LITTLEFS // or FILE_SYSTEM_FAT
+  // #define SHOW_COMPILE_TIME_INFORMATION
+
+  // #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
+  #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS 
+
+  // #define HTTP_SERVER_CORE 0 
 
   #include "dmesg_functions.h"
   #include "fileSystem.hpp" // include fileSystem.hpp if you want httpServer to server .html and other files as well
@@ -488,11 +498,12 @@
   void setup () {
     Serial.begin (115200);
 
-    // fileSystem.formatLittleFs ();
-    fileSystem.mountLittleFs (true); 
+    // fileSystem.formatFAT ();
+    fileSystem.mountLittleFs (true);
+    // fileSystem.mountSD ("/SD", 5); // SD Card if attached
     startWiFi ();
 
-    myHttpServer = new httpServer (httpRequestHandler, wsRequestHandler, (char *) "0.0.0.0", 80, firewall);
+    myHttpServer = new httpServer (httpRequestHandler, wsRequestHandler, (char *) "0.0.0.0", 80, firewall, (char *) "/var/www/html");
     if (myHttpServer->state () != httpServer::RUNNING) {
       Serial.printf (":(\n");
     } else {
