@@ -6,7 +6,7 @@
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    August 12, 2023, Bojan Jurca
+    October 23, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -58,12 +58,11 @@
 
     // TUNNING PARAMETERS
 
-    #define FTP_SERVER_STACK_SIZE 2 * 1024                      // TCP listener
     #define FTP_SESSION_STACK_SIZE 8 * 1024                     // TCP connection
-    // #define FTP_SERVER_CORE 1 // 1 or 0                     // #define FTP_SERVER_CORE if you want ftpServer to run on specific core
+    // #define FTP_SERVER_CORE 1 // 1 or 0                      // #define FTP_SERVER_CORE if you want ftpServer to run on specific core
     #define FTP_CMDLINE_BUFFER_SIZE 300                         // reading and temporary keeping FTP command lines
-    #define FTP_CONTROL_CONNECTION_TIME_OUT 300000              // 300000 ms = 5 min 
-    #define FTP_DATA_CONNECTION_TIME_OUT 3000                   // 3000 ms = 3 sec 
+    #define FTP_CONTROL_CONNECTION_TIME_OUT 300000              // 300000 ms = 5 min, 0 for infinite
+    #define FTP_DATA_CONNECTION_TIME_OUT 3000                   // 3000 ms = 3 sec, 0 for infinite 
 
     #define ftpServiceUnavailable (char *) "421 FTP service is currently unavailable\r\n"
 
@@ -143,7 +142,7 @@
                                 closeDataConnection ();
                             }
 
-        bool controlConnectionTimeOut () { return millis () - __lastActive__ >= FTP_CONTROL_CONNECTION_TIME_OUT; }
+        bool controlConnectionTimeOut () { return millis () - __lastActive__ >= FTP_CONTROL_CONNECTION_TIME_OUT && FTP_CONTROL_CONNECTION_TIME_OUT > 0; }
         
         void closeControlConnection () { // both, control and data connection
                                   int connectionSocket;
@@ -246,6 +245,7 @@
               }
         // nextFtpCommand:
               receivedTotal = 0; // FTP client does not send another FTP command until it gets a reply from current one, meaning that cmdLine is empty now
+              // DEBUG: Serial.printf ("[ftpConnection] stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
               
             } while (ths->__controlConnectionSocket__ > -1); // while the connection is still opened
 
@@ -490,7 +490,7 @@
           int connectingSocket = -1;
           struct sockaddr_in connectingAddress;
           socklen_t connectingAddressSize = sizeof (connectingAddress);
-          while (connectingSocket == -1 && millis () - lastActive < FTP_DATA_CONNECTION_TIME_OUT) {
+          while (connectingSocket == -1 && millis () - lastActive < FTP_DATA_CONNECTION_TIME_OUT || !FTP_DATA_CONNECTION_TIME_OUT) {
             delay (1);
             connectingSocket = accept (__dataConnectionSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
           }
@@ -716,7 +716,7 @@
         STATE_TYPE state () { return __state__; }
     
         ftpServer (  // the following parameters will be handeled by ftpServer instance
-                     char *serverIP,                                                                // FTP server IP address, 0.0.0.0 for all available IP addresses
+                     const char *serverIP,                                                          // FTP server IP address, 0.0.0.0 for all available IP addresses
                      int serverPort,                                                                // FTP server port
                      bool (*firewallCallback) (char *connectingIP)                                  // a reference to callback function that will be celled when new connection arrives 
                    )  { 
@@ -729,9 +729,9 @@
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
                         #ifdef FTP_SERVER_CORE
-                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "ftpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
                         #else
-                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "ftpServer", FTP_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "ftpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
                         #endif
                         if (pdPASS != taskCreated) {
                           dmesg ("[ftpServer] xTaskCreate error");
@@ -802,6 +802,7 @@
                       int connectingSocket;
                       struct sockaddr_in connectingAddress;
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
+                      // DEBUG: Serial.printf ("[ftpServer] listener taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
                         if (ths->__listeningSocket__ > -1) dmesg ("[ftpServer] accept error: ", errno, strerror (errno));

@@ -118,6 +118,7 @@
             __dmesgCircularQueue__ [__dmesgEnd__].message = "";
             __dmesgCircularQueue__ [__dmesgEnd__].message += message1;
             __dmesgCircularQueue__ [__dmesgEnd__].message += message2;
+            // Serial.println (__dmesgCircularQueue__ [__dmesgEnd__].message);
             if ((__dmesgEnd__ = (__dmesgEnd__ + 1) % DMESG_CIRCULAR_QUEUE_LENGTH) == __dmesgBeginning__) __dmesgBeginning__ = (__dmesgBeginning__ + 1) % DMESG_CIRCULAR_QUEUE_LENGTH;
         xSemaphoreGive (__dmesgSemaphore__);
     }

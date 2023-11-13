@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    August 12, 2023, Bojan Jurca
+    Ocrober 23, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -73,11 +73,10 @@
 
     // TUNNING PARAMETERS
 
-    #define TELNET_SERVER_STACK_SIZE 2 * 1024                   // TCP listener
     #define TELNET_CONNECTION_STACK_SIZE 10 * 1024              // each TCP connection
     // #define TELNET_SERVER_CORE 1 // 1 or 0                   // #define TELNET_SERVER_CORE if you want telnetServer to run on specific core
     #define TELNET_CMDLINE_BUFFER_SIZE 128                      // reading and temporary keeping telnet command lines
-    #define TELNET_CONNECTION_TIME_OUT 300000                   // 300000 ms = 5 min
+    #define TELNET_CONNECTION_TIME_OUT 300000                   // 300000 ms = 5 min, 0 for infinite
     #define TELNET_SESSION_MAX_ARGC 24                          // max number of arguments in command line
 
     #define telnetServiceUnavailable "Telnet service is currently unavailable.\r\n"
@@ -473,6 +472,7 @@
                               } else {
                                 *ths->__cmdLine__ = 0; // prepare buffer for the next user input                           
                               }
+                              // DEBUG: Serial.printf ("[telnetConnection] stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
                               break;
                             }
                   case 0:   {
@@ -962,7 +962,7 @@
                 if (delaySeconds) if (sendTelnet ((char *) "\x1b[2J") <= 0) return "";
                 
                 // display totals
-                sprintf (s, "total bytes received and sent:                   %10lu      %10lu\r\n", networkTrafficInformation.bytesReceived - lastNetworkTrafficInformation.bytesReceived, networkTrafficInformation.bytesSent - lastNetworkTrafficInformation.bytesSent);
+                sprintf (s, "total bytes received and sent:                       %10lu      %10lu\r\n", networkTrafficInformation.bytesReceived - lastNetworkTrafficInformation.bytesReceived, networkTrafficInformation.bytesSent - lastNetworkTrafficInformation.bytesSent);
 
                 // update variables for delta calculation
                 lastNetworkTrafficInformation = networkTrafficInformation;
@@ -971,8 +971,8 @@
 
                 // display header
                 sprintf (s, "\r\n"
-                            "socket  local address      remote address    bytes received      bytes sent      inactive\r\n"
-                            "-----------------------------------------------------------------------------------------------------------");
+                            "socket  local address      remote address        bytes received      bytes sent      inactive\r\n"
+                            "---------------------------------------------------------------------------------------------------------------");
                 if (sendTelnet (s) <= 0) return "";
 
                 // scan through sockets
@@ -981,15 +981,15 @@
                     // get server side address first
                     if (getsockname (i, (struct sockaddr *) &socketAddress, &len) != -1) {
                         inet_ntoa_r (socketAddress.sin_addr, socketIP, sizeof (socketIP));
-                        sprintf (s, "\r\n  %2i      %s:%i                                                                  ", i, socketIP, ntohs (socketAddress.sin_port));
+                        sprintf (s, "\r\n  %2i    %s:%i                                                                       ", i, socketIP, ntohs (socketAddress.sin_port));
                         // get client side address next
                         if (getpeername (i, (struct sockaddr *) &socketAddress, &len) != -1) {
                             inet_ntoa_r (socketAddress.sin_addr, socketIP, sizeof (socketIP));
                             if (socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived < lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived || socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent < lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent) lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET] = {0, 0};
-                            sprintf (s + 28, "%s:%i               ", socketIP, ntohs (socketAddress.sin_port));
-                            sprintf (s + 53, "%8lu      %10lu      %6lu s  %s", socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived, socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent, (millis () - socketTrafficInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000,  ((i == tcn->getSocket ()) ? "this connection" : ""));
+                            sprintf (s + 31, "%s:%i               ", socketIP, ntohs (socketAddress.sin_port));
+                            sprintf (s + 57, "%8lu      %10lu      %6lu s  %s", socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesReceived, socketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent - lastSocketTrafficInformation [i - LWIP_SOCKET_OFFSET].bytesSent, (millis () - socketTrafficInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000,  ((i == tcn->getSocket ()) ? "this connection" : ""));
                         } else { // socket without a peer address - it must be a listening socket
-                            sprintf (s + 83, "%6lu s  listening socket", (millis () - socketTrafficInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000);
+                            sprintf (s + 87, "%6lu s  listening socket", (millis () - socketTrafficInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000);
                         }
 
                         // update variables for delta calculation
@@ -2256,11 +2256,11 @@
         STATE_TYPE state () { return __state__; }
     
         telnetServer ( // the following parameters will be pased to each telnetConnection instance
-                     String (* telnetCommandHandlerCallback) (int argc, char *argv [], telnetConnection *tcn), // telnetCommandHandler callback function provided by calling program
+                     String (* telnetCommandHandlerCallback) (int argc, char *argv [], telnetConnection *tcn),  // telnetCommandHandler callback function provided by calling program
                      // the following parameters will be handeled by telnetServer instance
-                     char *serverIP,                                                                // Telnet server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort,                                                                // Telnet server port
-                     bool (*firewallCallback) (char *connectingIP)                                  // a reference to callback function that will be celled when new connection arrives 
+                     const char *serverIP,                                                                      // Telnet server IP address, 0.0.0.0 for all available IP addresses
+                     int serverPort,                                                                            // Telnet server port
+                     bool (*firewallCallback) (char *connectingIP)                                              // a reference to callback function that will be celled when new connection arrives 
                    )  { 
                         // create a local copy of parameters for later use
                         __telnetCommandHandlerCallback__ = telnetCommandHandlerCallback;
@@ -2272,9 +2272,9 @@
                         __state__ = STARTING;                        
                         #define tskNORMAL_PRIORITY 1
                         #ifdef TELNET_SERVER_CORE
-                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "telnetServer", TELNET_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, TELNET_SERVER_CORE);
+                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "telnetServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL, TELNET_SERVER_CORE);
                         #else
-                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "telnetServer", TELNET_SERVER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "telnetServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
                         #endif
                         if (pdPASS != taskCreated) {
                           dmesg ("[telnetServer] xTaskCreate error");
@@ -2346,6 +2346,7 @@
                       int connectingSocket;
                       struct sockaddr_in connectingAddress;
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
+                      // DEBUG: Serial.printf ("[telnetServer] listener taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
                         if (ths->__listeningSocket__ > -1) dmesg ("[telnetServer] accept error: ", errno, strerror (errno));

@@ -60,7 +60,7 @@
     char *ntpDate (char *);
     char *ntpDate ();
     bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, char *, bool);
-    bool cronTabAdd (char *, bool);
+    bool cronTabAdd (const char *, bool);
     int cronTabDel (char *);
     void startCronDaemon (void (* cronHandler) (char *), size_t);
 
@@ -226,7 +226,7 @@
     }
     
     // adds new entry into crontab table
-    bool cronTabAdd (char *cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
+    bool cronTabAdd (const char *cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
         char second [3]; char minute [3]; char hour [3]; char day [3]; char month [3]; char day_of_week [3]; char cronCommand [65];
         if (sscanf (cronTabLine, "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
             int8_t se = strcmp (second, "*")      ? atoi (second)      : ANY; if ((!se && *second != '0')      || se > 59)  { 
