@@ -25,9 +25,8 @@
 // 2. FILE SYSTEM:     #define which file system you want to use 
     // the file system must correspond to Tools | Partition scheme setting: FILE_SYSTEM_FAT (for FAT partition scheme), FILE_SYSTEM_LITTLEFS (for SPIFFS partition scheme) or FILE_SYSTEM_SD_CARD (if SC card is attached)
     // FAT file system can be bitwise combined with FILE_SYSTEM_SD_CARD, like #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
-    /// #define FILE_SYSTEM FILE_SYSTEM_FAT
 
-    #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+    #define FILE_SYSTEM   FILE_SYSTEM_LITTLEFS // LittleFS uses the least of memory, which may be needed for all the functionalities to run
 
 
 // 3. NETWORK:     #define how ESP32 will use the network
@@ -67,22 +66,27 @@
     #define DEFAULT_USER_PASSWORD                     "changeimmediatelly"  // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
 
 
-// #include (or comment-out) the functionalities you want (or don't want) to use
-#include "./servers/fileSystem.hpp"
-#include "./servers/time_functions.h"               // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters
-#include "./servers/network.h"                      // file_system.h is needed prior to #including network.h if you want to store the default parameters
-#include "./servers/httpClient.h"
-#include "./servers/ftpClient.h"                    // file_system.h is needed prior to #including ftpClient.h if you want to store the default parameters
-#include "./servers/smtpClient.h"                   // file_system.h is needed prior to #including smtpClient.h if you want to store the default parameters
-#include "./servers/userManagement.hpp"             // file_system.h is needed prior to #including userManagement.hpp in case of UNIX_LIKE_USER_MANAGEMENT
+// 5. #include (or comment-out) the functionalities you want (or don't want) to use
+#include "./servers/fileSystem.hpp"                 // most functionalities can run even without a file system if everything is stored in RAM (smaller web pages, ...)   
+#include "./servers/time_functions.h"               // fileSystem.hpp is needed prior to #including time_functions.h if you want to store the default parameters
+#include "./servers/network.h"                      // file>ystem.hpp is needed prior to #including network.h if you want to store the default parameters
+#include "./servers/httpClient.h"                   // support to access web pages from other servers and curl telnet command
+#include "./servers/ftpClient.h"                    // fileSystem.hpp is needed prior to #including ftpClient.h if you want to store the default parameters
+#include "./servers/smtpClient.h"                   // fileSystem.hpp is needed prior to #including smtpClient.h if you want to store the default parameters
+#include "./servers/userManagement.hpp"             // fileSystem.hpp is needed prior to #including userManagement.hpp in case of UNIX_LIKE_USER_MANAGEMENT
 #include "./servers/telnetServer.hpp"               // needs almost all the above files for whole functionality, but can also work without them
-#include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h
-#include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
+#include "./servers/ftpServer.hpp"                  // fileSystem.hpp is also necessary to use ftpServer.h
+#include "./servers/oscilloscope.h"                 // web based oscilloscope: you must #include httpServer.hpp as well to use it
+#define WEB_SESSIONS                                // comment this line out if you won't use web sessions
+#include "./servers/httpServer.hpp"                 // fileSystem.hpp is needed prior to #including httpServer.h if you want server also to serve .html and other files from built-in flash disk
+
+
+// uncomment the following line to get additional compile-time information about how the project gets compiled
+// #define SHOW_COMPILE_TIME_INFORMATION
 
 
 // backward compatibility
-
- #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT || (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+#if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT || (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
     [[deprecated("Replaced by fileSystem.mount(bool)")]]
     bool mountFileSystem (bool formatIfUnformatted) { return fileSystem.mount (formatIfUnformatted); }
 #endif

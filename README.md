@@ -1,7 +1,7 @@
 # ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
 
 
-## The template is a quick and easy way to build a user interface for an ESP32 project.
+## The template is a quick and easy way to build a nice user interface for an ESP32 project, without having to take care of all the micro switches, LED diodes, displays, etc.
 
    - You only have to modify the telnetCommandHandlerCallback function to build the Telnet user interface for your project.
 
@@ -18,13 +18,13 @@ Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.s
 ## The latest changes
 
 
-The latest changes implement support for SD cards. File system can reside entirely or partially on a SD card. Http server can now look for .html and other files also there.
+The latest changes are mainly about better and easier management of web sessions' login/logout. A simple local key-value database is included for managing (keeping) web session tokens and other purposes as well. With these, a simple web portal can be constructed, like the included example of a photo album.
 
 ![Screenshot](presentation.gif)
 
 
 
-## HTTP server
+## Fully multitasking HTTP server
 
 
 HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to certain extent. Demo HTTP server is available at 193.77.159.208.
@@ -34,13 +34,13 @@ HTTP server can handle HTTP requests in two different ways. As a programmed resp
 ![HTTP server performance](performance.gif)
 
 
-## Telnet server
+## Fully multitasking Telnet server
 
 
 Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in, mainly for editing small configuration files. Demo Telnet server is available at 193.77.159.208 (login as root with default password rootpassword).
 
 
-## FTP server
+## Fully multitasking FTP server
 
 
 FTP server is needed for uploading configuration files, .html files, ... to ESP32 file system. Both active and passive modes are supported.
@@ -50,6 +50,12 @@ FTP server is needed for uploading configuration files, .html files, ... to ESP3
 
 
 All the time zones form https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
+
+
+## Simple key-value database
+
+
+A simple key-value database is included for the purpose of managing (keeping) web session tokens. Other key-value databases can easily be added using the same technology, for different purposes (such as statistics of visited pages, etc). 
 
 
 ## Configuration files
