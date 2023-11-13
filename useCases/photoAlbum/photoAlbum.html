@@ -1,0 +1,388 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+	<title>photoAlbum</title>
+
+	<meta charset='UTF-8'>
+	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+  <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+	
+	<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='android-192-pa.png'>
+	<link rel='icon' type='image/png' sizes='192x192' href='android-192-pa.png'>
+	<link rel='apple-touch-icon' sizes='180x180' href='apple-180-pa.png'>
+
+  <style>
+
+    /* heading */
+    h1 {
+      font-family:verdana;
+      font-size:40px;
+      text-align:center;
+      color:white
+    }
+
+    p {
+      font-family:verdana;
+      font-size:18px;
+      color:white;
+    }
+
+    /* div for picture captions */
+    div.d1 {
+      height:65px;
+      width:100%;
+      font-family:verdana;
+      font-size:24px;
+      color:white;
+      position:absolute;
+      bottom:-35%;
+    }
+
+    /* div for picture hit counters */
+    div.d2 {
+      height:65px;
+      width:100%;
+      font-family:verdana;
+      font-size:14px;
+      color:white;
+      position:absolute;
+      bottom:-35%;
+      text-align:right;
+    }
+
+    /* button */
+    .button {
+      padding:10px 15px;
+      font-size:22px;
+      text-align:center;
+      cursor:pointer;
+      outline: none;
+      color:white;
+      border:none;
+      border-radius:12px;
+      box-shadow: 1px 1px black;
+      position:relative;
+      top:0px;
+      height:42px;
+    }
+    /* blue button */
+    .button1 {
+      background-color:hsl(207, 90%, 30%);
+    }
+    .button1:hover {
+      background-color:hsl(207, 90%, 40%);
+    }
+    .button1:active {
+      background-color:hsl(207, 90%, 50%);
+      transform: translateY(3px);
+    }
+    /* red button */
+    .button3 {
+      background-color:hsl(0, 100%, 25%)
+    }
+    .button3:hover {
+      background-color:hsl(0, 100%, 35%)
+    }
+    .button3:active {
+      background-color:hsl(0, 100%, 45%);
+      transform:translateY(3px)
+    }
+
+    /* input password */
+    input[type=password] {
+      padding:12px 20px;
+      font-size:22px;
+      height:38px;
+      width:90px;
+      margin:8px 0;
+      box-sizing:border-box;
+      border:2px solid hsl(207, 90%, 40%);
+      border-radius:12px;
+    }
+    input[type=password]:focus {
+      outline:none;
+      padding:12px 20px;
+      margin:8px 0;
+      box-sizing:border-box;
+      border:2px solid hsl(207, 90%, 55%);
+      border-radius:12px;
+    }
+
+    /* image container */
+    .image-container {
+      display:grid;
+      grid-template-columns:repeat(auto-fit, minmax(160px, 240px));
+      grid-template-rows:auto;
+      grid-gap:10%;
+      margin-left:7%;
+      margin-right:7%;
+    }
+    .image-container .image {
+      position:relative;
+      padding-bottom:100%;
+    }
+    .image-container .image img {
+      height:auto;
+      width:100%;
+      position:absolute;
+    }
+
+    /* image caption */
+    textarea {
+      font-family:verdana;
+      font-size:14px;
+      color:white;
+      width:100%;
+      height:80px;
+      border: none;
+      border-radius: 12px;
+      background-color:transparent;
+      overflow:hidden;
+      resize:none;
+    }
+    textarea:focus {
+      outline:none !important;
+      border-color:hsl(207, 90%, 55%);
+      box-shadow:0 0 10px hsl(207, 90%, 55%);
+    }
+
+    </style>
+
+  <script>
+
+    // mechanism that makes REST calls and get their replies
+    var httpClient = function () {
+      this.request = function (url, method, callback) {
+        var httpRequest = new XMLHttpRequest ();
+        var httpRequestTimeout;
+        httpRequest.onreadystatechange = function () {
+          // console.log (httpRequest.readyState);
+          if (httpRequest.readyState == 1) { // 1 = OPENED, start timing
+            httpRequestTimeout = setTimeout (function () { alert ('Server did not reply (in time).'); }, 3000);
+          }
+          if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
+            clearTimeout (httpRequestTimeout);
+            console.log (httpRequest.responseText);
+            if (httpRequest.status == 200) callback (httpRequest.responseText); // 200 = OK
+            else alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
+          }
+        }
+        httpRequest.open (method, url, true);
+        httpRequest.send (null);
+      }
+    }
+
+    function onImgLoad (imgObj) {
+      let initialWidth = imgObj.width;
+      let initialHeight = imgObj.height;
+      let minPictureArea = initialWidth * initialWidth * 9 / 16; // 16:9 aspect ratio gives the smallest area
+      let f = Math.sqrt (minPictureArea / (initialWidth * initialHeight));
+      // resize the picture so that all the pictures would have the same area
+      imgObj.style.height = (initialHeight * f) + 'px';
+      imgObj.style.width = (initialWidth * f) + 'px';
+      // center the picture
+      imgObj.style.transform = 'translate(' + Math.floor ((initialWidth - imgObj.width) / 2) + 'px, ' + Math.floor (((initialWidth - imgObj.height)) / 2) + 'px)';
+    }
+
+    // reload the image: https://stackoverflow.com/questions/33807637/keep-trying-to-reload-image-until-successful-but-dont-show-intermediate-broken
+    var loadTime = Date.now ();
+    function onImgError (imgObj) {
+      if(Date.now () - loadTime < 10000) { // keep trying 10 s
+        setTimeout (function() { imgObj.src = imgObj.src; }, 1000);
+      }
+    }
+
+    // enable or disable all textareas
+    function enableDisableImgCaptions (node, disable) { // https://stackoverflow.com/questions/4256339/how-can-i-loop-through-all-dom-elements-on-a-page
+      if (node.name == 'imgCaption') {
+          // console.log (node.id);
+          node.disabled = disable;
+          if (disable)  node.style.border = 'none';
+          else          node.style.border = '2px solid hsl(207, 90%, 16%)';
+      }
+      var nodes = node.childNodes;
+      for (var i = 0; i < nodes.length; i++) {
+          if (!nodes[i]) continue;
+          if (nodes[i].childNodes.length > 0) enableDisableImgCaptions (nodes [i], disable);
+      }
+    }
+
+    // detect enter or esc in password field
+    document.addEventListener ('keydown', evt => {
+      if (document.activeElement.id == 'password') {
+        if (evt.key === 'Escape') processPassword (true);
+        if (evt.key === 'Enter') processPassword (false);
+      }
+    });
+
+    // login when the user presses enter or dismiss when esc
+    function processPassword (dismiss) {
+      if (!dismiss) {
+
+        // try to login first
+        let client = new httpClient ();
+              let clientRequest = '/login' + '/webadmin%20' + document.getElementById ('password').value;
+              client.request (clientRequest, 'GET', function (serverReply) {
+          if (serverReply == "loggedIn") {
+            // logged-in
+            document.getElementById ('login').hidden = true;
+            document.getElementById ('password').hidden = true;
+            document.getElementById ('logout').hidden = false;
+            enableDisableImgCaptions (document, false);
+          } else {
+            alert (serverReply); // report error
+          }
+                });
+      }
+
+      // dismiss or failed to login
+      document.getElementById ('login').hidden = false;
+      document.getElementById ('password').hidden = true;
+      document.getElementById ('logout').hidden = true;
+      enableDisableImgCaptions (document, true);
+    }
+
+    // save new image caption when textarea looses focus
+    function changeImgCaption (id) {
+        // send base64 encoded changed text to the server in REST call
+        let client = new httpClient ();
+              client.request ('changeImgCaption/' + id + '/' + btoa (unescape (encodeURIComponent (document.getElementById (id).value))), 'PUT', function (serverReply) {
+            if (serverReply != 'imgCaptionChanged')
+              alert (serverReply);
+        });
+    }
+
+    // refresh locally stored counters on page show
+    addEventListener ('pageshow', (event) => {
+      // update view counters if comming to this page through back button
+      Object.keys (sessionStorage).forEach ((key) => {
+        let count = sessionStorage.getItem (key);
+        if (count > '') {
+          document.getElementById (key).innerText = count;
+        }
+      });
+    });
+
+  </script>
+
+</head>
+
+<body style="background-color:hsl(207, 90%, 6%)">
+
+  <div class="d2" ;="" style="position:absolute; top:22px; right:22px;">
+    <button class="button button1" id="login" onclick="
+      this.hidden = true;
+      let obj = document.getElementById (&#39;password&#39;);
+      obj.value = &#39;&#39;;
+      obj.hidden = false;
+      obj.focus ();
+    ">&nbsp;webadmin login&nbsp;</button>
+
+    <input type="password" id="password" placeholder="webadmin&#39;s password" style="width:280px;" hidden="" required="" onfocusout="if (!this.hidden) processPassword (true);">
+
+    <button class="button button3" id="logout" hidden="" onclick="
+
+        // logout first
+        let client = new httpClient ();
+              client.request (&#39;/logout&#39;, &#39;PUT&#39;, function (serverReply) {});
+
+        // update GUI elements
+        this.hidden = true;
+        document.getElementById (&#39;login&#39;).hidden = false;
+        enableDisableImgCaptions (document, true);
+    ">&nbsp;webadmin logout&nbsp;</button>
+
+  </div>
+
+    <br><br><h1>Photo album example</h1><br>
+
+  <p>
+    Example of web portal demonstrating:<br>
+    &nbsp;&nbsp;&nbsp;- dynamically generated web portal<br>
+    &nbsp;&nbsp;&nbsp;- web sessions with login/logout options<br>
+    &nbsp;&nbsp;&nbsp;- local database data storage<br>
+  </p>
+
+      <div class="image-container">
+
+    <div class="image"><a href="http://10.18.1.66/photoAlbum/20170813_132853.jpg"><img src="./photoAlbum_files/20170813_132853-small.jpg" onload="onImgLoad (this)" onerror="onImgError (this)" onclick="sessionStorage.setItem(&quot;20170813_132853-views&quot;, (parseInt (document.getElementById(&quot;20170813_132853-views&quot;).innerText) + 1).toString () + &quot; views&quot;);" style="height: 134.499px; width: 240.894px; transform: translate(-1px, 53px);"></a>
+        <div class="d2" id="20170813_132853-views">15 views</div>
+        <div class="d1">
+          <textarea name="imgCaption" id="20170813_132853" disabled="" onfocusout="changeImgCaption (id);">Balaton, Hungary
+2017</textarea>
+        </div>
+      </div>
+
+    <div class="image"><a href="http://10.18.1.66/photoAlbum/20220207_164229.jpg"><img src="./photoAlbum_files/20220207_164229-small.jpg" onload="onImgLoad (this)" onerror="onImgError (this)" onclick="sessionStorage.setItem(&quot;20220207_164229-views&quot;, (parseInt (document.getElementById(&quot;20220207_164229-views&quot;).innerText) + 1).toString () + &quot; views&quot;);" style="height: 208.495px; width: 155.4px; transform: translate(42px, 16px);"></a>
+        <div class="d2" id="20220207_164229-views">15 views</div>
+        <div class="d1">
+          <textarea name="imgCaption" id="20220207_164229" disabled="" onfocusout="changeImgCaption (id);">Malinska, Croatia
+2022</textarea>
+        </div>
+      </div>
+
+    <div class="image"><a href="http://10.18.1.66/photoAlbum/20220604_071648.jpg"><img src="./photoAlbum_files/20220604_071648-small.jpg" onload="onImgLoad (this)" onerror="onImgError (this)" onclick="sessionStorage.setItem(&quot;20220604_071648-views&quot;, (parseInt (document.getElementById(&quot;20220604_071648-views&quot;).innerText) + 1).toString () + &quot; views&quot;);" style="height: 155.885px; width: 207.846px; transform: translate(16px, 42px);"></a>
+        <div class="d2" id="20220604_071648-views">15 views</div>
+        <div class="d1">
+          <textarea name="imgCaption" id="20220604_071648" disabled="" onfocusout="changeImgCaption (id);">Lago del Predil /
+Rajbelsko jezero, Italy
+2022</textarea>
+        </div>
+      </div>
+
+    <div class="image"><a href="http://10.18.1.66/photoAlbum/20230314_095846.jpg"><img src="./photoAlbum_files/20230314_095846-small.jpg" onload="onImgLoad (this)" onerror="onImgError (this)" onclick="sessionStorage.setItem(&quot;20230314_095846-views&quot;, (parseInt (document.getElementById(&quot;20230314_095846-views&quot;).innerText) + 1).toString () + &quot; views&quot;);" style="height: 180px; width: 180px; transform: translate(30px, 30px);"></a>
+        <div class="d2" id="20230314_095846-views">15 views</div>
+        <div class="d1">
+          <textarea name="imgCaption" id="20230314_095846" disabled="" onfocusout="changeImgCaption (id);">Geneva, CERN,
+Switzerland 2023
+The first WWW server</textarea>
+        </div>
+      </div>
+
+    <div class="image"><a href="http://10.18.1.66/photoAlbum/20230605_162927.jpg"><img src="./photoAlbum_files/20230605_162927-small.jpg" onload="onImgLoad (this)" onerror="onImgError (this)" onclick="sessionStorage.setItem(&quot;20230605_162927-views&quot;, (parseInt (document.getElementById(&quot;20230605_162927-views&quot;).innerText) + 1).toString () + &quot; views&quot;);" style="height: 240.936px; width: 134.476px; transform: translate(53px, -1px);"></a>
+        <div class="d2" id="20230605_162927-views">15 views</div>
+        <div class="d1">
+          <textarea name="imgCaption" id="20230605_162927" disabled="" onfocusout="changeImgCaption (id);">Chicago, IL
+USA
+2023</textarea>
+        </div>
+      </div>
+
+    <div class="image"><a href="http://10.18.1.66/photoAlbum/20230614_184534.jpg"><img src="./photoAlbum_files/20230614_184534-small.jpg" onload="onImgLoad (this)" onerror="onImgError (this)" onclick="sessionStorage.setItem(&quot;20230614_184534-views&quot;, (parseInt (document.getElementById(&quot;20230614_184534-views&quot;).innerText) + 1).toString () + &quot; views&quot;);" style="height: 134.499px; width: 240.894px; transform: translate(-1px, 53px);"></a>
+        <div class="d2" id="20230614_184534-views">15 views</div>
+        <div class="d1">
+          <textarea name="imgCaption" id="20230614_184534" disabled="" onfocusout="changeImgCaption (id);">Vancouver, BC
+Canada
+2023</textarea>
+        </div>
+      </div>
+
+    </div>
+
+  <script>
+
+    // check if webadmin is already logged in (although this checking is not very safe it is only used to enable/disable
+    // GUI elements, all the activities webadmin may take will be checked later on the server side as well)
+    if (document.cookie.indexOf ('sessionUser=webadmin') !== -1) {
+      document.getElementById ('login').hidden = true;
+      document.getElementById ('password').hidden = true;
+      document.getElementById ('logout').hidden = false;
+      enableDisableImgCaptions (document, false);
+    }
+
+    /*
+    console.log (screen.width + 'px');
+    console.log (screen.height + 'px');
+    console.log (screen.orientation.type); // landscape-primary, landscape-secondary, portrait-secondary, portrait-secondary
+
+    window.addEventListener ('orientationchange', function () {
+      console.log (screen.width + 'px');
+      console.log (screen.height + 'px');
+      console.log (screen.orientation.type); // landscape-primary, landscape-secondary, portrait-secondary, portrait-secondary
+    });
+    */
+
+  </script>
+
+</body>
+</html>
