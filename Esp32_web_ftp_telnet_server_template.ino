@@ -8,7 +8,7 @@
 
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
      
-    October 23, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
 
     PLEASE NOTE THAT THIS FILE IS JUST A TEMPLATE. YOU CAN INCLUDE OR EXCLUDE FUNCTIONALITIES YOU NEED OR DON'T NEED IN Esp32_servers_config.h.
@@ -25,6 +25,7 @@
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING DEFINITIONS -----
                     #include "measurements.hpp"
                     measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
+                    measurements freeBlock (60);                // measure max free heap block each minute for possible heap-related problems
                     measurements httpRequestCount (60);         // measure how many web connections arrive each minute
                     #undef LED_BUILTIN
                     #define LED_BUILTIN 2                       // built-in led blinking is used in examples 01, 03 and 04
@@ -52,77 +53,87 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                     char niceRadio5 [3] = "fm";
 
                     // ----- handle HTTP protocol requests -----
-                        if (httpRequestStartsWith ("GET /example01.html "))      { // used by example 01: Dynamically generated HTML page
-                                                                                    return "<HTML>Example 01 - dynamic HTML page<br><br><hr />" + String (digitalRead (LED_BUILTIN) ? "Led is on." : "Led is off.") + "<hr /></HTML>";
+                        if (httpRequestStartsWith ("GET /example01.html "))       { // used by example 01: Dynamically generated HTML page
+                                                                                      return "<HTML>Example 01 - dynamic HTML page<br><br><hr />" + String (digitalRead (LED_BUILTIN) ? "Led is on." : "Led is off.") + "<hr /></HTML>";
                                                                                   }
+                    else if (httpRequestStartsWith ("GET /example07.html "))      { // used by example 07
+                                                                                      string refreshCounter = hcn->getHttpRequestCookie ("refreshCounter");
+                                                                                      if (refreshCounter == "") refreshCounter = "0";
+                                                                                      refreshCounter = string (atoi (refreshCounter) + 1);
+                                                                                      hcn->setHttpReplyCookie ("refreshCounter", refreshCounter, time () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
+                                                                                      return "<HTML>Web cookies<br><br>This page has been refreshed " + String (refreshCounter) + " times. Click refresh to see more.</HTML>";
+                                                                                  }                                                                                  
                     else if (httpRequestStartsWith ("GET /builtInLed "))          { // used by example 02, example 03, example 04, index.html: REST function for static HTML page
-                                                                                  getBuiltInLed:
-                                                                                    return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + String (digitalRead (LED_BUILTIN) ? "on" : "off") + "\"}\r\n";
+                                                                                      getBuiltInLed:
+                                                                                          return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + String (digitalRead (LED_BUILTIN) ? "on" : "off") + "\"}\r\n";
                                                                                   }                                                                    
                     else if (httpRequestStartsWith ("PUT /builtInLed/on "))       { // used by example 03, example 04: REST function for static HTML page
-                                                                                    digitalWrite (LED_BUILTIN, HIGH);
-                                                                                    goto getBuiltInLed;
+                                                                                      digitalWrite (LED_BUILTIN, HIGH);
+                                                                                      goto getBuiltInLed;
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /builtInLed/off "))      { // used by example 03, example 04, index.html: REST function for static HTML page
-                                                                                    digitalWrite (LED_BUILTIN, LOW);
-                                                                                    goto getBuiltInLed;
+                                                                                      digitalWrite (LED_BUILTIN, LOW);
+                                                                                      goto getBuiltInLed;
                                                                                   }
                     else if (httpRequestStartsWith ("GET /upTime "))              { // used by index.html: REST function for static HTML page
-                                                                                    char httpResponseContentBuffer [100];
-                                                                                    time_t t = getUptime ();       // t holds seconds
-                                                                                    int seconds = t % 60; t /= 60; // t now holds minutes
-                                                                                    int minutes = t % 60; t /= 60; // t now holds hours
-                                                                                    int hours = t % 24;   t /= 24; // t now holds days
-                                                                                    char c [25]; *c = 0;
-                                                                                    if (t) sprintf (c, "%lu days, ", t);
-                                                                                    sprintf (c + strlen (c), "%02i:%02i:%02i", hours, minutes, seconds);
-                                                                                    sprintf (httpResponseContentBuffer, "{\"id\":\"%s\",\"upTime\":\"%s\"}", HOSTNAME, c);
-                                                                                    return httpResponseContentBuffer;
+                                                                                      char httpResponseContentBuffer [100];
+                                                                                      time_t t = getUptime ();       // t holds seconds
+                                                                                      int seconds = t % 60; t /= 60; // t now holds minutes
+                                                                                      int minutes = t % 60; t /= 60; // t now holds hours
+                                                                                      int hours = t % 24;   t /= 24; // t now holds days
+                                                                                      char c [25]; *c = 0;
+                                                                                      if (t) sprintf (c, "%lu days, ", t);
+                                                                                      sprintf (c + strlen (c), "%02i:%02i:%02i", hours, minutes, seconds);
+                                                                                      sprintf (httpResponseContentBuffer, "{\"id\":\"%s\",\"upTime\":\"%s\"}", HOSTNAME, c);
+                                                                                      return httpResponseContentBuffer;
                                                                                   }                                                                    
                     else if (httpRequestStartsWith ("GET /freeHeap "))            { // used by index.html: REST function for static HTML page
-                                                                                    return freeHeap.toJson (5);
+                                                                                      return freeHeap.toJson (5);
+                                                                                  }
+                    else if (httpRequestStartsWith ("GET /freeBlock "))           { // used by index.html
+                                                                                      return freeBlock.toJson (5);
                                                                                   }
                     else if (httpRequestStartsWith ("GET /httpRequestCount "))    { // used by index.html: REST function for static HTML page
-                                                                                    return httpRequestCount.toJson (5);
+                                                                                      return httpRequestCount.toJson (5);
                                                                                   }
                     else if (httpRequestStartsWith ("GET /niceSwitch1 "))         { // used by example 05.html: REST function for static HTML page
-                                                                                  returnNiceSwitch1State:
-                                                                                    return "{\"id\":\"niceSwitch1\",\"value\":\"" + String (niceSwitch1) + "\"}";
+                                                                                      returnNiceSwitch1State:
+                                                                                          return "{\"id\":\"niceSwitch1\",\"value\":\"" + String (niceSwitch1) + "\"}";
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceSwitch1/"))         { // used by example 05.html: REST function for static HTML page
-                                                                                    *(httpRequest + 21) = 0;
-                                                                                    strcpy (niceSwitch1, strstr (httpRequest + 17, "true") ? "true": "false");
-                                                                                    goto returnNiceSwitch1State; // return success (or possible failure) back to the client
+                                                                                      *(httpRequest + 21) = 0;
+                                                                                      strcpy (niceSwitch1, strstr (httpRequest + 17, "true") ? "true": "false");
+                                                                                      goto returnNiceSwitch1State; // return success (or possible failure) back to the client
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceButton2/pressed ")) { // used by example 05.html: REST function for static HTML page
-                                                                                    return "{\"id\":\"niceButton2\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                                      return "{\"id\":\"niceButton2\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                   }
                     else if (httpRequestStartsWith ("GET /niceSlider3 "))         { // used by example 05.html: REST function for static HTML page
-                                                                                  returnNiceSlider3Value:
-                                                                                    return "{\"id\":\"niceSlider3\",\"value\":\"" + String (niceSlider3) + "\"}";
+                                                                                      returnNiceSlider3Value:
+                                                                                          return "{\"id\":\"niceSlider3\",\"value\":\"" + String (niceSlider3) + "\"}";
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceSlider3/"))         { // used by example 05.html: REST function for static HTML page
-                                                                                    niceSlider3 = atoi (httpRequest + 17);
-                                                                                    Serial.printf ("[Got request from web browser for niceSlider3]: %i\n", niceSlider3);
-                                                                                    goto returnNiceSlider3Value; // return success (or possible failure) back to the client
+                                                                                      niceSlider3 = atoi (httpRequest + 17);
+                                                                                      Serial.printf ("[Got request from web browser for niceSlider3]: %i\n", niceSlider3);
+                                                                                      goto returnNiceSlider3Value; // return success (or possible failure) back to the client
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceButton4/pressed ")) { // used by example 05.html: REST function for static HTML page
-                                                                                    Serial.printf ("[Got request from web browser for niceButton4]: pressed\n");
-                                                                                    return "{\"id\":\"niceButton4\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                                      Serial.printf ("[Got request from web browser for niceButton4]: pressed\n");
+                                                                                      return "{\"id\":\"niceButton4\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                   }
                     else if (httpRequestStartsWith ("GET /niceRadio5 "))          { // used by example 05.html: REST function for static HTML page
-                                                                                  returnNiceRadio5Value:
-                                                                                    return "{\"id\":\"niceRadio5\",\"modulation\":\"" + String (niceRadio5) + "\"}";
+                                                                                      returnNiceRadio5Value:
+                                                                                          return "{\"id\":\"niceRadio5\",\"modulation\":\"" + String (niceRadio5) + "\"}";
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceRadio5/"))          { // used by example 05.html: REST function for static HTML page
-                                                                                    httpRequest [18] = 0;
-                                                                                    Serial.println (httpRequest + 16);
-                                                                                    strcpy (niceRadio5, strstr (httpRequest + 16, "am") ? "am" : "fm");
-                                                                                    goto returnNiceRadio5Value; // return success (or possible failure) back to the client
+                                                                                      httpRequest [18] = 0;
+                                                                                      Serial.println (httpRequest + 16);
+                                                                                      strcpy (niceRadio5, strstr (httpRequest + 16, "am") ? "am" : "fm");
+                                                                                      goto returnNiceRadio5Value; // return success (or possible failure) back to the client
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceButton6/pressed ")) { // used by example 05.html: REST function for static HTML page
-                                                                                    Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
-                                                                                    return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                                      Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
+                                                                                      return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                   }
 
                     // ----- USED FOR DEMONSTRATION OF WEB SESSION HANDLING, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
@@ -256,10 +267,10 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
                             webSessionTokenInformation_t webSessionTokenInformation;
                             tcn->sendTelnet ((char *) "web session token                                                valid for  user name\n\r-------------------------------------------------------------------------------------");
                             for (auto p: webSessionTokenDatabase) {
-                                e = webSessionTokenDatabase.FindValue (p->key, &webSessionTokenInformation, p->blockOffset);
+                                e = webSessionTokenDatabase.FindValue (p.key, &webSessionTokenInformation, p.blockOffset);
                                 if (e == webSessionTokenDatabase.OK && time () && webSessionTokenInformation.expires > time ()) {
                                     char c [180];
-                                    sprintf (c, "\n\r%s %5li s    %s", p->key.c_str (), webSessionTokenInformation.expires - time (), webSessionTokenInformation.userName.c_str ());
+                                    sprintf (c, "\n\r%s %5li s    %s", p.key.c_str (), webSessionTokenInformation.expires - time (), webSessionTokenInformation.userName.c_str ());
                                     tcn->sendTelnet (c);
                                 }
                             }
@@ -298,7 +309,16 @@ void cronHandlerCallback (char *cronCommand) {
                     if (cronCommandIs ("onMinute"))                       {   // triggers each minute - collect some measurements for the purpose of this demonstration
                                                                               struct tm st = localTime (time ()); 
                                                                               freeHeap.addMeasurement (st.tm_min, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB 
+                                                                              freeBlock.addMeasurement (st.tm_min, heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) / 1024); // take s sample of max free heap block in KB 
                                                                               httpRequestCount.addCounterToMeasurements (st.tm_min);          // take sample of number of web connections that arrived last minute 
+                                                                          }
+                    if (cronCommandIs ("onHour"))                         {   // triggers each hour - reconnect if disconnected
+                                                                              if (getWiFiMode () & WIFI_STA) {
+                                                                                  if (!WiFi.isConnected ()) {
+                                                                                      dmesg ("[network][STA] disconnected, reconnecting ...");
+                                                                                      WiFi.reconnect ();
+                                                                                  }    
+                                                                              }
                                                                           }
 
 }
@@ -309,17 +329,19 @@ void setup () {
     Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
 
 
-    // 1. Mount file system - this is the first thing to do since all the configuration files reside on the file system.
-    #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-        // fileSystem.formatLittleFs (); Serial.printf ("\nFormatting file system with LittleFS ...\n\n"); // format flash disk to start everithing from the scratch
-        fileSystem.mountLittleFs (true);                                            
-    #endif
-    #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
-        // fileSystem.formatFAT (); Serial.printf ("\nFormatting file system with FAT ...\n\n"); // format flash disk to start everithing from the scratch
-        fileSystem.mountFAT (true);
-    #endif  
-    #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
-        fileSystem.mountSD ("/SD", 5); // SD Card if attached, provide the mount poind and CS pin
+    #ifdef FILE_SYSTEM
+        // 1. Mount file system - this is the first thing to do since all the configuration files reside on the file system.
+        #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+            // fileSystem.formatLittleFs (); Serial.printf ("\nFormatting file system with LittleFS ...\n\n"); // format flash disk to start everithing from the scratch
+            fileSystem.mountLittleFs (true);                                            
+        #endif
+        #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
+            // fileSystem.formatFAT (); Serial.printf ("\nFormatting file system with FAT ...\n\n"); // format flash disk to start everithing from the scratch
+            fileSystem.mountFAT (true);
+        #endif
+        #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+            fileSystem.mountSD ("/SD", 5); // SD Card if attached, provide the mount point and CS pin
+        #endif
     #endif
 
 
@@ -345,7 +367,7 @@ void setup () {
 
 
     // 5. Start the servers.
-    #ifdef __HTTP_SERVER__
+    #ifdef __HTTP_SERVER__                                    // all the arguments are optional
         httpServer *httpSrv = new (std::nothrow) httpServer ( httpRequestHandlerCallback, // a callback function that will handle HTTP requests that are not handled by webServer itself
                                                               wsRequestHandlerCallback,   // a callback function that will handle WS requests, NULL to ignore WS requests
                                                               "0.0.0.0",                  // start HTTP server on all available IP addresses
@@ -354,13 +376,13 @@ void setup () {
                                                               "/var/www/html");           // (optional) httpServer root directory, the default is "/var/www/html"
         if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
     #endif
-    #ifdef __FTP_SERVER__
+    #ifdef __FTP_SERVER__                                 // all the arguments are optional
         ftpServer *ftpSrv = new (std::nothrow) ftpServer ("0.0.0.0",          // start FTP server on all available ip addresses
                                                           21,                 // default FTP port
                                                           firewallCallback);  // let's use firewallCallback function for FTP server FOR DEMONSTRATION PURPOSES
         if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
     #endif
-    #ifdef __TELNET_SERVER__
+    #ifdef __TELNET_SERVER__                                        // all the arguments are optional
         telnetServer *telnetSrv = new (std::nothrow) telnetServer ( telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
                                                                     "0.0.0.0",                    // start Telnet server on all available ip addresses 
                                                                     23,                           // default Telnet port
@@ -373,6 +395,7 @@ void setup () {
                     cronTabAdd ("* * * * * * gotTime");  // triggers only once - when ESP32 reads time from NTP servers for the first time
                     cronTabAdd ("0 0 0 1 1 * newYear'sGreetingsToProgrammer");  // triggers at the beginning of each year
                     cronTabAdd ("0 * * * * * onMinute");  // triggers each minute at 0 seconds
+                    cronTabAdd ("0 0 * * * * onHour");  // triggers each hour at 0:0
                     //           | | | | | | |
                     //           | | | | | | |___ cron command, this information will be passed to cronHandlerCallback when the time comes
                     //           | | | | | |___ day of week (0 - 7 or *; Sunday=0 and also 7)
@@ -382,7 +405,7 @@ void setup () {
                     //           | |___ minute (0 - 59 or *)
                     //           |___ second (0 - 59 or *)
 
-                    pinMode (LED_BUILTIN, OUTPUT);         
+                    pinMode (LED_BUILTIN, OUTPUT | INPUT);
                     digitalWrite (LED_BUILTIN, LOW);
 
 }

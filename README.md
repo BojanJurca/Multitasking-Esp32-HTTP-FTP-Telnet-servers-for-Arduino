@@ -1,7 +1,7 @@
 # ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
 
 
-## The template is a quick and easy way to build a nice user interface for an ESP32 project, without having to take care of all the micro switches, LED diodes, displays, etc.
+## This template is a quick and easy way to build a nice user interface for an ESP32 project, without having to take care of all the switches, LED diodes, displays, etc.
 
    - You only have to modify the telnetCommandHandlerCallback function to build the Telnet user interface for your project.
 
@@ -18,7 +18,7 @@ Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.s
 ## The latest changes
 
 
-The latest changes are mainly about better and easier management of web sessions' login/logout. A simple local key-value database is included for managing (keeping) web session tokens and other purposes as well. With these, a simple web portal can be constructed, like the included example of a photo album.
+The latest changes are support (this applies to built-in oscilloscope) for ESP32-S2, ESP32-S3 and ESP32-C3 boards (most of ESP32 boards should also just work).
 
 ![Screenshot](presentation.gif)
 
