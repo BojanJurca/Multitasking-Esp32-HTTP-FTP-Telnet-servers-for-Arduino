@@ -9,7 +9,7 @@
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    October 23, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -102,7 +102,7 @@
     #define HTTP_REPLY_STATUS_MAX_LENGTH 32                     // only first 3 characters are important
     #define HTTP_WS_FRAME_MAX_SIZE 1500                         // WebSocket send frame size and also read frame size (there are 2 buffers), MTU = 1500
     #define HTTP_CONNECTION_WS_TIME_OUT 300000                  // 300000 ms = 5 min for WebSocket connections, 0 for infinite
-    #define WEB_SESSIONS                                        // comment this line out if you won't use web sessions
+    // #define WEB_SESSIONS                                        // comment this line out if you won't use web sessions
     #ifdef WEB_SESSIONS
         #define WEB_SESSION_TIME_OUT 300                        // 300 s = 5 min, 0 for infinite
 
@@ -229,7 +229,7 @@
                             // compose websocket accept response and send it back to the client
                             char buffer  [255]; // 255 will do
                             sprintf (buffer, "HTTP/1.1 101 Switching Protocols \r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", s3);
-                            if (sendAll (connectionSocket, buffer, strlen (buffer), HTTP_CONNECTION_WS_TIME_OUT) == strlen (buffer)) {
+                            if (sendAll (connectionSocket, buffer, HTTP_CONNECTION_WS_TIME_OUT) == strlen (buffer)) {
                               __state__ = RUNNING;
                             }
                           } else { // |key| > 24
@@ -596,10 +596,10 @@
                               // close connection socket
                               int connectionSocket;
                               xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                                connectionSocket = __connectionSocket__;
-                                __connectionSocket__ = -1;
-                              
-                                httpServerConcurentTasks--;
+                                  connectionSocket = __connectionSocket__;
+                                  __connectionSocket__ = -1;
+                                
+                                  httpServerConcurentTasks--;
                               xSemaphoreGive (__httpServerSemaphore__);
                               if (connectionSocket > -1) close (connectionSocket);
                             }
@@ -756,7 +756,7 @@
               endOfHttpRequest = strstr (ths->__httpRequestAndReplyBuffer__, "\r\n\r\n"); 
               if (!endOfHttpRequest) {
                   dmesg ("[httpConnection] __httpRequestAndReplyBuffer__ too small for HTTP request");
-                  sendAll (ths->__connectionSocket__, (char *) reply507, HTTP_CONNECTION_TIME_OUT);
+                  sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                   goto endOfConnection;
               }
 
@@ -778,7 +778,7 @@
                 if (ths->__httpRequestHandlerCallback__) {
                     httpReplyContent = ths->__httpRequestHandlerCallback__ (ths->__httpRequestAndReplyBuffer__, ths);
                     if (!httpReplyContent) { // out of memory
-                        sendAll (ths->__connectionSocket__, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);
+                        sendAll (ths->__connectionSocket__, reply503, HTTP_CONNECTION_TIME_OUT);
                         goto endOfConnection;
                     }
                 }
@@ -794,7 +794,7 @@
                   }
                   if (ths->__httpReplyHeader__.error ()) {
                       dmesg ("[httpConnection] __httpReplyHeader__ too small for HTTP reply header");
-                      sendAll (ths->__connectionSocket__, (char *) reply507, HTTP_CONNECTION_TIME_OUT);
+                      sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                       goto endOfConnection;
                   }
                   // construct the whole HTTP reply from differrent pieces and send it to client (browser)
@@ -830,7 +830,7 @@
                   int bytesSent = bytesToCopyThisTime; // already sent
                   while (bytesSent < httpReplyContentLen) {
                     bytesToCopyThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) 1500); // MTU = 1500, TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send)
-                    if (sendAll (ths->__connectionSocket__, (char *) httpReplyContent.c_str () + bytesSent, bytesToCopyThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
+                    if (sendAll (ths->__connectionSocket__, httpReplyContent.c_str () + bytesSent, bytesToCopyThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
                       dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                       goto endOfConnection;
                     }                    
@@ -877,7 +877,7 @@
                             xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
                         } else {
                             if (xSemaphoreTake (__httpServerSemaphore__, pdMS_TO_TICKS (HTTP_CONNECTION_TIME_OUT)) != pdTRUE) {
-                                sendAll (ths->__connectionSocket__, (char *) reply503, HTTP_CONNECTION_TIME_OUT);
+                                sendAll (ths->__connectionSocket__, reply503, HTTP_CONNECTION_TIME_OUT);
                                 goto endOfConnection;
                             }
                         }
@@ -889,7 +889,7 @@
 
                             if (ths->__httpReplyHeader__.error ()) {
                                 dmesg ("[httpConnection] __httpReplyHeader__ too small for HTTP reply header");
-                                sendAll (ths->__connectionSocket__, (char *) reply507, HTTP_CONNECTION_TIME_OUT);
+                                sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                                 xSemaphoreGive (__httpServerSemaphore__);
                                 goto endOfConnection;
                             }
@@ -919,7 +919,7 @@
 
                             int bytesToReadThisTime = min (httpReplyContentLen, (unsigned long) HTTP_BUFFER_SIZE - httpReplyHeaderLen); 
                             int bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (unsigned long) bytesToReadThisTime);
-                            yield ();
+                            // delay (1); // yield ();
                             ths->__httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
                             if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
                               dmesg ("[httpConnection] read-send error (1): ", errno, strerror (errno));
@@ -932,7 +932,7 @@
                             while (bytesSent < httpReplyContentLen) {
                               bytesToReadThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) HTTP_BUFFER_SIZE);
                               bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [0], (unsigned long) bytesToReadThisTime);
-                              yield ();
+                              delay (25); // yield (); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
                               if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
                                 dmesg ("[httpConnection] read-send error (2): ", errno, strerror (errno));
                                 f.close ();
@@ -958,7 +958,7 @@
   
                 // SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY
   
-                if (sendAll (ths->__connectionSocket__, (char *) reply404, strlen (reply404), HTTP_CONNECTION_TIME_OUT) <= 0) {
+                if (sendAll (ths->__connectionSocket__, reply404, HTTP_CONNECTION_TIME_OUT) <= 0) {
                   dmesg ("[httpConnection] send error: ", errno, strerror (errno));
                   goto endOfConnection;
                 }
@@ -1019,12 +1019,12 @@
         STATE_TYPE state () { return __state__; }
     
         httpServer ( // the following parameters will be pased to each httpConnection instance
-                     String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn), // httpRequestHandler callback function provided by calling program
-                     void (*wsRequestHandlerCallback) (char *wsRequest, WebSocket *webSocket),      // wsRequestHandler callback function provided by calling program      
+                     String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn) = NULL,  // httpRequestHandler callback function provided by calling program
+                     void (*wsRequestHandlerCallback) (char *wsRequest, WebSocket *webSocket) = NULL,       // wsRequestHandler callback function provided by calling program      
                      // the following parameters will be handeled by httpServer instance
-                     const char *serverIP,                                                          // HTTP server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort,                                                                // HTTP server port
-                     bool (*firewallCallback) (char *connectingIP),                                 // a reference to callback function that will be celled when new connection arrives 
+                     const char *serverIP = "0.0.0.0",                                                      // HTTP server IP address, 0.0.0.0 for all available IP addresses
+                     int serverPort = 80,                                                                   // HTTP server port
+                     bool (*firewallCallback) (char *connectingIP) = NULL,                                  // a reference to callback function that will be celled when new connection arrives 
                      const char *httpServerHomeDirectory = "/var/www/html"
                    )  { 
                         // create directory structure
@@ -1121,12 +1121,12 @@
                                                       webSessionTokenInformation_t webSessionTokenInformation;
                                                       persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
                                                       for (auto p: webSessionTokenDatabase) {
-                                                          e = webSessionTokenDatabase.FindValue (p->key, &webSessionTokenInformation, p->blockOffset);
+                                                          e = webSessionTokenDatabase.FindValue (p.key, &webSessionTokenInformation, p.blockOffset);
                                                           if (e == webSessionTokenDatabase.OK && time () && webSessionTokenInformation.expires && webSessionTokenInformation.expires <= time ()) {
-                                                              expiredToken = p->key;
+                                                              expiredToken = p.key;
                                                               break;
                                                           }  else {
-                                                              // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: token is stil valid %s for %i s\n", p->key, webSessionTokenInformation.expires - time ());
+                                                              // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: token is stil valid %s for %i s\n", p.key, webSessionTokenInformation.expires - time ());
                                                           }
                                                       }
                                                       if (expiredToken > "") {
@@ -1203,11 +1203,11 @@
                                 httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandlerCallback__, clientIP, serverIP, ths->__httpServerHomeDirectory__);
                                 if (!hcp) {
                                   // dmesg ("[httpServer] new httpConnection error");
-                                  sendAll (connectingSocket, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);
+                                  sendAll (connectingSocket, reply503, HTTP_CONNECTION_TIME_OUT);
                                   close (connectingSocket); // normally httpConnection would do this but if it is not created we have to do it here
                                 } else {
                                   if (hcp->state () != httpConnection::RUNNING) {
-                                    sendAll (connectingSocket, (char *) reply503, strlen (reply503), HTTP_CONNECTION_TIME_OUT);
+                                    sendAll (connectingSocket, reply503, HTTP_CONNECTION_TIME_OUT);
                                     delete (hcp); // normally httpConnection would do this but if it is not running we have to do it here
                                   } else {
                                     ; // httpConnection is running in its own task and will stop by itself 

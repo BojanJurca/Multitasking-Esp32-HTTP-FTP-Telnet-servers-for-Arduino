@@ -4,7 +4,7 @@
  
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
   
-    June 25, 2023, Bojan Jurca
+    November 26, 2023, Bojan Jurca
 
 */
 
@@ -23,7 +23,7 @@
 
     // ----- functions and variables in this modul -----
 
-    string sendMail (char *, char *, char *, char *, char *, char *, int, char *);
+    string sendMail (const char *, const char *, const char *, const char *, const char *, const char *, int, const char *);
     
     
     // TUNNING PARAMETERS
@@ -45,8 +45,8 @@
 
        
     // sends message, returns error or success text (from SMTP server)
-    string __sendMail__ (char *message, char *subject, char *to, char *from, char *password, char *userName, int smtpPort, char *smtpServer) {
-        // DEBUG: Serial.printf ("__sendMail__:\nsmtpServer=%s\nsmtpPort=%i\nusername=%s\npassword=%s\nfrom=%s\nto=%s\nsubject=%s\nmessage=%s\n", smtpServer, smtpPort, userName, password, from, to, subject, message);
+    string __sendMail__ (const char *message, const char *subject, const char *to, const char *from, const char *password, const char *userName, int smtpPort, const char *smtpServer) {
+        // DEBUG: Serial.printf ("[__sendMail__] ()\nsmtpServer=%s\nsmtpPort=%i\nusername=%s\npassword=%s\nfrom=%s\nto=%s\nsubject=%s\nmessage=%s\n", smtpServer, smtpPort, userName, password, from, to, subject, message);
 
       // get server address
       struct hostent *he = gethostbyname (smtpServer);
@@ -87,6 +87,8 @@
         close (connectionSocket);
         return "";
       }
+      // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
+
       if (strstr (buffer, "220") != buffer) goto closeSmtpConnection; // 220 mail.siol.net ESMTP server ready
 
       // send EHLO to SMTP server and read its reply
@@ -96,60 +98,68 @@
         return "";
       }
       sprintf (buffer, "EHLO %s\r\n", (char *) HOSTNAME);
-      if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
+      if (sendAll (connectionSocket, buffer, SMTP_TIME_OUT) <= 0) {
         dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
+      // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", buffer);
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
         dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
+      // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
       if (strstr (buffer, "250") != buffer) goto closeSmtpConnection; // 250-mail.siol.net ...
 
       // send login request to SMTP server and read its reply
-      if (sendAll (connectionSocket, (char *) "AUTH LOGIN\r\n", strlen ((char *) "AUTH LOGIN\r\n"), SMTP_TIME_OUT) <= 0) {
+      if (sendAll (connectionSocket, "AUTH LOGIN\r\n", SMTP_TIME_OUT) <= 0) {
         dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
+      // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", "AUTH LOGIN\r\n");
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
         dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
+      // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
       if (strstr (buffer, "334") != buffer) goto closeSmtpConnection; // 334 VXNlcm5hbWU6 (= base64 encoded)
   
       // send base64 encoded user name to SMTP server and read its reply
       size_t encodedLen;
       mbedtls_base64_encode ((unsigned char *) buffer, sizeof (buffer) - 3, &encodedLen, (const unsigned char *) userName, strlen (userName));
       strcpy (buffer + encodedLen, "\r\n");
-      if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
+      if (sendAll (connectionSocket, buffer, SMTP_TIME_OUT) <= 0) {
         dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
+      // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", buffer);      
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
         dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
+      // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
       if (strstr (buffer, "334") != buffer) goto closeSmtpConnection; // 334 UGFzc3dvcmQ6 (= base64 encoded Password:)
 
       // send base64 encoded password to SMTP server and read its reply
       mbedtls_base64_encode ((unsigned char *) buffer, sizeof (buffer) - 3, &encodedLen, (const unsigned char *) password, strlen (password));
       strcpy (buffer + encodedLen, "\r\n");
-      if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
+      if (sendAll (connectionSocket, buffer, SMTP_TIME_OUT) <= 0) {
         dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
+      // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", buffer);      
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
         dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
+      // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
       if (strstr (buffer, "235") != buffer) goto closeSmtpConnection; // 235 2.7.0 Authentication successful 
 
       // send MAIL FROM to SMTP server and read its reply, there should be only one address in from string (there is onlyone sender) - parse it against @ chracter 
@@ -172,16 +182,18 @@
                           i = k;
                           strcpy (buffer, "MAIL FROM:"); strcat (buffer, buffer + j + 1); strcat (buffer, (char *) "\r\n");
                           // send buffer now
-                          if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
+                          if (sendAll (connectionSocket, buffer, SMTP_TIME_OUT) <= 0) {
                             dmesg ("[smtpClient] send error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";        
                           }
+                          // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", buffer);                          
                           if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
                             dmesg ("[smtpClient] read error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";
                           }
+                          // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
                           if (strstr (buffer, "250") != buffer) goto closeSmtpConnection; // 250 2.1.0 Ok
                         }
             default:    break;
@@ -189,12 +201,13 @@
         }
       }
 
-      // send RCPT TP for each address in to list to SMTP server and read its reply - parse it against @ chracter 
-      if (sizeof (buffer) < 13 + strlen (to) + 1) { // there are going to be only one 'to' adress at a time, we can move this checking down the code to be more effective if needed
+      // send RCPT TO for each address in to-list, to SMTP server and read its reply - parse it against @ chracter 
+      if (sizeof (buffer) < 13 + strlen (to) + 1 + 1) { // there are going to be only one 'to' adress at a time, we can move this checking down the code to be more effective if needed
         dmesg ("[sendMail] buffer too small");
         close (connectionSocket);
         return "";
       }
+      memset (buffer, 0, sizeof (buffer)); // fill the buffer with 0
       strcpy (buffer + 13, to);
       {
         bool quotation = false;
@@ -209,16 +222,18 @@
                           i = k;
                           strcpy (buffer, "RCPT TO:"); strcat (buffer, buffer + j + 1); strcat (buffer, (char *) "\r\n");
                           // send buffer now
-                          if (sendAll (connectionSocket, buffer, strlen (buffer), SMTP_TIME_OUT) <= 0) {
+                          if (sendAll (connectionSocket, buffer, SMTP_TIME_OUT) <= 0) {
                             dmesg ("[smtpClient] send error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";        
                           }
+                          // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", buffer);                          
                           if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
                             dmesg ("[smtpClient] read error: ", errno, strerror (errno));
                             close (connectionSocket);
                             return "";
                           }
+                          // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
                           if (strstr (buffer, "250") != buffer) goto closeSmtpConnection; // 250 2.1.5 Ok
                         }
             default:    break;
@@ -227,25 +242,27 @@
       }
 
       // send DATA command to SMTP server and read its reply
-      if (sendAll (connectionSocket, (char *) "DATA\r\n", strlen ((char *) "DATA\r\n"), SMTP_TIME_OUT) <= 0) {
+      if (sendAll (connectionSocket, "DATA\r\n", SMTP_TIME_OUT) <= 0) {
         dmesg ("[smtpClient] send error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";        
       }
+      // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n","DATA\r\n");      
       if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
         dmesg ("[smtpClient] read error: ", errno, strerror (errno));
         close (connectionSocket);
         return "";
       }
+      // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
       if (strstr (buffer, "354") != buffer) goto closeSmtpConnection; // 354 End data with <CR><LF>.<CR><LF>
 
       // send DATA content to SMTP server and read its reply
       {
-        string  s = "From:";
-                s += from;
-                s += "\r\nTo:";
-                s += to;
-                s += "\r\n";
+        String s = "From:";
+               s += from;
+               s += "\r\nTo:";
+               s += to;
+               s += "\r\n";
         #ifdef __TIME_FUNCTIONS__
           time_t now = time (NULL);
           if (now) { // if we know the time than add this information also
@@ -264,16 +281,18 @@
                      "\r\n";
                 s += message;
                 s += "\r\n.\r\n"; // end-of-message mark
-        if (sendAll (connectionSocket, s, SMTP_TIME_OUT) <= 0) {
+        if (sendAll (connectionSocket, s.c_str (), SMTP_TIME_OUT) <= 0) {
           dmesg ("[smtpClient] send error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";        
         }
+        // DEBUG: Serial.printf ("[__sendMail__] =>\n%s\n", (char *) s);             
         if (recvAll (connectionSocket, buffer, SMTP_BUFFER_SIZE, (char *) "\n", SMTP_TIME_OUT) <= 0) { 
           dmesg ("[smtpClient] read error: ", errno, strerror (errno));
           close (connectionSocket);
           return "";
         }
+        // DEBUG: Serial.printf ("[__sendMail__] <=\n%s\n", buffer);
         if (strstr (buffer, "250") != buffer) goto closeSmtpConnection; // 250 2.0.0 Ok: queued as 5B05E52A278
       }
 
@@ -283,7 +302,7 @@
   }
 
   // sends message, returns error or success text, fills empty parameters with the ones from configuration file /etc/mail/sendmail.cf
-  string sendMail (char *message = (char *) "", char *subject = (char *) "", char *to = (char *) "", char *from = (char *) "", char *password = (char *) "", char *userName = (char *) "", int smtpPort = 0, char *smtpServer = (char *) "") {
+  string sendMail (const char *message = "", const char *subject = "", const char *to = "", const char *from = "", const char *password = "", const char *userName = "", int smtpPort = 0, const char *smtpServer = "") {
       // DEBUG: Serial.printf ("sendMail (call):\nsmtpServer=%s\nsmtpPort=%i\nusername=%s\npassword=%s\nfrom=%s\nto=%s\nsubject=%s\nmessage=%s\n", smtpServer, smtpPort, userName, password, from, to, subject, message);
 
     #ifdef __FILE_SYSTEM__

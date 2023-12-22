@@ -1,7 +1,7 @@
 /*
- * vector.h for Arduino ESP boards
+ * vector.h for Arduino (ESP boards)
  * 
- * This file is part of C++ vectors for Arduino: https://github.com/BojanJurca/Cplusplus-vectors-for-Arduino
+ * This file is part of Vectors-for-Arduino: https://github.com/BojanJurca/Vectors-for-Arduino
  * 
  * vector.h is based on Tom Stewart's work: https://github.com/tomstewart89/Vector with some differences:
  * 
@@ -23,8 +23,10 @@
  *
  * I tried to make the vector library as generic as possible but haven't succeeded completely. Please see the description of Arduino String template specialization below. 
  * It is possible that other specializations for other types of objects may be necessary as well.
+ *
+ * Vector functions are not thread-safe.
  * 
- *  Bojan Jurca, October 10, 2023
+ *  Bojan Jurca, December 6, 2023
  *  
  */
 
@@ -67,7 +69,7 @@
                             DATA_ALREADY_LOADED = -8      // can't load the data if it is already loaded 
             }; // note that all errors are negative numbers
 
-            char *errorCodeText (errorCode e) {
+            char *errorCodeText (int e) {
                 switch (e) {
                     case OK:                  return (char *) "OK";
                     case NOT_FOUND:           return (char *) "NOT_FOUND";
@@ -234,7 +236,7 @@
             *  Calling program should check lastErrorCode member variable after constructor is beeing called for possible errors
             */
       
-            vector<vectorType> (vector<vectorType>& other) {
+            vector (vector& other) {
                 if (this->reserve (other.size ()) != OK) {
                     __vector_h_debug__ ("copy-constructor - out of memory.");
                     #ifdef __VECTOR_H_EXCEPTIONS__
@@ -262,7 +264,7 @@
             *  Without properly handling it, = operator would probably just copy one instance over another which would result in crash when instances will be distroyed.
             */
       
-            vector<vectorType>* operator = (vector<vectorType> other) {
+            vector* operator = (vector other) {
                 this->clear (); // clear existing elements if needed
                 if (this->reserve (other.size ()) != OK) {
                     __vector_h_debug__ ("operator = - out of memory.");
@@ -537,8 +539,74 @@
                     return OK;
                 }
             }
-      
+
+
+           /*
+            *  Sorts vector elements in accending order using heap sort algorithm
+            *
+            *  For heap sort algorithm description please see: https://www.geeksforgeeks.org/heap-sort/ and https://builtin.com/data-science/heap-sort
+            *  
+            *  It works for almost of the data types as long as operator < is provided.
+            */
+
+            void sort () { 
+
+                // build heap (rearrange array)
+                for (int i = __size__ / 2 - 1; i >= 0; i --) {
+
+                    // heapify i .. n
+                    int j = i;
+                    do {
+                        int largest = j;        // initialize largest as root
+                        int left = 2 * j + 1;   // left = 2 * j + 1
+                        int right = 2 * j + 2;  // right = 2 * j + 2
+                        
+                        if (left < __size__ && at (largest) < at (left)) largest = left;     // if left child is larger than root
+                        if (right < __size__ && at (largest) < at (right)) largest = right;  // if right child is larger than largest so far
+                        
+                        if (largest != j) {     // if largest is not root
+                            // swap arr [j] and arr [largest]
+                            vectorType tmp = at (j); at (j) = at (largest); at (largest) = tmp;
+                            // heapify the affected subtree in the next iteration
+                            j = largest;
+                        } else {
+                            break;
+                        }
+                    } while (true);
+
+                }
+                
+                // one by one extract an element from heap
+                for (int i = __size__ - 1; i > 0; i --) {
             
+                    // move current root to end
+                    vectorType tmp = at (0); at (0) = at (i); at (i) = tmp;
+
+                    // heapify the reduced heap 0 .. i
+                    int j = 0;
+                    do {
+                        int largest = j;        // initialize largest as root
+                        int left = 2 * j + 1;   // left = 2*j + 1
+                        int right = 2 * j + 2;  // right = 2*j + 2
+                        
+                        if (left < i && at (largest) < at (left)) largest = left;     // if left child is larger than root
+                        if (right < i && at (largest) < at (right)) largest = right;  // if right child is larger than largest so far
+                        
+                        if (largest != j) {     // if largest is not root
+                            // swap arr [j] and arr [largest]
+                            vectorType tmp = at (j); at (j) = at (largest); at (largest) = tmp;
+                            // heapify the affected subtree in the next iteration
+                            j = largest;
+                        } else {
+                            break;
+                        }
+                    } while (true);            
+        
+                }        
+
+            }
+
+
            /*
             *  Iterator is needed in order for standard C++ for each loop to work. 
             *  A good source for iterators is: https://www.internalpointers.com/post/writing-custom-iterators-modern-cpp
@@ -724,7 +792,7 @@
                             DATA_ALREADY_LOADED = -8      // can't load the data if it is already loaded 
             }; // note that all errors are negative numbers
 
-            char *errorCodeText (errorCode e) {
+            char *errorCodeText (int e) {
                 switch (e) {
                     case OK:                  return (char *) "OK";
                     case NOT_FOUND:           return (char *) "NOT_FOUND";
@@ -893,7 +961,7 @@
             *  Calling program should check lastErrorCode member variable after constructor is beeing called for possible errors
             */
       
-            vector<String> (vector<String>& other) {
+            vector (vector& other) {
                 if (this->reserve (other.size ()) != OK) {
                     __vector_h_debug__ ("<String> copy-constructor - out of memory.");
                     #ifdef __VECTOR_H_EXCEPTIONS__
@@ -919,7 +987,7 @@
             *  Without properly handling it, = operator would probably just copy one instance over another which would result in crash when instances will be distroyed.
             */
       
-            vector<String>* operator = (vector<String> other) {
+            vector* operator = (vector other) {
                 this->clear (); // clear existing elements if needed
                 if (this->reserve (other.size ()) != OK) {
                     __vector_h_debug__ ("<String>.operator = - out of memory.");
@@ -1238,7 +1306,73 @@
                     return OK;
                 }
             }
-      
+
+
+           /*
+            *  Sorts vector elements in accending order using heap sort algorithm
+            *
+            *  For heap sort algorithm description please see: https://www.geeksforgeeks.org/heap-sort/ and https://builtin.com/data-science/heap-sort
+            *  
+            *  It works for almost of the data types as long as operator < is provided.
+            */
+
+            void sort () { 
+
+                // build heap (rearrange array)
+                for (int i = __size__ / 2 - 1; i >= 0; i --) {
+
+                    // heapify i .. n
+                    int j = i;
+                    do {
+                        int largest = j;        // initialize largest as root
+                        int left = 2 * j + 1;   // left = 2 * j + 1
+                        int right = 2 * j + 2;  // right = 2 * j + 2
+                        
+                        if (left < __size__ && at (largest) < at (left)) largest = left;     // if left child is larger than root
+                        if (right < __size__ && at (largest) < at (right)) largest = right;  // if right child is larger than largest so far
+                        
+                        if (largest != j) {     // if largest is not root
+                            // swap arr [j] and arr [largest]
+                            __swapStrings__ (&at (j), &at (largest));
+                            // heapify the affected subtree in the next iteration
+                            j = largest;
+                        } else {
+                            break;
+                        }
+                    } while (true);
+
+                }
+                
+                // one by one extract an element from heap
+                for (int i = __size__ - 1; i > 0; i --) {
+            
+                    // move current root to end
+                    __swapStrings__ (&at (0), &at (i));
+
+                    // heapify the reduced heap 0 .. i
+                    int j = 0;
+                    do {
+                        int largest = j;        // initialize largest as root
+                        int left = 2 * j + 1;   // left = 2*j + 1
+                        int right = 2 * j + 2;  // right = 2*j + 2
+                        
+                        if (left < i && at (largest) < at (left)) largest = left;     // if left child is larger than root
+                        if (right < i && at (largest) < at (right)) largest = right;  // if right child is larger than largest so far
+                        
+                        if (largest != j) {     // if largest is not root
+                            // swap arr [j] and arr [largest]
+                            __swapStrings__ (&at (j), &at (largest));
+                            // heapify the affected subtree in the next iteration
+                            j = largest;
+                        } else {
+                            break;
+                        }
+                    } while (true);            
+        
+                }        
+
+            }
+
             
            /*
             *  Iterator is needed in order for standard C++ for each loop to work. 

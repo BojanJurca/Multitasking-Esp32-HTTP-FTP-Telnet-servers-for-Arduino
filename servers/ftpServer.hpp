@@ -6,7 +6,7 @@
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    October 23, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -90,6 +90,11 @@
     // control ftpServer critical sections
     static SemaphoreHandle_t __ftpServerSemaphore__ = xSemaphoreCreateMutex (); 
 
+    // log what is going on within telnetServer
+    byte ftpServerConcurentTasks = 0;
+    byte ftpServerConcurentTasksHighWatermark = 0;
+
+
     // cycle through set of port numbers when FTP server is working in pasive mode
     int __pasiveDataPort__ () {
         static int lastPasiveDataPort = 1024;                                                 // change pasive data port range if needed
@@ -132,12 +137,24 @@
                             if (pdPASS != taskCreated) {
                               dmesg ("[ftpControlConnection] xTaskCreate error");
                             } else {
-                              __state__ = RUNNING;           
-                            }
+                                __state__ = RUNNING;
 
+                                xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
+                                    ftpServerConcurentTasks++;
+                                    if (ftpServerConcurentTasks > ftpServerConcurentTasksHighWatermark)
+                                        ftpServerConcurentTasksHighWatermark = ftpServerConcurentTasks;
+                                xSemaphoreGive (__ftpServerSemaphore__);
+
+                                return; // success                              
+                            }
+                            dmesg ("[ftpConnection] xTaskCreate error"); // failure
                           }
 
         ~ftpControlConnection ()  {
+                                xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
+                                    ftpServerConcurentTasks--;
+                                xSemaphoreGive (__ftpServerSemaphore__);
+
                                 closeControlConnection ();
                                 closeDataConnection ();
                             }
@@ -182,7 +199,7 @@
 
         // writing output to FTP control connection with error logging (dmesg)
         int sendFtp (char *buf) { 
-            int i = sendAll (__controlConnectionSocket__, buf, strlen (buf), FTP_CONTROL_CONNECTION_TIME_OUT);
+            int i = sendAll (__controlConnectionSocket__, buf, FTP_CONTROL_CONNECTION_TIME_OUT);
             if (i <= 0)
                 dmesg ("[ftpControlConnection] send error: ", errno, strerror (errno));
             return i;
@@ -716,9 +733,9 @@
         STATE_TYPE state () { return __state__; }
     
         ftpServer (  // the following parameters will be handeled by ftpServer instance
-                     const char *serverIP,                                                          // FTP server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort,                                                                // FTP server port
-                     bool (*firewallCallback) (char *connectingIP)                                  // a reference to callback function that will be celled when new connection arrives 
+                     const char *serverIP = "0.0.0.0",                                                    // FTP server IP address, 0.0.0.0 for all available IP addresses
+                     int serverPort = 21,                                                                 // FTP server port
+                     bool (*firewallCallback) (char *connectingIP) = NULL                                 // a reference to callback function that will be celled when new connection arrives 
                    )  { 
                         // create a local copy of parameters for later use
                         strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0;
@@ -834,7 +851,7 @@
                                   close (connectingSocket); // normally ftpControlConnection would do this but if it is not created we have to do it here
                                 } else {
                                   if (fcn->state () != ftpControlConnection::RUNNING) {
-                                    sendAll (connectingSocket, ftpServiceUnavailable, strlen (ftpServiceUnavailable), FTP_CONTROL_CONNECTION_TIME_OUT);
+                                    sendAll (connectingSocket, ftpServiceUnavailable, FTP_CONTROL_CONNECTION_TIME_OUT);
                                     delete (fcn); // normally ftpControlConnection would do this but if it is not running we have to do it here
                                   }
                                 }

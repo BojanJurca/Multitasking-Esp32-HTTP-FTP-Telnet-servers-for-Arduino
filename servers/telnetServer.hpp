@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    Ocrober 23, 2023, Bojan Jurca
+    December 25, 2023, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -88,10 +88,22 @@
         #define "MyESP32Server"                                 // use default if not defined previously
     #endif
     #ifndef MACHINETYPE
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "MACHINETYPE was not defined previously, #defining the default ESP32 Dev Module in telnetServer.hpp"
+        // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
+        #if CONFIG_IDF_TARGET_ESP32
+            #define MACHINETYPE                   "ESP32"   
+        #elif CONFIG_IDF_TARGET_ESP32S2
+            #define MACHINETYPE                   "ESP32-S2"    
+        #elif CONFIG_IDF_TARGET_ESP32S3
+            #define MACHINETYPE                   "ESP32-S3"
+        #elif CONFIG_IDF_TARGET_ESP32C3
+            #define MACHINETYPE                   "ESP32-C3"        
+        #elif CONFIG_IDF_TARGET_ESP32C6
+            #define MACHINETYPE                   "ESP32-C6"
+        #elif CONFIG_IDF_TARGET_ESP32H2
+            #define MACHINETYPE                   "ESP32-H2"
+        #else
+            #define MACHINETYPE                   "ESP32 (other)"
         #endif
-        #define MACHINETYPE "ESP32 Dev Module"              // use default if not defined previously
     #endif
 
     #include "vector.h"                                     // for vi command only
@@ -138,6 +150,10 @@
     // control telnetServer critical sections
     static SemaphoreHandle_t __telnetServerSemaphore__ = xSemaphoreCreateMutex (); 
 
+    // log what is going on within telnetServer
+    byte telnetServerConcurentTasks = 0;
+    byte telnetServerConcurentTasksHighWatermark = 0;
+
 
     // ----- telnetConnection class -----
 
@@ -174,13 +190,26 @@
                                 dmesg ("[telnetConnection] xTaskCreate error");
                             } else {
                                 __state__ = RUNNING;
-                            }
 
+                                xSemaphoreTake (__telnetServerSemaphore__, portMAX_DELAY);
+                                    telnetServerConcurentTasks++;
+                                    if (telnetServerConcurentTasks > telnetServerConcurentTasksHighWatermark)
+                                        telnetServerConcurentTasksHighWatermark = telnetServerConcurentTasks;
+                                xSemaphoreGive (__telnetServerSemaphore__);
+
+                                return; // success
+
+                            }
+                            dmesg ("[telnetConnection] xTaskCreate error"); // failure
                           }
 
         ~telnetConnection ()  {
-                                closeConnection ();
-                            }
+                                  xSemaphoreTake (__telnetServerSemaphore__, portMAX_DELAY);
+                                      telnetServerConcurentTasks--;
+                                  xSemaphoreGive (__telnetServerSemaphore__);
+
+                                  closeConnection ();
+                              }
 
         int getSocket () { return __connectionSocket__; }
 
@@ -209,14 +238,14 @@
         uint16_t getClientWindowHeight () { return __clientWindowHeight__; }
 
         // writing output to telnet with error logging (dmesg)
-        int sendTelnet (char *buf, size_t len) { 
+        int sendTelnet (const char *buf, size_t len) { 
             int i = sendAll (__connectionSocket__, buf, len, __telnet_connection_time_out__);
             if (i <= 0)
                 dmesg ("[telnetConnection] send error: ", errno, strerror (errno));
             return i;
         }
 
-        int sendTelnet (char *buf) { return sendTelnet (buf, strlen (buf)); }
+        int sendTelnet (const char *buf) { return sendTelnet (buf, strlen (buf)); }
 
 
         // reading input from Telnet client with extraction of IAC commands
@@ -2256,11 +2285,11 @@
         STATE_TYPE state () { return __state__; }
     
         telnetServer ( // the following parameters will be pased to each telnetConnection instance
-                     String (* telnetCommandHandlerCallback) (int argc, char *argv [], telnetConnection *tcn),  // telnetCommandHandler callback function provided by calling program
+                     String (* telnetCommandHandlerCallback) (int argc, char *argv [], telnetConnection *tcn) = NULL, // telnetCommandHandler callback function provided by calling program
                      // the following parameters will be handeled by telnetServer instance
-                     const char *serverIP,                                                                      // Telnet server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort,                                                                            // Telnet server port
-                     bool (*firewallCallback) (char *connectingIP)                                              // a reference to callback function that will be celled when new connection arrives 
+                     const char *serverIP = "0.0.0.0",                                                                // Telnet server IP address, 0.0.0.0 for all available IP addresses
+                     int serverPort = 23,                                                                             // Telnet server port
+                     bool (*firewallCallback) (char *connectingIP) = NULL                                             // a reference to callback function that will be celled when new connection arrives 
                    )  { 
                         // create a local copy of parameters for later use
                         __telnetCommandHandlerCallback__ = telnetCommandHandlerCallback;
@@ -2373,12 +2402,12 @@
                                 telnetConnection *tcn = new (std::nothrow) telnetConnection (connectingSocket, ths->__telnetCommandHandlerCallback__, clientIP, serverIP);
                                 if (!tcn) {
                                   dmesg ("[telnetConnection] service unavaliable");
-                                  sendAll (connectingSocket, (char *) telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
+                                  sendAll (connectingSocket, telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
                                   close (connectingSocket); // normally telnetConnection would do this but if it is not created we have to do it here
                                 } else {
                                   if (tcn->state () != telnetConnection::RUNNING) {
                                     dmesg ("[telnetConnection] service unavaliable");
-                                    sendAll (connectingSocket, (char *) telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
+                                    sendAll (connectingSocket, telnetServiceUnavailable, TELNET_CONNECTION_TIME_OUT);
                                     delete (tcn); // normally telnetConnection would do this but if it is not running we have to do it here
                                   }
                                 }

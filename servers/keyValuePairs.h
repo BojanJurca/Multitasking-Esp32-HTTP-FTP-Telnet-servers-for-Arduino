@@ -1,11 +1,13 @@
 /*
- * keyValuePairs.h for Arduino ESP boards
+ * keyValuePairs.h for Arduino (ESP boards)
  * 
- * This file is part of Cplusplus-key-value-pairs-for-Arduino: https://github.com/BojanJurca/Cplusplus-key-value-pairs-for-Arduino
+ * This file is part of Key-value-pairs-for-Arduino: https://github.com/BojanJurca/Key-value-pairs-for-Arduino
  * 
  * The data storage is internaly implemented as balanced binary search tree for good searching performance.
+ *
+ * Key-valu-pairs functions are not thread-safe.
  * 
- * Bojan Jurca, October 10, 2023
+ * Bojan Jurca, November 26, 2023
  *  
  */
 
@@ -52,7 +54,7 @@
                           DATA_ALREADY_LOADED = -8      // can't load the data if it is already loaded 
           }; // note that all errors are negative numbers
 
-          char *errorCodeText (errorCode e) {
+          char *errorCodeText (int e) {
               switch (e) {
                   case OK:                  return (char *) "OK";
                   case NOT_FOUND:           return (char *) "NOT_FOUND";
@@ -158,7 +160,7 @@
            *  Calling program should check lastErrorCode member variable after constructor is beeing called for possible errors
            */
     
-          keyValuePairs<keyType, valueType> (keyValuePairs<keyType, valueType>& other) {
+          keyValuePairs (keyValuePairs& other) {
               // copy other's elements
               for (auto e: other) {
                   int h = this->__insert__ (&__root__, e.key, e.value); if  (h >= 0) __height__ = h;
@@ -177,7 +179,7 @@
            *  Without properly handling it, = operator would probably just copy one instance over another which would result in crash when instances will be distroyed.
            */
     
-          keyValuePairs<keyType, valueType>* operator = (keyValuePairs<keyType, valueType> other) {
+          keyValuePairs* operator = (keyValuePairs other) {
               this->clear (); // clear existing pairs if needed
 
               // copy other's pairs
@@ -326,8 +328,8 @@
 
                   if (stackSize >= __KEY_VALUE_PAIRS_MAX_STACK_SIZE__) throw (BAD_ALLOC);
   
-                  // find the lowest pair in the balanced binary search tree (tjhis would be the leftmost one) and fill the stack meanwhile
-                  keyValuePairs<keyType, valueType>::__balancedBinarySearchTreeNode__* p = kvp->__root__;
+                  // find the lowest pair in the balanced binary search tree (this would be the leftmost one) and fill the stack meanwhile
+                  keyValuePairs::__balancedBinarySearchTreeNode__* p = kvp->__root__;
 
                   while (p) {
                       __stack__ [++ __stackPointer__] = p;                      
@@ -354,7 +356,7 @@
                   // if the node has a right subtree find the leftmost element in the right subtree and fill the stack meanwhile
                   if (__stack__ [__stackPointer__]->rightSubtree != NULL) {
                       __key_value_pair_h_debug__ ("Iterator: going to the right subtree");
-                      keyValuePairs<keyType, valueType>::__balancedBinarySearchTreeNode__* p = __stack__ [__stackPointer__]->rightSubtree;
+                      keyValuePairs::__balancedBinarySearchTreeNode__* p = __stack__ [__stackPointer__]->rightSubtree;
                       if (p && p != __stack__ [__stackPointer__ + 1]) { // if the right subtree has not ben visited yet, proceed with the right subtree
                             while (p) {
                                 __stack__ [++ __stackPointer__] = p;

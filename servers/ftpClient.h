@@ -112,7 +112,7 @@
                                               }
                                             }
             else if (ftpReplyIs ("230 "))   { // server said that we have logged in, initiate pasive data connection
-                                              if (sendAll (controlConnectionSocket, (char *) "PASV\r\n", FTP_CLIENT_TIME_OUT) == -1) {
+                                              if (sendAll (controlConnectionSocket, "PASV\r\n", FTP_CLIENT_TIME_OUT) == -1) {
                                                 string e = string (errno) + (char *) " " + strerror (errno);
                                                 close (controlConnectionSocket);
                                                 return string ("send error: ") + e;

@@ -59,9 +59,9 @@
     time_t getUptime ();
     char *ntpDate (char *);
     char *ntpDate ();
-    bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, char *, bool);
+    bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, const char *, bool);
     bool cronTabAdd (const char *, bool);
-    int cronTabDel (char *);
+    int cronTabDel (const char *);
     void startCronDaemon (void (* cronHandler) (char *), size_t);
 
 
@@ -206,7 +206,7 @@
     } __cronEntry__ [CRONTAB_MAX_ENTRIES];
   
     // adds new entry into crontab table
-    bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, char *cronCommand, bool readFromFile = false) {
+    bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, const char *cronCommand, bool readFromFile = false) {
         bool b = false;    
         xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
             if (__cronTabEntries__ < CRONTAB_MAX_ENTRIES - 1) {
@@ -289,7 +289,7 @@
     }
     
     // deletes entry(es) from crontam table
-    int cronTabDel (char *cronCommand) { // returns the number of cron commands being deleted
+    int cronTabDel (const char *cronCommand) { // returns the number of cron commands being deleted
         int cnt = 0;
         xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
             int i = 0;

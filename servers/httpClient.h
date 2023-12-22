@@ -101,7 +101,7 @@
           close (connectionSocket);
           return "Out of memory";
       }
-      if (sendAll (connectionSocket, (char *) httpRequest, timeOut) == -1) {
+      if (sendAll (connectionSocket, httpRequest, timeOut) == -1) {
           int e = errno;
           close (connectionSocket);
           return "[httpClient] send() error: " + String (e) + " " + strerror (e);
