@@ -39,12 +39,30 @@
 		a:hover {color: hsl(207, 90%, 30%); cursor:pointer; }
 		a:link:active, a:visited:active {color: gray;}
 
+		dialog[open] {
+			font-family: verdana; 
+			font-size: 28px; 
+			color: white;
+			background-color:rgb(200 0 0 / 0.90);
+			border: solid rgb(200 0 0 / 0.90) 0px;
+			border-radius: 12px;
+			/*
+			position: absolute;
+			left: 50%;
+			top: 50%;
+			transform: translate(-50%, -50%);
+			*/
+  		}
+
 	</style>
 </head>
 
 <body>
 		
 	<br><h1><small>A brief demonstration of Esp32_web_ftp_telnet_server_template web user interface capabilities</small></h1>
+
+	<!-- error message -->
+	<dialog id="errDialog"></dialog>
 
 	<div class='d1'>
 		<b>HTML/REST/JSON <small>bi-directional communication with ESP32</small></b>
@@ -58,7 +76,7 @@
 	</div>
 	<hr />
 	<div class='d1'>
-		<div class='d2'>&nbsp;Up time<br>&nbsp;<small><small>Test code stability.</small></small></div>
+		<div class='d2'>&nbsp;Up time<br>&nbsp;<small><small>Test stability of the code.</small></small></div>
 		<div class='d5' id='upTime'>...</div>
 	</div>
 	<hr />
@@ -66,6 +84,12 @@
 		<div class='d3'>&nbsp;Free heap<br>&nbsp;<small><small>Find memory leaks.</small></small></div>
 		<div class='d4' id='freeHeap'>...</div>
 		<div class='d5'><canvas id='freeHeapGraph' height='62'></canvas></div>
+	</div>
+	<hr />
+	<div class='d1'>
+		<div class='d3'>&nbsp;Max free heap block<br>&nbsp;<small><small>Find heap related problems.</small></small></div>
+		<div class='d4' id='freeBlock'>...</div>
+		<div class='d5'><canvas id='freeBlockGraph' height='62'></canvas></div>
 	</div>
 	<hr />
 	<div class='d1'>
@@ -90,27 +114,36 @@
 	<script type='text/javascript'>
 
 		var freeHeapTO;
+		var freeBlockTO;
 		var httpRequestCountTO;
 
 		// correct canvas scaling and sizes
 		function resizeCanvases () {
 			var canvasWidth = document.getElementById ('upTime').clientWidth;
-			var canvasScaleWidth = canvasWidth / 500;
+			var canvasScaleWidth = canvasWidth / document.getElementById ('httpRequestCountGraph').clientWidth;
+						
 			document.getElementById ('freeHeapGraph').width = canvasWidth;
+			document.getElementById ('freeBlockGraph').width = canvasWidth;
 			document.getElementById ('httpRequestCountGraph').width = canvasWidth;
 			document.getElementById ('rssiGraph').width = canvasWidth;
 			document.getElementById ('freeHeapGraph').getContext ('2d').scale (canvasScaleWidth, 1);
+			document.getElementById ('freeBlockGraph').getContext ('2d').scale (canvasScaleWidth, 1);
 			document.getElementById ('httpRequestCountGraph').getContext ('2d').scale (canvasScaleWidth, 1);
 			document.getElementById ('rssiGraph').getContext ('2d').scale (canvasScaleWidth, 1);
 
+			// schedule REST calls with small delays so that all requests would not be sent to ESP32 at the same time
 			clearTimeout (freeHeapTO);
 			freeHeapTO = setTimeout (function () {
 				client.request ('/freeHeap', 'GET', function (json) {document.getElementById ('freeHeap').innerText = lineGraph (json,'freeHeapGraph','#0961aa') + ' KB';});
 			}, 100);
+			clearTimeout (freeBlockTO);
+			freeBlockTO = setTimeout (function () {
+				client.request ('/freeBlock', 'GET', function (json) {document.getElementById ('freeBlock').innerText = lineGraph (json,'freeBlockGraph','#0961aa') + ' KB';});
+			}, 300);
 			clearTimeout (httpRequestCountTO);
 			httpRequestCountTO = setTimeout (function () {
 				client.request ('/httpRequestCount', 'GET', function (json) {document.getElementById('httpRequestCount').innerText = lineGraph (json, 'httpRequestCountGraph', '#2597f4') + ' / min';});
-			}, 200);
+			}, 500);
 		}
 		resizeCanvases ();
 		window.addEventListener ('resize', (e) => {         
@@ -128,17 +161,19 @@
 					if (httpRequest.readyState == 1) { // 1 = OPENED, start timing
 						clearTimeout (httpRequestTimeout);
 						httpRequestTimeout = setTimeout (function () { 
-							alert ('Server did not reply (in time).'); 
-							// errorMessage ('Server did not reply (in time).');
+							// alert ('Server did not reply (in time).'); 
+							errorMessage ('Server did not reply (in time).');
 						}, 5000);
 					}
 					if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
 						clearTimeout (httpRequestTimeout);
-						if (httpRequest.status == 200) {
-							callback (httpRequest.responseText); // 200 = OK
-						} else {
-							alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
-							// errorMessage ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText);
+						switch (httpRequest.status) {
+							case 200: 	callback (httpRequest.responseText); // 200 = OK
+										break;
+							case 0:		break;
+							default: 	// alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
+										errorMessage ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText);
+										break;
 						}
 					}
 				}
@@ -148,6 +183,17 @@
 		}
 
 		var client = new httpClient ();
+
+		// error message
+		var errorMessageTimeout = null;
+		function errorMessage (msg) {
+			clearTimeout (errorMessageTimeout);
+			document.getElementById ('errDialog').textContent = msg;
+			document.getElementById ('errDialog').showModal ();
+			errorMessageTimeout = setTimeout (function () {
+				document.getElementById ('errDialog').close ();
+			}, 3000);				
+		}
 
 		function getAndRefreshLedState () { // read led state from ESP and refresh GUI
 			client.request ('/builtInLed', 'GET', function (json) {refreshLedState (json);});
@@ -229,9 +275,15 @@
 
 		setTimeout (function () {
 			setInterval (function () {
+				client.request ('/freeBlock', 'GET', function (json) {document.getElementById ('freeBlock').innerText = lineGraph (json, 'freeBlockGraph', '#0961aa') + ' KB';});
+			}, 60000);
+		}, 300);
+
+		setTimeout (function () {
+			setInterval (function () {
 				client.request ('/httpRequestCount', 'GET', function (json) {document.getElementById ('httpRequestCount').innerText = lineGraph (json, 'httpRequestCountGraph', '#2597f4') + ' / min';});
 			}, 60000);
-		}, 200);
+		}, 500);
 
 		// WebSocket streaming:
 		// we should have a circular queue od measurements here but since we already have
@@ -293,30 +345,50 @@
 	<br><br><h1><small>Web server examples</small></h1><br>
 
 	<hr />
-	<div class='d1' style='height: 48px; color: gray;'>
-		&nbsp;&nbsp;<a href="/example01.html">example01.html</a>&nbsp;&nbsp;<small><small>Dynamically generated HTML page.</small></small>
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example01.html">example01.html</a></div>
+		<div class='d2'><small><small>Dynamically generated HTML page.</small></small></div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px; color: gray;'>
-		&nbsp;&nbsp;<a href="/example02.html">example02.html</a>&nbsp;&nbsp;<small><small>Static HTML page (.html file) calling REST functions.</small></small>
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example02.html">example02.html</a></div>
+		<div class='d2'><small><small>Static HTML page (.html file) calling REST functions.</small></small></div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px; color: gray;'>
-		&nbsp;&nbsp;<a href="/example03.html">example03.html</a>&nbsp;&nbsp;<small><small>Checkbox calling REST functions.</small></small>
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example03.html">example03.html</a></div>
+		<div class='d2'><small><small>Checkbox calling REST functions.</small></small></div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px; color: gray;'>
-		&nbsp;&nbsp;<a href="/example04.html">example04.html</a>&nbsp;&nbsp;<small><small>Stylish checkbox calling REST functions.</small></small>
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example04.html">example04.html</a></div>
+		<div class='d2'><small><small>Stylish checkbox calling REST functions.</small></small></div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px; color: gray;'>
-		&nbsp;&nbsp;<a href="/example05.html">example05.html</a>&nbsp;&nbsp;<small><small>Nice web GUI controls.</small></small>
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example05.html">example05.html</a></div>
+		<div class='d2'><small><small>Nice web GUI controls.</small></small></div>
 	</div>
 	<hr />
-	<div class='d1' style='height: 48px; color: gray;'>
-		&nbsp;&nbsp;<a href="/oscilloscope.html">oscilloscope.html</a>&nbsp;&nbsp;<small><small>See what is going on within your ESP32 project.</small></small>
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example07.html">example07.html</a></div>
+		<div class='d2'><small><small>Example of cookie set by web server.</small></small></div>
+	</div>
+	<hr />
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/login.html">login.html</a></div>
+		<div class='d2'><small><small>Web session login example.</small></small></div>
 	</div>
 
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/protectedPage.html">protectedPage.html</a></div>
+		<div class='d2'><small><small>Only loggedin users can access this page.</small></small></div>
+	</div>
+	<hr />
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/oscilloscope.html">oscilloscope.html</a></div>
+		<div class='d2'><small><small>See what is going on within your ESP32 project.</small></small></div>
+	</div>
 	<hr />
 	<br>
 

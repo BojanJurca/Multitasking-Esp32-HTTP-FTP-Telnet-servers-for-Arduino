@@ -1,0 +1,239 @@
+<html>
+	<head>
+		<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
+		<link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
+		<link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
+		<meta http-equiv='content-type' content='text/html;charset=utf-8' />
+
+		<title>Example 07 - login</title>
+
+		<style>
+			hr {
+				border:0;
+				border-top:1px solid lightgray;
+				border-bottom:1px solid lightgray;
+			}
+
+			h1 {
+				font-family:verdana;
+				font-size:40px;
+				text-align:center;
+			}
+    
+  
+			/* button */
+			.button {padding: 10px 15px; font-size: 22px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 42px}
+			button:disabled {background-color: #aaa}
+			button:disabled:hover {background-color: #aaa}
+ 			/* blue button */
+			.button1 {background-color: hsl(207, 90%, 40%)}
+			.button1:hover {background-color: hsl(207, 90%, 30%)}
+			.button1:active {background-color: hsl(207, 90%, 30%); transform: translateY(3px)}
+
+			/* div grid */
+			div.d1 {
+				position:relative;
+				overflow:hidden;
+				width:100%;
+				font-family:verdana;
+				font-size:22px;
+				color:gray;
+			}
+			div.d2 {
+				position:relative;
+				float:left;
+				width:25%;
+				font-family:verdana;
+				font-size:30px;
+				color:gray;
+			}
+			div.d3 {
+				position:relative;
+				float:left;
+				width:30%;
+				font-family:verdana;
+				font-size:30px;
+				color:black;
+			}
+			div.d4 {
+				position:relative;
+				float:left;
+				width:45%;
+				font-family:verdana;
+				font-size:15px;
+				color:black;
+			}
+
+			/* input text */
+			input[type=text] {
+				padding: 12px 20px;
+				font-size: 22px;
+				height: 38px;
+				width: 90px;
+				margin: 8px 0;
+				box-sizing: border-box;
+				border: 2px solid hsl(207, 90%, 40%);
+				border-radius: 8px;
+			}
+			input[type=text]:focus {
+				outline: none;
+				padding: 12px 20px;
+				margin: 8px 0;
+				box-sizing: border-box;
+				border: 2px solid hsl(207, 90%, 55%);
+				border-radius: 8px;
+			}
+
+			/* input password */
+			input[type=password] {
+				padding: 12px 20px;
+				font-size: 22px;
+				height: 38px;
+				width: 90px;
+				margin: 8px 0;
+				box-sizing: border-box;
+				border: 2px solid hsl(207, 90%, 40%);
+				border-radius: 8px;
+			}
+			input[type=password]:focus {
+				outline: none;
+				padding: 12px 20px;
+				margin: 8px 0;
+				box-sizing: border-box;
+				border: 2px solid hsl(207, 90%, 55%);
+				border-radius: 8px;
+			}
+
+			dialog[open] {
+				font-family: verdana; 
+				font-size: 28px; 
+				color: white;
+				background-color:rgb(200 0 0 / 0.90);
+				border: solid rgb(200 0 0 / 0.90) 0px;
+				border-radius: 12px;
+				/*
+				position: absolute;
+				left: 50%;
+				top: 50%;
+				transform: translate(-50%, -50%);
+				*/
+			}
+
+		</style>
+
+		<script type='text/javascript'>
+
+			// mechanism that makes REST calls and get their replies
+			var httpClient = function () {
+				this.request = function (url, method, callback) {
+					var httpRequest = new XMLHttpRequest ();
+					var httpRequestTimeout = null;
+					
+					httpRequest.onreadystatechange = function () {
+						// console.log (httpRequest.readyState);
+						if (httpRequest.readyState == 1) { // 1 = OPENED, start timing
+							clearTimeout (httpRequestTimeout);
+							httpRequestTimeout = setTimeout (function () { 
+								// alert ('Server did not reply (in time).'); 
+								errorMessage ('Server did not reply (in time).');
+							}, 5000);
+						}
+						if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
+							clearTimeout (httpRequestTimeout);
+							switch (httpRequest.status) {
+								case 200: 	callback (httpRequest.responseText); // 200 = OK
+											break;
+								case 0:		break;
+								default: 	// alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
+											errorMessage ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText);
+											break;
+							}
+						}
+					}
+					httpRequest.open (method, url, true);
+					httpRequest.send (null);
+				}
+			}
+
+			// error message
+			var errorMessageTimeout = null;
+			function errorMessage (msg) {
+				clearTimeout (errorMessageTimeout);
+				document.getElementById ('errDialog').textContent = msg;
+				document.getElementById ('errDialog').showModal ();
+				errorMessageTimeout = setTimeout (function () {
+					document.getElementById ('errDialog').close ();
+				}, 3000);				
+			}
+
+		</script>
+
+	</head>
+<body>
+
+	<h1>Example 07 - login</h1><br>
+	<hr />
+
+	<!-- error message -->
+	<dialog id="errDialog"></dialog>
+
+	<div class='d1'>
+		<div class='d2'>&nbsp;User name</div>
+		<div class='d3'> 
+			<input type="text" id="userName" style="width:90%;" required>
+		</div>
+		<div class='d4'>
+			Enter your ESP32 user name (like root for example).
+		</div>
+	</div>
+
+	<div class='d1'>
+		<div class='d2'>&nbsp;Password</div>
+		<div class='d3'> 
+			<input type="password" id="userPassword" style="width:90%;" required>
+		</div>
+		<div class='d4'>
+			Enter password for user name (like rootpassword for example).
+		</div>
+	</div>
+
+	<hr />
+
+	<br>
+
+	<div class='d1' style='height: 50px;'>
+		<div class='d2'>&nbsp;</div>
+		<div class='d3'> 
+			<button class='button button1' id='loginButton' onclick="tryToLogin ()">&nbsp;Login&nbsp;</button>
+		</div>
+		<div class='d4'>
+			Uses cookies. 
+		</div>
+	</div>
+
+</body>
+
+	<script type='text/javascript'>
+
+		function tryToLogin () {
+
+			if (!document.getElementById ('userName').reportValidity ()) return;			
+			if (!document.getElementById ('userPassword').reportValidity ()) return;
+
+			// try to get session token into a cookie
+			var client = new httpClient ();
+			var clientRequest = 'login' + '/' + document.getElementById ('userName').value + '%20' + document.getElementById ('userPassword').value;
+			client.request 	(clientRequest, 'GET', function (serverReply) 	{
+												if (serverReply == "loggedIn") {
+													alert (document.cookie); // success, got sessionToken cookie
+													window.location.href = "/protectedPage.html";
+												} else {
+													alert (serverReply); // report error
+												}
+									  		});
+
+		}
+
+	</script>
+
+</html>
