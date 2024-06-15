@@ -18,7 +18,9 @@ Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.s
 ## The latest changes
 
 
-The latest changes are about porting the code to IDF 5.x.
+The latest changes are mainly about porting the code to IDF 5.x. If you are looking for code that runs on IDF 4.x please, download the release v2.04.
+
+There are still some parts that I was unable to port to IDF 5.x well enough so far. For example obtaining IP addresses of stations connected to the AP interface in iw Telnet command. Any help with this would be appreciated.
 
 
 ![Screenshot](presentation.gif)
