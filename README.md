@@ -18,7 +18,8 @@ Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.s
 ## The latest changes
 
 
-The latest changes are support (this applies to built-in oscilloscope) for ESP32-S2, ESP32-S3 and ESP32-C3 boards (most of ESP32 boards should also just work).
+The latest changes are about porting the code to IDF 5.x.
+
 
 ![Screenshot](presentation.gif)
 

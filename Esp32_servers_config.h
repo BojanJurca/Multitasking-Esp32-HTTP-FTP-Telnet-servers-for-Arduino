@@ -8,8 +8,8 @@
 
 // include version_of_servers.h to include version information
 #include "./servers/version_of_servers.h"
-// include dmesg_functions.h which is useful for run-time debugging - for dmesg telnet command
-#include "./servers/dmesg_functions.h"
+// include dmesg.hpp which is useful for run-time debugging - for dmesg telnet command
+#include "./servers/dmesg.hpp"
 
 
 // 1. TIME:    #define which time settings, wil be used with time_functions.h - will be included later
@@ -76,9 +76,9 @@
 // 4. USERS:     #define what kind of user management you want before #including user_management.h
 #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT   // or HARDCODED_USER_MANAGEMENT or NO_USER_MANAGEMENT
 // if UNIX_LIKE_USER_MANAGEMENT is selected you must also include file_system.h to be able to use /etc/passwd and /etc/shadow files
-#define DEFAULT_ROOT_PASSWORD "rootpassword"          // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT are used
-#define DEFAULT_WEBADMIN_PASSWORD "webadminpassword"  // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
-#define DEFAULT_USER_PASSWORD "changeimmediatelly"    // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
+#define DEFAULT_ROOT_PASSWORD     "rootpassword"        // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT are used
+#define DEFAULT_WEBADMIN_PASSWORD "webadminpassword"    // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
+#define DEFAULT_USER_PASSWORD     "changeimmediatelly"  // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
 
 
 // 5. #include (or comment-out) the functionalities you want (or don't want) to use
@@ -86,7 +86,7 @@
     #include "./servers/fileSystem.hpp"   // most functionalities can run even without a file system if everything is stored in RAM (smaller web pages, ...)
 #endif
 #include "./servers/time_functions.h"     // fileSystem.hpp is needed prior to #including time_functions.h if you want to store the default parameters
-#include "./servers/network.h"            // file>ystem.hpp is needed prior to #including network.h if you want to store the default parameters
+#include "./servers/netwk.h"              // fileSystem.hpp is needed prior to #including network.h if you want to store the default parameters
 #include "./servers/httpClient.h"         // support to access web pages from other servers and curl telnet command
 #ifdef FILE_SYSTEM
     #include "./servers/ftpClient.h"      // fileSystem.hpp is needed prior to #including ftpClient.h if you want to store the default parameters
@@ -110,17 +110,3 @@
 
 // uncomment the following line to get additional compile-time information about how the project gets compiled
 // #define SHOW_COMPILE_TIME_INFORMATION
-
-
-// backward compatibility
-#ifdef FILE_SYSTEM
-    #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT || (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-        [[deprecated("Replaced by fileSystem.mount(bool)")]] bool mountFileSystem(bool formatIfUnformatted) {
-          return fileSystem.mount(formatIfUnformatted);
-        }
-    #endif
-#endif
-
-[[deprecated("Replaced by userManagement.initialize()")]] void initializeUsers() {
-  userManagement.initialize();
-}

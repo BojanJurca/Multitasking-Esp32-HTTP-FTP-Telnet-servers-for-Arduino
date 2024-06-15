@@ -6,9 +6,9 @@
             - one of ESP32 boards (Tools | Board) and 
             - one of FAT partition schemes (Tools | Partition scheme) for FAT file system or one of SPIFFS partition schemes for LittleFS file system
 
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
      
-    December 25, 2023, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
 
     PLEASE NOTE THAT THIS FILE IS JUST A TEMPLATE. YOU CAN INCLUDE OR EXCLUDE FUNCTIONALITIES YOU NEED OR DON'T NEED IN Esp32_servers_config.h.
@@ -24,9 +24,9 @@
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING DEFINITIONS -----
                     #include "measurements.hpp"
-                    measurements freeHeap (60);                 // measure free heap each minute for possible memory leaks
-                    measurements freeBlock (60);                // measure max free heap block each minute for possible heap-related problems
-                    measurements httpRequestCount (60);         // measure how many web connections arrive each minute
+                    measurements<60> freeHeap;                  // measure free heap each minute for possible memory leaks
+                    measurements<60> freeBlock;                 // measure max free heap block each minute for possible heap-related problems
+                    measurements<60> httpRequestCount;          // measure how many web connections arrive each minute
                     #undef LED_BUILTIN
                     #define LED_BUILTIN 2                       // built-in led blinking is used in examples 01, 03 and 04
 
@@ -45,7 +45,7 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
 
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
-                    httpRequestCount.increaseCounter ();                            // gether some statistics
+                    httpRequestCount.increase_valueCounter ();                      // gether some statistics
 
                     // variables used by example 05
                     char niceSwitch1 [6] = "false";
@@ -57,9 +57,9 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                                                                       return "<HTML>Example 01 - dynamic HTML page<br><br><hr />" + String (digitalRead (LED_BUILTIN) ? "Led is on." : "Led is off.") + "<hr /></HTML>";
                                                                                   }
                     else if (httpRequestStartsWith ("GET /example07.html "))      { // used by example 07
-                                                                                      string refreshCounter = hcn->getHttpRequestCookie ("refreshCounter");
+                                                                                      cstring refreshCounter = hcn->getHttpRequestCookie ("refreshCounter");
                                                                                       if (refreshCounter == "") refreshCounter = "0";
-                                                                                      refreshCounter = string (atoi (refreshCounter) + 1);
+                                                                                      refreshCounter = cstring (atoi (refreshCounter) + 1);
                                                                                       hcn->setHttpReplyCookie ("refreshCounter", refreshCounter, time () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
                                                                                       return "<HTML>Web cookies<br><br>This page has been refreshed " + String (refreshCounter) + " times. Click refresh to see more.</HTML>";
                                                                                   }                                                                                  
@@ -88,13 +88,13 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                                                                       return httpResponseContentBuffer;
                                                                                   }                                                                    
                     else if (httpRequestStartsWith ("GET /freeHeap "))            { // used by index.html: REST function for static HTML page
-                                                                                      return freeHeap.toJson (5);
+                                                                                      return freeHeap.toJson ();
                                                                                   }
                     else if (httpRequestStartsWith ("GET /freeBlock "))           { // used by index.html
-                                                                                      return freeBlock.toJson (5);
+                                                                                      return freeBlock.toJson ();
                                                                                   }
                     else if (httpRequestStartsWith ("GET /httpRequestCount "))    { // used by index.html: REST function for static HTML page
-                                                                                      return httpRequestCount.toJson (5);
+                                                                                      return httpRequestCount.toJson ();
                                                                                   }
                     else if (httpRequestStartsWith ("GET /niceSwitch1 "))         { // used by example 05.html: REST function for static HTML page
                                                                                       returnNiceSwitch1State:
@@ -140,8 +140,8 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                     #ifdef WEB_SESSIONS
                         // ----- web sessions - this part is still public, the users do not need to login -----
 
-                        fsString<64> sessionToken = hcn->getHttpRequestCookie ("sessionToken").c_str ();
-                        fsString<64>userName;
+                        Cstring<64> sessionToken = hcn->getHttpRequestCookie ("sessionToken").c_str ();
+                        Cstring<64>userName;
                         if (sessionToken > "") userName = hcn->getUserNameFromToken (sessionToken); // if userName > "" the user is loggedin
 
                         // REST call to login       
@@ -153,7 +153,7 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                 hcn->setHttpReplyCookie ("sessionUser", "");
                             }
                             // check new login credentials and login
-                            fsString<64>password;
+                            Cstring<64>password;
                             if (sscanf (httpRequest, "%*[^/]/login/%64[^%%]%%20%64s", (char *) userName, (char *) password) == 2) {
                                 if (userManagement.checkUserNameAndPassword (userName, password)) { // check if they are OK against system users or find another way of authenticating the user
                                     sessionToken = hcn->newWebSessionToken (userName, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT).c_str (); // use 0 for infinite
@@ -227,7 +227,7 @@ void wsRequestHandlerCallback (char *wsRequest, WebSocket *webSocket) {
                                                                             int i = WiFi.RSSI ();
                                                                             c = (char) i;
                                                                             // Serial.printf ("[WebSocket data streaming] sending %i to web client\n", i);
-                                                                        } while (webSocket->sendBinary ((byte *) &c, sizeof (c))); // send RSSI information as long as web browser is willing tzo receive it
+                                                                        } while (webSocket->sendBinary ((byte *) &c, sizeof (c))); // keep sending RSSI information as long as web browser is receiving it
                                                                     }
 
 }
@@ -263,14 +263,14 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
                     // ----- USED FOR DEMONSTRATION OF RETRIEVING INFORMATION FROM WEB SESSION TOKEN DATABASE, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
                     #ifdef WEB_SESSIONS
                         if (argv0is ("web") && argv1is ("sessions")) {  
-                            persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e; // or just int
+                            signed char e; // or just int
                             webSessionTokenInformation_t webSessionTokenInformation;
                             tcn->sendTelnet ((char *) "web session token                                                valid for  user name\n\r-------------------------------------------------------------------------------------");
                             for (auto p: webSessionTokenDatabase) {
-                                e = webSessionTokenDatabase.FindValue (p.key, &webSessionTokenInformation, p.blockOffset);
-                                if (e == webSessionTokenDatabase.OK && time () && webSessionTokenInformation.expires > time ()) {
+                                e = webSessionTokenDatabase.FindValue (p->key, &webSessionTokenInformation, p->blockOffset);
+                                if (e == err_ok && time () && webSessionTokenInformation.expires > time ()) {
                                     char c [180];
-                                    sprintf (c, "\n\r%s %5li s    %s", p.key.c_str (), webSessionTokenInformation.expires - time (), webSessionTokenInformation.userName.c_str ());
+                                    sprintf (c, "\n\r%s %5li s    %s", p->key.c_str (), webSessionTokenInformation.expires - time (), webSessionTokenInformation.userName.c_str ());
                                     tcn->sendTelnet (c);
                                 }
                             }
@@ -292,41 +292,69 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
 // Cron command handler example - if you don't need it just delete this function and pass NULL to startCoronDaemon function instead
 // later in the code. 
 
-void cronHandlerCallback (char *cronCommand) {
+void cronHandlerCallback (const char *cronCommand) {
     // this callback function is supposed to handle cron commands/events that occur at time specified in crontab
 
     #define cronCommandIs(X) (!strcmp (cronCommand, X))  
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
-                    if (cronCommandIs ("gotTime"))                        {   // triggers only once - the first time ESP32 sets its clock (when it gets time from NTP server for example)
-                                                                              char buf [26]; // 26 bytes are needed
-                                                                              ascTime (localTime (time ()), buf);
-                                                                              Serial.println ("Got time at " + String (buf) + " (local time), do whatever needs to be done the first time the time is known.");
-                                                                          }           
-                    if (cronCommandIs ("newYear'sGreetingsToProgrammer")) {   // triggers at the beginning of each year
-                                                                              Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
-                                                                          }
-                    if (cronCommandIs ("onMinute"))                       {   // triggers each minute - collect some measurements for the purpose of this demonstration
-                                                                              struct tm st = localTime (time ()); 
-                                                                              freeHeap.addMeasurement (st.tm_min, ESP.getFreeHeap () / 1024); // take s sample of free heap in KB 
-                                                                              freeBlock.addMeasurement (st.tm_min, heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) / 1024); // take s sample of max free heap block in KB 
-                                                                              httpRequestCount.addCounterToMeasurements (st.tm_min);          // take sample of number of web connections that arrived last minute 
-                                                                          }
-                    if (cronCommandIs ("onHour"))                         {   // triggers each hour - reconnect if disconnected
-                                                                              if (getWiFiMode () & WIFI_STA) {
-                                                                                  if (!WiFi.isConnected ()) {
-                                                                                      dmesg ("[network][STA] disconnected, reconnecting ...");
-                                                                                      WiFi.reconnect ();
-                                                                                  }    
-                                                                              }
-                                                                          }
-
+                    if (cronCommandIs ("ONCE_AN_HOUR"))                         {   // built-in cron event, triggers once an hour even if the time is not known
+                                                                                    // check if ESP32 works in WIFI_STA mode
+                                                                                    wifi_mode_t wifiMode = WIFI_OFF;
+                                                                                    if (esp_wifi_get_mode (&wifiMode) != ESP_OK) {
+                                                                                        #ifdef __DMESG__
+                                                                                            dmesgQueue << "[cronHandlerCallback] couldn't get WiFi mode";
+                                                                                        #endif
+                                                                                        cout << "[cronHandlerCallback] couldn't get WiFi mode\n";
+                                                                                    } else {
+                                                                                        if (wifiMode & WIFI_STA) { // WiFi works in STAtion mode  
+                                                                                            // is  STAtion mode is diconnected?
+                                                                                            if (!WiFi.isConnected ()) { 
+                                                                                                #ifdef __DMESG__
+                                                                                                    dmesgQueue << "[cronHandlerCallback] STAtion disconnected, reconnecting to WiFi";
+                                                                                                #endif
+                                                                                                cout << "[cronHandlerCallback] STAtion disconnected, reconnecting to WiFi\n";
+                                                                                                WiFi.reconnect (); 
+                                                                                            } else { // check if it really works anyway 
+                                                                                                esp32_ping routerPing;
+                                                                                                routerPing.ping (WiFi.gatewayIP ());
+                                                                                                for (int i = 0; i < 4; i++) {
+                                                                                                    routerPing.ping (1);
+                                                                                                    if (routerPing.received ())
+                                                                                                        break;
+                                                                                                    delay (1000);
+                                                                                                }
+                                                                                                if (!routerPing.received ()) {
+                                                                                                    #ifdef __DMESG__
+                                                                                                        dmesgQueue << "[cronHandlerCallback] ping of router failed, reconnecting WiFi STAtion";
+                                                                                                    #endif
+                                                                                                    cout << "[cronHandlerCallback] ping of router failed, reconnecting WiFi STAtion\n";
+                                                                                                    WiFi.reconnect (); 
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
+                                                                                }
+                    else if (cronCommandIs ("gotTime"))                        {   // triggers only once - the first time ESP32 sets its clock (when it gets time from NTP server for example)
+                                                                                    char buf [26]; // 26 bytes are needed
+                                                                                    ascTime (localTime (time ()), buf);
+                                                                                    Serial.println ("Got time at " + String (buf) + " (local time), do whatever needs to be done the first time the time is known.");
+                                                                                }           
+                    else if (cronCommandIs ("newYear'sGreetingsToProgrammer"))  {   // triggers at the beginning of each year
+                                                                                    Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
+                                                                                }
+                    else if (cronCommandIs ("onMinute"))                        {   // triggers each minute - collect some measurements for the purpose of this demonstration
+                                                                                    struct tm st = localTime (time ()); 
+                                                                                    freeHeap.push_back ( { (unsigned char) st.tm_min, (int) (ESP.getFreeHeap () / 1024) } ); // take s sample of free heap in KB 
+                                                                                    freeHeap.push_back ( { (unsigned char) st.tm_min, (int) (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) / 1024) } ); // take s sample of free heap in KB 
+                                                                                    httpRequestCount.push_back_and_reset_valueCounter (st.tm_min);          // take sample of number of web connections that arrived last minute 
+                                                                                }
 }
 
 
 void setup () {
     Serial.begin (115200);
-    Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
+    Serial.println (cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
 
 
     #ifdef FILE_SYSTEM
@@ -374,20 +402,35 @@ void setup () {
                                                               80,                         // default HTTP port
                                                               NULL,                       // we won't use firewallCallback function for HTTP server FOR DEMONSTRATION PURPOSES
                                                               "/var/www/html");           // (optional) httpServer root directory, the default is "/var/www/html"
-        if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
+        if (!httpSrv && httpSrv->state () != httpServer::RUNNING) {
+            #ifdef __DMESG__
+                dmesgQueue << "[httpServer] did not start";
+            #endif
+            cout << "[httpServer] did not start\n";          
+        }
     #endif
     #ifdef __FTP_SERVER__                                 // all the arguments are optional
         ftpServer *ftpSrv = new (std::nothrow) ftpServer ("0.0.0.0",          // start FTP server on all available ip addresses
                                                           21,                 // default FTP port
                                                           firewallCallback);  // let's use firewallCallback function for FTP server FOR DEMONSTRATION PURPOSES
-        if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+        if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) {
+            #ifdef __DMESG__
+                dmesgQueue << "[ftpServer] did not start";
+            #endif
+            cout << "[ftpServer] did not start\n";                    
+        }
     #endif
     #ifdef __TELNET_SERVER__                                        // all the arguments are optional
         telnetServer *telnetSrv = new (std::nothrow) telnetServer ( telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
                                                                     "0.0.0.0",                    // start Telnet server on all available ip addresses 
                                                                     23,                           // default Telnet port
                                                                     firewallCallback);            // let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES
-        if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) dmesg ("[telnetServer] did not start.");
+        if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) {
+            #ifdef __DMESG__
+                dmesgQueue << "[telnetServer] did not start";
+            #endif
+            cout << "[telnetServer] did not start\n";          
+        }
     #endif
 
 
