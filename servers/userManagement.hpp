@@ -2,7 +2,7 @@
 
     userManagement.hpp
   
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
     User_management initially creates user management files:
   
@@ -31,7 +31,7 @@
 
     // ----- includes, definitions and supporting functions -----
 
-    #include <WiFi.h>
+    #include "std/console.hpp"
 
 
 #ifndef __USER_MANAGEMENT__
@@ -146,17 +146,17 @@
 
                 void initialize () { // creates user management files with root, webadmin, webserver and telnetserver users, if they don't exist - only 3 fields are used: user name, hashed password and home directory
                     if (!fileSystem.mounted ()) {
-                        Serial.printf ("[%10lu] [user management] file system is not mounted, can't read or write user configuration files.\n", millis ()); 
+                        cout << "[user management] file system is not mounted, can't read or write user configuration files.\n"; 
                         return; // if there is no file system, we can not write configuration files and read from them
                     }
                     // create dirctory structure
                     if (!fileSystem.isDirectory ((char *) "/etc")) { fileSystem.makeDirectory ((char *) "/etc"); }
                     // create /etc/passwd if it doesn't exist
                     {
-                        if (!fileSystem.isFile ((char *) "/etc/passwd")) {
-                            Serial.printf ("[%10lu] [user_management] /etc/passwd does not exist, creating default one ... ", millis ());
+                        if (!fileSystem.isFile ("/etc/passwd")) {
+                            cout << "[user_management] /etc/passwd does not exist, creating default one ... ";
                             bool created = false;
-                            File f = fileSystem.open ((char *) "/etc/passwd", "w", true);
+                            File f = fileSystem.open ("/etc/passwd", "w");
                             if (f) {
                                 char *defaultContent = (char *) "root:x:0:::/:\r\n"
                                                                 "webadmin:x:1000:::/var/www/html/:\r\n";
@@ -166,15 +166,15 @@
                                 diskTrafficInformation.bytesWritten += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
-                            Serial.printf (created ? "created\n" : "error\n");
+                            cout << (created ? "created\n" : "error\n");
                         }
                     }
                     // create /etc/shadow if it doesn't exist
                     {
-                        if (!fileSystem.isFile ((char *) "/etc/shadow")) {
-                            Serial.printf ("[%10lu] [user_management] /etc/shadow does not exist, creating default one ... ", millis ());
+                        if (!fileSystem.isFile ("/etc/shadow")) {
+                            cout << "[user_management] /etc/shadow does not exist, creating default one ... ";
                             bool created = false;
-                            File f = fileSystem.open ((char *) "/etc/shadow", "w", true);
+                            File f = fileSystem.open ("/etc/shadow", "w");
                             if (f) {
                                 char rootpassword [USER_PASSWORD_MAX_LENGTH + 1]; __sha256__ (rootpassword, sizeof (rootpassword), DEFAULT_ROOT_PASSWORD);
                                 char webadminpassword [USER_PASSWORD_MAX_LENGTH + 1]; __sha256__ (webadminpassword, sizeof (webadminpassword), DEFAULT_WEBADMIN_PASSWORD);
@@ -186,7 +186,7 @@
                                 diskTrafficInformation.bytesWritten += strlen (defaultPasswords); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
-                            Serial.printf (created ? "created\n" : "error\n");
+                            cout << (created ? "created\n" : "error\n");
                         }
                     }
                 }
@@ -199,7 +199,7 @@
                     
                     char srchStr [USER_PASSWORD_MAX_LENGTH + 65 + 6];
                     sprintf (srchStr, "%s:$5$", userName); __sha256__ (srchStr + strlen (srchStr), 65, password); strcat (srchStr, ":"); // we get something like "root:$5$de362bbdf11f2df30d12f318eeed87b8ee9e0c69c8ba61ed9a57695bbd91e481:"
-                    File f = fileSystem.open ("/etc/shadow", "r", false); 
+                    File f = fileSystem.open ("/etc/shadow", "r"); 
                     if (f) { 
                         char line [USER_PASSWORD_MAX_LENGTH + 65 + 6]; // this should do, we don't even need the whole line which looks something like "root:$5$de362bbdf11f2df30d12f318eeed87b8ee9e0c69c8ba61ed9a57695bbd91e481:::::::"
                         int i = 0;
@@ -229,7 +229,7 @@
                     *buffer = 0;
                     char srchStr [USER_PASSWORD_MAX_LENGTH + 2]; 
                     sprintf (srchStr, "%s:", userName);
-                    File f = fileSystem.open ("/etc/passwd", "r", false); 
+                    File f = fileSystem.open ("/etc/passwd", "r"); 
                     if (f) { 
                         char line [USER_PASSWORD_MAX_LENGTH + 32 + FILE_PATH_MAX_LENGTH + 1]; // this should do for one line which looks something like "webserver::100:::/var/www/html/:"
                         int i = 0;
@@ -278,7 +278,7 @@
                     // read /etc/shadow
                     char buffer [MAX_ETC_SHADOW_SIZE + 3]; buffer [0] = '\n'; 
                     int i = 1;
-                    File f = fileSystem.open ("/etc/shadow", "r", false); 
+                    File f = fileSystem.open ("/etc/shadow", "r"); 
                     if (f) { 
                         while (f.available () && i <= MAX_ETC_SHADOW_SIZE) if ((buffer [i] = f.read ()) != '\r') i++; buffer [i++] = '\n'; buffer [i] = 0; // read the whole file in C string ignoring \r
                         if (f.available ()) { f.close (); return false; } // /etc/shadow too large
@@ -291,7 +291,7 @@
                     if (!u && !__ignoreIfUserDoesntExist__) return false; // user not found in /etc/shadow
 
                     // write all the buffer except user's record back to /etc/shadow and then add a new record for the user
-                    f = fileSystem.open ("/etc/shadow", "w", false);
+                    f = fileSystem.open ("/etc/shadow", "w");
                     if (f) {
                         char *lineBeginning = buffer + 1;
                         char *lineEnd;
@@ -340,7 +340,7 @@
                     // read /etc/passwd
                     char buffer [MAX_ETC_PASSWD_SIZE + 3]; buffer [0] = '\n'; 
                     int i = 1;
-                    File f = fileSystem.open ("/etc/passwd", "r", false); 
+                    File f = fileSystem.open ("/etc/passwd", "r"); 
                     if (f) { 
                         while (f.available () && i <= MAX_ETC_PASSWD_SIZE) if ((buffer [i] = f.read ()) != '\r') i++; buffer [i++] = '\n'; buffer [i] = 0; // read the whole file in C string ignoring \r
                         if (f.available ()) { f.close (); return (char *) "/etc/shadow is too large."; } 
@@ -354,7 +354,7 @@
                     if (!__dontWriteNewUser__ && strlen (buffer) + strlen (userName) + strlen (userId) + strlen (homeDirectory) + 10 > MAX_ETC_PASSWD_SIZE) return (char *) "Can't add a user because /etc/passwd file is already too long.";
 
                     // write all the buffer back to /etc/passwd and then add a new record for the new user
-                    f = fileSystem.open ("/etc/passwd", "w", false);
+                    f = fileSystem.open ("/etc/passwd", "w");
                     if (f) {
                         char *lineBeginning = buffer + 1;
                         char *lineEnd;

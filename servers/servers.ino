@@ -1,20 +1,19 @@
 // this file is here just to make development of server files easier, it is not part of any project
 
 #include <WiFi.h>
-// fixed size strings
-#include "fsString.h"
-#define string fsString<300>                                // max number of characters in fixes size strings used here
 
 // #define SHOW_COMPILE_TIME_INFORMATION
 #define HOSTNAME                  "MyESP32Server"
 #define MACHINETYPE               "ESP32 Dev Modue"
 #define DEFAULT_STA_SSID          "YOUR_STA_SSID"
 #define DEFAULT_STA_PASSWORD      "YOUR_STA_PASSWORD"
-#define DEFAULT_AP_SSID           "" // HOSTNAME, leave empty if you don't want to use AP
+// #define DEFAULT_AP_SSID           HOSTNAME, leave undefined if you don't want to use AP
 #define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"
 #define TZ "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana or choose another (POSIX) time zone from: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
 // uncomment one of the tests at a time
+// #define DBG
+// #define TEST_DMESG
 // #define TEST_FS
 // #define TEST_FTP
 // #define TEST_TELNET
@@ -22,6 +21,60 @@
 // #define TEST_USER_MANAGEMENT
 // #define TEST_TIME_FUNCTIONS
 #define TEST_HTTP_SERVER_AND_CLIENT
+
+
+#ifdef DBG
+
+    void setup () {
+        Serial.begin (115200);
+        delay (3000);
+        Serial.println ("DBG ...");
+
+    }
+
+    void loop () {
+      
+    }
+
+#endif 
+
+
+
+
+#ifdef TEST_DMESG // TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG 
+
+    #include "dmesg.hpp"
+
+    void setup () {
+        Serial.begin (115200);
+        delay (3000);
+        Serial.println ("testing ...");
+
+        dmesgQueue << "[Test]";
+        dmesgQueue << "[Test]" << " there are ";
+        dmesgQueue << "[Test] there are " << 0;
+        dmesgQueue << "[Test] there are " << 0 << " errors in dmesgQueue";
+
+        dmesg ("one");
+        dmesg ("two ", "tree");
+        dmesg ("four ", 4);
+        dmesg ("five ", 5, " six");
+
+        dmesgQueue << String ("abc") << String ("def");
+        dmesgQueue << Cstring<15> ("ABC") << Cstring<15> ("DEF");
+
+         for (auto e: dmesgQueue) { // use Iterator for scanning the dmesg queue because locking is already implemented here
+            Serial.print (e.milliseconds);
+            Serial.print (" ");
+            Serial.println (e.message);
+        }
+    }
+
+    void loop () {
+      
+    }
+
+#endif // TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG TEST_DMESG 
 
 
 
@@ -32,22 +85,25 @@
     #define SHOW_COMPILE_TIME_INFORMATION 
 
     // #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
-    #define FILE_SYSTEM FILE_SYSTEM_SD_CARD
+    #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS
     #include "fileSystem.hpp"
-    #include "network.h"
+    #include "netwk.h"
     #include "telnetServer.hpp"
     #include "ftpServer.hpp"
     #include "httpServer.hpp"
 
     void setup () {
         Serial.begin (115200);
+        while (!Serial)
+            delay (100);
+        delay (1000);
 
         // fileSystem.format ();
         // fileSystem.formatFAT ();
         // fileSystem.formatLittleFs ();
-        // fileSystem.mount (true);
+        fileSystem.mountLittleFs (true);
         // fileSystem.mountFAT (true); // built-in falsh disk
-        fileSystem.mountSD ("/", 5); // SD Card if attached
+        // fileSystem.mountSD ("/", 5); // SD Card if attached
     }
 
     void loop () {
@@ -65,12 +121,11 @@
     #define USER_MANAGEMENT NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
     #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
 
-    #include "dmesg_functions.h"
+    #include "dmesg.hpp"
     #include "fileSystem.hpp"
     #include "time_functions.h"
-    #include "network.h"
+    #include "netwk.h"
     #include "userManagement.hpp"
-  
     #include "ftpServer.hpp"
     #include "ftpClient.h"
 
@@ -113,18 +168,18 @@
 
   // include all .h files telnet server is using to test the whole functionality
   
-      #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
+      #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD: (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
  
-      #include "dmesg_functions.h"
+      #include "std/console.hpp"
+      #include "dmesg.hpp"
       #include "fileSystem.hpp"
-      #include "network.h"
+      #include "netwk.h"
       #include "time_functions.h"
       #include "httpClient.h"
       #include "ftpClient.h"
       #include "smtpClient.h"
       #define USER_MANAGEMENT NO_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
       #include "userManagement.hpp"
-
       #include "telnetServer.hpp"
 
   String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *tcn) {
@@ -132,7 +187,9 @@
     #define argv0is(X) (argc > 0 && !strcmp (argv[0], X))  
     #define argv1is(X) (argc > 1 && !strcmp (argv[1], X))
     #define argv2is(X) (argc > 2 && !strcmp (argv[2], X))    
-    #define LED_BUILTIN 2
+    #ifndef LED_BUILTIN
+        #define LED_BUILTIN 2
+    #endif
     
             if (argv0is ("led") && argv1is ("state")) {                  // led state telnet command
               return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
@@ -153,11 +210,11 @@
   telnetServer *myTelnetServer; 
 
   void setup () {
-    Serial.begin (115200); Serial.printf ("\r\n\r\n\r\n\r\n");
+    cinit ();
 
     // fileSystem.formatFAT ();
-    fileSystem.mountFAT (true);
-    fileSystem.mountSD ("/SD", 5);
+    fileSystem.mountLittleFs (true); // fileSystem.mountFAT (true);
+    // fileSystem.mountSD ("/SD", 5);
     // fileSystem.mountSD ("/", 5);
 
     // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA-tic credentials
@@ -165,17 +222,16 @@
  
     startCronDaemon (NULL);
 
-    myTelnetServer = new telnetServer (telnetCommandHandlerCallback, (char *) "0.0.0.0", 23, firewall);
-    if (myTelnetServer->state () != telnetServer::RUNNING) {
-      Serial.printf (":(\n");
-    } else {
-      Serial.printf (":)\n");
-    }
-    
+    myTelnetServer = new telnetServer (telnetCommandHandlerCallback, "0.0.0.0", 23, firewall);
+    if (myTelnetServer && myTelnetServer->state () == telnetServer::RUNNING) // check if server instance creation succeded && the server is running as it should
+        cout << ":)\n";
+    else
+        cout << ":(\n";
   }
 
   void loop () {
-
+      // cout << ".\n";
+      // delay (1000);
   }
 
 #endif // TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET 
@@ -187,7 +243,7 @@
 #ifdef TEST_SMTP_CLIENT // TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT TEST_SMTP_CLIENT 
 
   #include "fileSystem.hpp"
-  #include "network.h"
+  #include "netwk.h"
   #include "smtpClient.h"
   
   void setup () {
@@ -200,9 +256,9 @@
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
     delay (100);
     
-    Serial.printf ("sendMail (...) = %s\n", (char *) sendMail ((char *) "<html><p style='color:green;'><b>Success!</b></p></html>", (char *) "smtpClient test 1", (char *) "bojan.***@***.com,sabina.***@***.com", (char *) "\"smtpClient\"<bojan.***@***.net>", (char *) "***", (char *) "***", 25, (char *) "smtp.siol.net").c_str ());
+    Serial.printf ("sendMail (...) = %s\n", sendMail ("<html><p style='color:green;'><b>Success!</b></p></html>", "smtpClient test 1", "bojan.***@***.com,sabina.***@***.com", "\"smtpClient\"<bojan.***@***.net>", "***", "***", 25, "smtp.siol.net"));
 
-    Serial.printf ("sendMail (...) = %s\n", (char *) sendMail ((char *) "<html><p style='color:blue;'><b>Success!</b></p></html>", (char *) "smtpClient test 2", (char *) "bojan.jurca@gmail.com").c_str ());
+    Serial.printf ("sendMail (...) = %s\n", sendMail ("<html><p style='color:blue;'><b>Success!</b></p></html>", "smtpClient test 2", "bojan.***@***.com"));
   }
 
   void loop () {
@@ -254,8 +310,7 @@
     #define TIMEZONE "CET-1CEST,M3.5.0,M10.5.0/3" // Europe/Ljubljana, all time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
     #include "fileSystem.hpp" // include fileSystem.hpp if you want cronDaemon to access /etc/ntp.conf and /etc/crontab
-    #include "network.h"
-
+    #include "netwk.h"
     #include "time_functions.h"
 
 
@@ -270,7 +325,7 @@
 
             Serial.printf ("%s (%s) Got time at %s (local time), ESP32 has been running %lu seconds. Do whatever needs to be done the first time the time is known.\r\n", __func__, cronCommand, buf, getUptime ());
 
-            struct tm afterOneMinute = gmTime (timeToLocalTime (time () + 60)); // 1 min = 60 s
+            struct tm afterOneMinute = localTime (time () + 60); // 1 min = 60 s
             char s [100];
             sprintf (s, "%i %i %i * * * afterOneMinute", afterOneMinute.tm_sec, afterOneMinute.tm_min, afterOneMinute.tm_hour);
             if (cronTabAdd (s)) Serial.printf ("--- afterOneMinute --- added\n"); else Serial.printf ("--- afterOneMinute --- NOT added\n"); // change cronTab from within cronHandler
@@ -298,21 +353,41 @@
 
     void setup () {
         Serial.begin (115200);
+        // while (!Serial) delay (100);
+        delay (3000);
 
         // set time zone
         setenv ("TZ", TIMEZONE, 1); 
         tzset ();
 
+        
+        // fileSystem.mount (false);
+        // startWiFi (); 
+        WiFi.mode (WIFI_STA);
+        // WiFi.begin (DEFAULT_STA_SSID, DEFAULT_STA_PASSWORD);
+        // while (WiFi.localIP ().toString () == "0.0.0.0") { Serial.println ("."); delay (1000); }
 
-        fileSystem.mount (false);
-        startWiFi (); // for some strange reason you can't set time if WiFi is not initialized
+            Serial.println ("--- Time set to 1708387200 = 2024/20/02 00:00:00 - GMT");
+            // setTimeOfDay (1708387200); // 2024/20/02 00:00:00 - GMT
+                  ntpDate (  "1.si.pool.ntp.org"  );
 
-        startCronDaemon (cronHandler);
-        cronTabAdd ((char *) "* * * * * * gotTime"); 
-        cronTabAdd ((char *) "0 * * * * * onMinute"); 
+            char buf [26]; 
+            Serial.println ("--- GMT");
+              Serial.println (time ());
+              ascTime (gmTime (time ()), buf); 
+              Serial.println (buf);
+            Serial.println ("--- Local");
+            struct tm slt = localTime (time ());
+            ascTime (slt, buf); 
+            Serial.println (buf);
 
-        Serial.printf ("|free heap| 8 bit free  min  max   |32 bit free  min  max   |default free  min  max  |exec free   min   max   |\n");
-        Serial.printf ("---------------------------------------------------------------------------------------------------------------\n");    
+        // startCronDaemon (cronHandler);
+        // cronTabAdd ((char *) "* * * * * * gotTime"); 
+        // cronTabAdd ((char *) "0 * * * * * onMinute"); 
+
+        // Serial.printf ("|free heap| 8 bit free  min  max   |32 bit free  min  max   |default free  min  max  |exec free   min   max   |\n");
+        // Serial.printf ("---------------------------------------------------------------------------------------------------------------\n");    
+
     }
 
     void loop () {
@@ -332,9 +407,9 @@
 
   // #define HTTP_SERVER_CORE 0 
 
-  #include "dmesg_functions.h"
+  #include "dmesg.hpp"
   #include "fileSystem.hpp" // include fileSystem.hpp if you want httpServer to server .html and other files as well
-  #include "network.h"
+  #include "netwk.h"
   #include "httpServer.hpp"
   #include "httpClient.h"
   #include "oscilloscope.h"
@@ -360,9 +435,9 @@
 
     if (httpRequestStartsWith ("GET / ")) {
                                             // play with cookies
-                                            string s = hcn->getHttpRequestCookie ((char *) "refreshCount");
+                                            cstring s = hcn->getHttpRequestCookie ((char *) "refreshCount");
                                             Serial.printf ("This page has been refreshed %s times\n", s);
-                                            hcn->setHttpReplyCookie ("refreshCount", string (atoi (s) + 1));
+                                            hcn->setHttpReplyCookie ("refreshCount", cstring (atoi (s) + 1));
                                             // return large HTML reply from memory (9 KB in this case)
                                             return F("<html>\n"
                                                      "  <head>\n"

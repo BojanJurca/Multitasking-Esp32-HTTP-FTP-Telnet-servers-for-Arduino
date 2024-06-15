@@ -2,20 +2,21 @@
 
     httpClient.hpp 
   
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
     HTTP client combines a HTTP request from server, page and method and returns a HTTP reply or "" if there is none.
   
-    June 25, 2023, Bojan Jurca
-         
+    May 22, 2024, Bojan Jurca
+
 */
 
 
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    #include <lwip/netdb.h>
     // fixed size strings
-    #include "fsString.h"
+    #include "std/Cstring.hpp"
     
 
 #ifndef __HTTP_CLIENT__
@@ -24,7 +25,7 @@
 
     // ----- functions and variables in this modul -----
 
-    String httpClient (char *serverName, int serverPort, String httpRequest, String httpMethod, unsigned long timeOut);
+    String httpClient (const char *serverName, int serverPort, const char *httpRequest, const char *httpMethod, unsigned long timeOut);
 
 
     // ----- TUNNING PARAMETERS -----
@@ -35,39 +36,17 @@
 
     // ----- CODE -----
 
-    #include "dmesg_functions.h"
-
-    #ifndef __STRISTR__
-      #define __STRISTR__
-      // missing C function in Arduino
-      char *stristr (char *haystack, char *needle) { 
-        if (!haystack || !needle) return NULL; // nonsense
-        int nCheckLimit = strlen (needle);                     
-        int hCheckLimit = strlen (haystack) - nCheckLimit + 1;
-        for (int i = 0; i < hCheckLimit; i++) {
-          int j = i;
-          int k = 0;
-          while (*(needle + k)) {
-              char nChar = *(needle + k ++); if (nChar >= 'a' && nChar <= 'z') nChar -= 32; // convert to upper case
-              char hChar = *(haystack + j ++); if (hChar >= 'a' && hChar <= 'z') hChar -= 32; // convert to upper case
-              if (nChar != hChar) break;
-          }
-          if (!*(needle + k)) return haystack + i; // match!
-        }
-        return NULL; // no match
-      }
-    #endif
-
-
-    // ----- HTTP client -----
-
-    String httpClient (char *serverName, int serverPort, char *httpAddress, char *httpMethod = (char *) "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
+    String httpClient (const char *serverName, int serverPort, const char *httpAddress, const char *httpMethod = (char *) "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
       // get server address
       struct hostent *he = gethostbyname (serverName);
       if (!he) return "[httpClient] gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);
       // create socket
       int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
       if (connectionSocket == -1) return "[httpClient] socket() error: " + String (errno) + " " + strerror (errno);
+
+      // remember some information that netstat telnet command would use
+      additionalSocketInformation [connectionSocket - LWIP_SOCKET_OFFSET] = { __HTTP_CLIENT_SOCKET__, 0, 0, millis (), millis () };
+
       // make the socket not-blocking so that time-out can be detected
       if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
         int e = errno;
@@ -90,14 +69,14 @@
       // construct and send minimal HTTP request (or almost minimal, IIS for example, requires Host field)
       char serverIP [46];
       inet_ntoa_r (serverAddress.sin_addr, serverIP, sizeof (serverIP));
-      string httpRequest;
+      cstring httpRequest;
       httpRequest += httpMethod;
       httpRequest += " ";
       httpRequest += httpAddress;
       httpRequest += " HTTP/1.0\r\nHost: ";
       httpRequest += serverIP;
       httpRequest += "\r\n\r\n"; // 1.0 HTTP does not know keep-alive directive - we want the server to close the connection immediatelly after sending the reply
-      if (httpRequest.error ()) {
+      if (httpRequest.errorFlags ()) {
           close (connectionSocket);
           return "Out of memory";
       }
@@ -125,8 +104,8 @@
                         else return httpReply; // return what we have recived without checking if HTTP reply is OK
           default:
 
-                        networkTrafficInformation.bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                        socketTrafficInformation [connectionSocket - LWIP_SOCKET_OFFSET].bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                        additionalNetworkInformation.bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                        additionalSocketInformation [connectionSocket - LWIP_SOCKET_OFFSET].bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                         __httpReply__ [receivedThisTime] = 0;
                           int bl = httpReply.length ();

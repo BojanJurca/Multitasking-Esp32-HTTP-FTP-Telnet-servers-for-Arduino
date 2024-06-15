@@ -2,12 +2,11 @@
 
     time_functions.h
  
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
-    Real_time_clock synchronizes its time with NTP server accessible from internet once a day. Internet connection is 
-    necessary for real_time_clock to get initialized.
+    Cron daemon synchronizes the time with NTP server accessible from internet once a day.
 
-    June 25, 2023, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     Nomenclature used in time_functions.h - for easier understaning of the code:
 
@@ -24,7 +23,12 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
-    #include "time.h"
+    #include <lwip/netdb.h>
+    #include <time.h>
+    #include <lwip/netdb.h>
+    #include "std/Cstring.hpp"
+    #include "std/console.hpp"
+    #include "netwk.h"
 
 
 #ifndef __TIME_FUNCTIONS__
@@ -52,17 +56,16 @@
 
     time_t time ();
     void setTimeOfDay (time_t);
-    time_t localTime ();
     struct tm gmTime (time_t);
     struct tm localTime (time_t);
     char *ascTime (const struct tm, char *);
     time_t getUptime ();
-    char *ntpDate (char *);
+    char *ntpDate (const char *);
     char *ntpDate ();
     bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, const char *, bool);
     bool cronTabAdd (const char *, bool);
     int cronTabDel (const char *);
-    void startCronDaemon (void (* cronHandler) (char *), size_t);
+    void startCronDaemon (void (* cronHandler) (const char *), size_t);
 
 
     // TUNNING PARAMETERS
@@ -104,88 +107,224 @@
   
     static SemaphoreHandle_t __cronSemaphore__ = xSemaphoreCreateRecursiveMutex (); // controls access to cronDaemon's variables
 
-    char __ntpServer1__ [254] = DEFAULT_NTP_SERVER_1; // host name may have max 253 characters
-    char __ntpServer2__ [254] = DEFAULT_NTP_SERVER_2; // host name may have max 253 characters
-    char __ntpServer3__ [254] = DEFAULT_NTP_SERVER_3; // host name may have max 253 characters 
+    char __ntpServer1__ [255] = DEFAULT_NTP_SERVER_1; // DNS host name may have max 253 characters
+    char __ntpServer2__ [255] = DEFAULT_NTP_SERVER_2; // DNS host name may have max 253 characters
+    char __ntpServer3__ [255] = DEFAULT_NTP_SERVER_3; // DNS host name may have max 253 characters 
   
     // synchronizes time with NTP server, returns error message
-    char *ntpDate (char *ntpServer) {
-
-        // prepare NTP request
-        byte ntpPacket [48];
-        memset (ntpPacket, 0, sizeof (ntpPacket));
-        ntpPacket [0] = 0b11100011;  
-        ntpPacket [1] = 0;           
-        ntpPacket [2] = 6;           
-        ntpPacket [3] = 0xEC;  
-        ntpPacket [12] = 49;
-        ntpPacket [13] = 0x4E;
-        ntpPacket [14] = 49;
-        ntpPacket [15] = 52;  
-        // send NTP request
-        IPAddress ntpServerIp;
-        WiFiUDP udp;
-    
-        if (!WiFi.hostByName (ntpServer, ntpServerIp)) return (char *) "Could not find NTP server by its name.";
-        // open internal port
-        #define INTERNAL_NTP_PORT 2390
-        if (!udp.begin (INTERNAL_NTP_PORT)) return (char *) "Internal port 2390 is not available for NTP.";
-        // start UDP
-        #define NTP_PORT 123
-        if (!udp.beginPacket (ntpServerIp, NTP_PORT)) { udp.stop (); return (char *) "NTP server is not available on default NTP port 123."; }
-        // send UDP
-        if (udp.write (ntpPacket, sizeof (ntpPacket)) != sizeof (ntpPacket)) { udp.stop (); return (char *) "Could't send NTP request."; }
-        // check if UDP request has been sent
-        if (!udp.endPacket ()) { udp.stop (); return (char *) "NTP request not sent."; }
-      
-        // wait for NTP reply or time-out
-        unsigned long ntpRequestMillis = millis ();
-        while (true) {
-            if (millis () - ntpRequestMillis >= 500) { udp.stop (); return (char *) "NTP request time-out."; }
-            if (udp.parsePacket () != sizeof (ntpPacket)) continue; // keep waiting for NTP reply
-            // read NTP reply
-            udp.read (ntpPacket, sizeof (ntpPacket));
-            if (!ntpPacket [40] && !ntpPacket [41] && !ntpPacket [42] && !ntpPacket [43]) { udp.stop (); return (char *) "Invalid NTP reply."; }
-            // convert reply into UNIX time
-            unsigned long highWord;
-            unsigned long lowWord;
-            unsigned long secsSince1900;
-            #define SEVENTY_YEARS 2208988800UL
-            highWord = word (ntpPacket [40], ntpPacket [41]); 
-            lowWord = word (ntpPacket [42], ntpPacket [43]);
-            secsSince1900 = highWord << 16 | lowWord;
-            time_t currentTime = secsSince1900 - SEVENTY_YEARS;
-            if (currentTime < 1687461154) { udp.stop (); return (char *) "Wrong NTP reply."; } // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
-            udp.stop ();
-            setTimeOfDay (currentTime);
+    char *ntpDate (const char *ntpServer) {
+        if (WiFi.localIP ().toString () == "0.0.0.0") {
             #ifdef __DMESG__
-                dmesg ("[time] synchronized with ", ntpServer);
+                dmesgQueue << "[NTP] not connected to WiFi";
             #endif
-            Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] synchronized with ", ntpServer);
-            break;
+            return (char *) "Not connected to WiFi";
         }
-        return (char *) ""; // no error = OK  
+
+        // Based on Let's make a NTP Client in C: https://lettier.github.io/posts/2016-04-26-lets-make-a-ntp-client-in-c.html
+        // which I'm keeping here as close to the original as possible due to its comprehensive explanation.
+
+        // »Network Time Protocol«
+
+        typedef struct {
+            uint8_t li_vn_mode;       // Eight bits. li, vn, and mode.
+                                      // li.   Two bits.   Leap indicator.
+                                      // vn.   Three bits. Version number of the protocol.
+                                      // mode. Three bits. Client will pick mode 3 for client.
+            uint8_t stratum;          // Eight bits. Stratum level of the local clock.
+            uint8_t poll;             // Eight bits. Maximum interval between successive messages.
+            uint8_t precision;        // Eight bits. Precision of the local clock.
+            uint32_t rootDelay;       // 32 bits. Total round trip delay time.
+            uint32_t rootDispersion;  // 32 bits. Max error aloud from primary clock source.
+            uint32_t refId;           // 32 bits. Reference clock identifier.
+            uint32_t refTm_s;         // 32 bits. Reference time-stamp seconds.
+            uint32_t refTm_f;         // 32 bits. Reference time-stamp fraction of a second.
+            uint32_t origTm_s;        // 32 bits. Originate time-stamp seconds.
+            uint32_t origTm_f;        // 32 bits. Originate time-stamp fraction of a second.
+            uint32_t rxTm_s;          // 32 bits. Received time-stamp seconds.
+            uint32_t rxTm_f;          // 32 bits. Received time-stamp fraction of a second.
+            uint32_t txTm_s;          // 32 bits and the most important field the client cares about. Transmit time-stamp seconds.
+            uint32_t txTm_f;          // 32 bits. Transmit time-stamp fraction of a second.
+        } ntp_packet;                 // Total: 384 bits or 48 bytes.
+
+        // »The NTP message consists of a 384 bit or 48 byte data structure containing 17 fields. Note that the order of li, vn, and mode 
+        //  is important. We could use three bit fields but instead we’ll combine them into a single byte to avoid any implementation-defined 
+        //  issues involving endianness, LSB, and/or MSB.«
+
+        // »Populate our Message«
+
+        // Create and zero out the packet. All 48 bytes worth.
+        ntp_packet packet = {};
+        // Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
+        *((char *) &packet + 0) = 0x1b; // Represents 27 in base 10 or 00011011 in base 2.
+
+        // »First we zero-out or clear out the memory of our structure and then fill it in with leap indicator zero, version number three, and mode 3. 
+        // The rest we can leave blank and still get back the time from the server.«
+
+        // »Setup our Socket and Server Data Structure«
+
+        // Create a UDP socket, convert the host-name to an IP address, set the port number,
+        // connect to the server, send the packet, and then read in the return packet.
+
+        struct hostent *server;       // Server data structure.
+        struct sockaddr_in serv_addr; // Server address data structure.
+
+        int sockfd = socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP); // Create a UDP socket.
+        if (sockfd < 0) {
+            #ifdef __DMESG__
+                dmesgQueue << "[NTP] socket() error: " << errno << " " << strerror (errno);
+            #endif
+            return (char *) "Could not open a socket";
+        }
+
+        // remember some information that netstat telnet command would use
+        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET] = { __NTP_SOCKET__, 0, 0, millis (), millis () };
+
+        // remember some information that netstat telnet command would use
+        // additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET] = { __NTP_SOCKET__, 0, 0, millis (), millis () };
+
+        // Setup socket timeout to 1s, this will limit the time we wait for NTP reply
+        struct timeval tout = {1, 0};
+        if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, &tout, sizeof (tout)) < 0) {
+            #ifdef __DMESG__
+                dmesgQueue << "[NTP] setsockopt() error: " << errno << strerror (errno);
+            #endif
+            close (sockfd);
+            return (char *) "Could not set socket time-out";
+        }
+
+        server = gethostbyname (ntpServer); // Convert URL to IP.
+        if (server == NULL) {
+            #ifdef __DMESG__
+                dmesgQueue << "[NTP] gethostbyname() error: " << errno << strerror (errno);
+            #endif
+            return (char *) "NTP server not found";
+        }
+
+        // Zero out the server address structure.
+        bzero ((char *) &serv_addr, sizeof (serv_addr));
+
+        serv_addr.sin_family = AF_INET;
+        // Copy the server's IP address to the server address structure.
+        bcopy ((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
+
+        // Convert the port number integer to network big-endian style and save it to the server address structure.
+        serv_addr.sin_port = htons (123);
+
+        // »Before we can start communicating we have to setup our socket, server and server address structures. We will be using the 
+        //  User Datagram Protocol (versus TCP) for our socket since the server we are sending our message to is listening on port 
+        //  number 123 using UDP.«
+
+        // »Send our Message to the Server«
+
+        // Call up the server using its IP address and port number.
+
+        if (connect (sockfd, (struct sockaddr *) &serv_addr, sizeof (serv_addr)) < 0) {
+            #ifdef __DMESG__
+                dmesgQueue << "[NTP] connect() error: " << errno << " " << strerror (errno);
+            #endif          
+            close (sockfd);
+            return (char *) "Could not connect to NTP server";
+        }
+
+        // Send it the NTP packet it wants. If n == -1, it failed.
+        int n;
+        n = sendto (sockfd, (char *) &packet, sizeof (ntp_packet), 0, (struct sockaddr *) &serv_addr, sizeof (serv_addr));
+        if (n < 0) {
+            #ifdef __DMESG__
+                dmesgQueue << "[NTP] sendto() error: " << errno << " " << strerror (errno);
+            #endif          
+            close (sockfd);
+            return (char *) "Could not sent NTP packet";
+        }
+
+        additionalNetworkInformation.bytesSent += n; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].bytesSent += n; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+
+        // remember some information that netstat telnet command would use
+        // additionalNetworkInformation.bytesSent += n;
+        // additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].bytesSent += n;
+        // additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis (); 
+  
+        // »With our message payload, socket, server and address setup, we can now send our message to the server. 
+        //  To do this, we write our 48 byte struct to the socket.«
+
+        // »Read in the Return Message«
+
+        // Wait and receive the packet back from the server. If n == -1, it failed.
+
+        int fromlen;
+        struct sockaddr_in from;
+        n = recvfrom (sockfd, (char *) &packet, sizeof (ntp_packet), 0, (struct sockaddr *) &from, (socklen_t*) &fromlen);
+        if (n < 0) {
+          #ifdef __DMESG__
+                dmesgQueue << "[NTP] recvfrom() error: " <<  errno << " " << strerror (errno);
+            #endif          
+            close (sockfd);
+            return (char *) "Could not receive NTP packet";
+        }
+
+        // remember some information that netstat telnet command would use
+        additionalNetworkInformation.bytesReceived += n;
+        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].bytesReceived += n;
+        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis (); 
+
+        // »Now that our message is sent, we block or wait for the response by reading from the socket. The message we get back should be the same
+        //  size as the message we sent. We will store the incoming message in packet just like we stored our outgoing message.«
+
+        // »Parse the Return Message«
+
+        // These two fields contain the time-stamp seconds as the packet left the NTP server.
+        // The number of seconds correspond to the seconds passed since 1900.
+        // ntohl() converts the bit/byte order from the network's to host's "endianness".
+
+        packet.txTm_s = ntohl (packet.txTm_s); // Time-stamp seconds.
+        packet.txTm_f = ntohl (packet.txTm_f); // Time-stamp fraction of a second.
+
+        // Extract the 32 bits that represent the time-stamp seconds (since NTP epoch) from when the packet left the server.
+        // Subtract 70 years worth of seconds from the seconds since 1900.
+        // This leaves the seconds since the UNIX epoch of 1970.
+        // (1900)------------------(1970)**************************************(Time Packet Left the Server)
+
+        #define NTP_TIMESTAMP_DELTA 2208988800
+        time_t txTm = (time_t) (packet.txTm_s - NTP_TIMESTAMP_DELTA);
+
+        // »The message we get back is in network order or big-endian form. Depending on the machine you run this on, ntohl will transform the bits 
+        //  from either big to little or big to big-endian. You can think of big or little-endian as reading from left to right or tfel ot thgir respectively.
+        //
+        //  With the data in the order we need it, we can now subtract the delta and cast the resulting number to a time-stamp number. 
+        //  Note that NTP_TIMESTAMP_DELTA = 2208988800ull which is the NTP time-stamp of 1 Jan 1970 or put another way 2,208,988,800 unsigned long long seconds.«
+
+        setTimeOfDay (txTm);
+        #ifdef __DMESG__
+            dmesgQueue << "[time] synchronized with " << ntpServer;
+        #endif
+        close (sockfd);
+        cout << "[time] synchronized with " << ntpServer << endl;
+
+        return (char *) ""; // OK
     }
   
     char *ntpDate () { // synchronizes time with NTP servers, returns error message
         char *s;
         if (!*(s = ntpDate (__ntpServer1__))) return (char *) ""; 
         #ifdef __DMESG__
-            dmesg ("[time] ", s); 
+            dmesgQueue << "[time] " << s; 
         #endif
-        Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] ", s);
+        cout << "[time] " << s << endl;
         delay (1);
         if (!*(s = ntpDate (__ntpServer2__))) return (char *) ""; 
         #ifdef __DMESG__
-            dmesg ("[time] ", s); 
+            dmesgQueue << "[time] " << s; 
         #endif
-        Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] ", s);
+        cout << "[time] " << s << endl;
         delay (1);
         if (!*(s = ntpDate (__ntpServer3__))) return (char *) ""; 
         #ifdef __DMESG__
-            dmesg ("[time] ", s); 
+            dmesgQueue << "[time] " << s; 
         #endif
-        Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] ", s);
+        cout << "[time] " << s << endl;
         return (char *) "NTP servers are not available.";
     }
   
@@ -219,9 +358,9 @@
         xSemaphoreGiveRecursive (__cronSemaphore__);
         if (b) return true;
         #ifdef __DMESG__
-            dmesg ("[time][cronDaemon][cronTabAdd] can't add cronCommand, cron table is full: ", cronCommand);
+            dmesgQueue << "[time][cronDaemon][cronTabAdd] can't add cronCommand, cron table is full: " << cronCommand;
         #endif
-        Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronTabAdd] can't add cronCommand, cron table is full: ", cronCommand);
+        cout << "[time][cronDaemon][cronTabAdd] can't add cronCommand, cron table is full: " << cronCommand << endl;
         return false;
     }
     
@@ -231,59 +370,59 @@
         if (sscanf (cronTabLine, "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
             int8_t se = strcmp (second, "*")      ? atoi (second)      : ANY; if ((!se && *second != '0')      || se > 59)  { 
                                                                                                                                 #ifdef __DMESG__
-                                                                                                                                    dmesg ("[time][cronDaemon][cronAdd] invalid second: ", second); 
+                                                                                                                                    dmesgQueue << "[time][cronDaemon][cronAdd] invalid second: " << second; 
                                                                                                                                 #endif
-                                                                                                                                Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid second: ", second);  
+                                                                                                                                cout << "[time][cronDaemon][cronAdd] invalid second: " << second << endl;  
                                                                                                                                 return false; 
                                                                                                                             }
             int8_t mi = strcmp (minute, "*")      ? atoi (minute)      : ANY; if ((!mi && *minute != '0')      || mi > 59)  { 
                                                                                                                                 #ifdef __DMESG__
-                                                                                                                                    dmesg ("[time][cronDaemon][cronAdd] invalid minute: ",  minute); 
+                                                                                                                                    dmesgQueue << "[time][cronDaemon][cronAdd] invalid minute: " << minute; 
                                                                                                                                 #endif
-                                                                                                                                Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid minute: ", minute);  
+                                                                                                                                cout << "[time][cronDaemon][cronAdd] invalid minute: " << minute << endl;  
                                                                                                                                 return false; 
                                                                                                                             }
             int8_t hr = strcmp (hour, "*")        ? atoi (hour)        : ANY; if ((!hr && *hour != '0')        || hr > 23)  {
                                                                                                                                 #ifdef __DMESG__
-                                                                                                                                    dmesg ("[time][cronDaemon][cronAdd] invalid hour: ",  hour); 
+                                                                                                                                    dmesgQueue << "[time][cronDaemon][cronAdd] invalid hour: " << hour; 
                                                                                                                                 #endif
-                                                                                                                                Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid hour: ", hour);  
+                                                                                                                                cout << "[time][cronDaemon][cronAdd] invalid hour: " << hour << endl;  
                                                                                                                                 return false; 
                                                                                                                             }
             int8_t dm = strcmp (day, "*")         ? atoi (day)         : ANY; if (!dm                          || dm > 31)  { 
                                                                                                                                 #ifdef __DMESG__
-                                                                                                                                    dmesg ("[time][cronDaemon][cronAdd] invalid day: ", day); 
+                                                                                                                                    dmesgQueue << "[time][cronDaemon][cronAdd] invalid day: " << day; 
                                                                                                                                 #endif
-                                                                                                                                Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid day: ", day);  
+                                                                                                                                cout << "[time][cronDaemon][cronAdd] invalid day: " << day << endl;
                                                                                                                                 return false; 
                                                                                                                             }
             int8_t mn = strcmp (month, "*")       ? atoi (month)       : ANY; if (!mn                          || mn > 12)  { 
                                                                                                                                 #ifdef __DMESG__
-                                                                                                                                    dmesg ("[time][cronDaemon][cronAdd] invalid month: ", month); 
+                                                                                                                                    dmesgQueue << "[time][cronDaemon][cronAdd] invalid month: " << month; 
                                                                                                                                 #endif
-                                                                                                                                Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid month: ", month);  
+                                                                                                                                cout << "[time][cronDaemon][cronAdd] invalid month: " << month << endl;  
                                                                                                                                 return false; 
                                                                                                                             }
             int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : ANY; if ((!dw && *day_of_week != '0') || dw > 7)   {
                                                                                                                                 #ifdef __DMESG__
-                                                                                                                                    dmesg ("[time][cronDaemon][cronAdd] invalid day of week: ", day_of_week); 
+                                                                                                                                    dmesgQueue << "[time][cronDaemon][cronAdd] invalid day of week: " << day_of_week; 
                                                                                                                                 #endif
-                                                                                                                                Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid day of week: ", day_of_week);  
+                                                                                                                                cout << "[time][cronDaemon][cronAdd] invalid day of week: " << day_of_week << endl;
                                                                                                                                 return false; 
                                                                                                                             }
             if (!*cronCommand) { 
                 #ifdef __DMESG__
-                    dmesg ("[time][cronDaemon][cronAdd] missing cron command");
+                    dmesgQueue << "[time][cronDaemon][cronAdd] missing cron command";
                 #endif
-                Serial.printf ("[%10lu] %s\r\n", millis (), "[time][cronDaemon][cronAdd] missing cron command");  
+                cout << "[time][cronDaemon][cronAdd] missing cron command\n";  
                 return false;
             }
             return cronTabAdd (se, mi, hr, dm, mn, dw, cronCommand, readFromFile);
         } else {
             #ifdef __DMESG__
-                dmesg ("[time][cronDaemon][cronAdd] invalid cronTabLine: ", cronTabLine);
+                dmesgQueue << "[time][cronDaemon][cronAdd] invalid cronTabLine: " << cronTabLine;
             #endif
-            Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronAdd] invalid cronTabLine: ", cronTabLine);
+            cout << "[time][cronDaemon][cronAdd] invalid cronTabLine: " << cronTabLine << endl;
             return false;
         }
     }
@@ -305,35 +444,57 @@
         xSemaphoreGiveRecursive (__cronSemaphore__);
         if (!cnt) {
             #ifdef __DMESG__
-                dmesg ("[time][cronDaemon][cronTabDel] cronCommand not found: ", cronCommand);
+                dmesgQueue << "[time][cronDaemon][cronTabDel] cronCommand not found: " << cronCommand;
             #endif
-            Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon][cronTabDel] cronCommand not found: ", cronCommand);
+            cout << "[time][cronDaemon][cronTabDel] cronCommand not found: " << cronCommand << endl;
         }
         return cnt;
     }
 
-    // startCronDaemon functions runs __cronDaemon__ as a separate task. It does two things: it synchronizes time with NTP servers once a day and executes cron commands from cron table when the time is right
+    // startCronDaemon functions runs __cronDaemon__ as a separate task. It does two things: 
+    // 1. - it executes cron commands from cron table when the time is right
+    // 2. - it synchronizes time with NTP servers once a day
     void __cronDaemon__ (void *ptrCronHandler) { 
         #ifdef __DMESG__
-            dmesg ("[time][cronDaemon] is running on core ", xPortGetCoreID ());
+            dmesgQueue << "[time][cronDaemon] is running on core " << xPortGetCoreID ();
         #endif
-        Serial.printf ("[%10lu] %s\r\n", millis (), "[time][cronDaemon] started");
+        cout << "[time][cronDaemon] started\n";
         do {     // try to set/synchronize the time, retry after 1 minute if unsuccessfull 
             delay (15000);
             if (!*ntpDate ()) break; // success
             delay (45000);
         } while (!time ());
 
-        void (* cronHandler) (char *) = (void (*) (char *)) ptrCronHandler;  
-        unsigned long lastSyncMillis = millis (); 
+        void (* cronHandler) (const char *) = (void (*) (const char *)) ptrCronHandler;  
+        unsigned long lastMinuteCheckMillis = millis ();
+        unsigned long lastHourCheckMillis = millis ();
+        unsigned long lastDayCheckMillis = millis ();
 
         while (true) {
             delay (10);
 
-            // 1. synchronize time with NTP servers
-            if (millis () - lastSyncMillis >= 86400000) { ntpDate (); lastSyncMillis = millis (); } 
+            // trigger "EVERY_MINUTE" built in event? (triggers regardles wether real time is known or not)
+            if (millis () - lastMinuteCheckMillis >= 60000) { 
+                lastMinuteCheckMillis = millis ();
+                if (cronHandler != NULL) cronHandler ("ONCE_A_MINUTE");
+            }
 
-            // 2. execute cron commands from cron table
+            // trigger "EVERY_HOUR" built in event? (triggers regardles wether real time is known or not)
+            if (millis () - lastHourCheckMillis >= 3600000) { 
+                lastHourCheckMillis = millis ();
+                if (cronHandler != NULL) cronHandler ("ONCE_AN_HOUR");
+            }
+
+            // trigger "EVERY_DAY" built in event? (triggers regardles wether real time is known or not)
+            if (millis () - lastDayCheckMillis >= 86400000) { 
+                lastDayCheckMillis = millis ();
+                if (cronHandler != NULL) cronHandler ("ONCE_A_DAY");
+
+                // 2. synchronize time with NTP servers
+                ntpDate ();  
+            } 
+
+            // 3. execute cron commands from cron table
             time_t now = time (NULL);
             if (!now) continue; // if the time is not known cronDaemon can't do anythig
             static time_t previous = now;
@@ -353,7 +514,6 @@
 
                                 if (!__cronEntry__ [i].executed) {
                                   __cronEntry__ [i].markForExecution = true;
-                                  // DEBUG: Serial.printf ("[%10lu] [time][cronDaemon] %s marked for execution\n", millis (), __cronEntry__ [i].cronCommand);
                                 }
                                                 
                         } else {
@@ -374,7 +534,6 @@
                                     __cronEntry__ [i].lastExecuted = now;
                                     __cronEntry__ [i].markForExecution = false;
                                     if (cronHandler != NULL) cronHandler (__cronEntry__ [i].cronCommand); // this should be called last in case cronHandler calls croTabAdd or cronTabDel itself                        
-                                    // DEBUG: Serial.printf ("[%10lu] [time][cronDaemon] %s executed\n", millis (), __cronEntry__ [i].cronCommand);
                                     execCnt ++; 
                                     delay (1);
                                 }
@@ -390,18 +549,17 @@
     }
 
     // Runs __cronDaemon__ as a separate task. The first time it is called it also creates default configuration files /etc/ntp.conf and /etc/crontab
-    void startCronDaemon (void (* cronHandler) (char *)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default one
-        Serial.printf ("[%10lu] [time][cronDaemon] starting ...\n", millis ());
+    void startCronDaemon (void (* cronHandler) (const char *)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default one
 
         #ifdef __FILE_SYSTEM__
             if (fileSystem.mounted ()) {
               // read TZ (timezone) configuration from /usr/share/zoneinfo, create a new one if it doesn't exist
-              if (!fileSystem.isFile ((char *) "/usr/share/zoneinfo")) {
+              if (!fileSystem.isFile ("/usr/share/zoneinfo")) {
                   // create directory structure
-                  if (!fileSystem.isDirectory ((char *) "/usr/share")) { fileSystem.makeDirectory ((char *) "/usr"); fileSystem.makeDirectory ((char *) "/usr/share"); }
-                  Serial.printf ("[%10lu] [time][cronDaemon] /usr/share/zoneinfo does not exist, creating default one ... ", millis ());
+                  if (!fileSystem.isDirectory ("/usr/share")) { fileSystem.makeDirectory ("/usr"); fileSystem.makeDirectory ("/usr/share"); }
+                  cout << "[time][cronDaemon] /usr/share/zoneinfo does not exist, creating default one ... ";
                   bool created = false;
-                  File f = fileSystem.open ((char *) "/usr/share/zoneinfo", "w", true);
+                  File f = fileSystem.open ("/usr/share/zoneinfo", "w");
                   if (f) {
                       String defaultContent = F ( "# timezone configuration - reboot for changes to take effect\r\n"
                                                   "# choose one of available (POSIX) timezones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv\r\n\r\n"
@@ -412,27 +570,29 @@
                     diskTrafficInformation.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                   }
-                  Serial.printf (created ? "created\n" : "error\n");
+                  cout << (created ? "created\n" : "error\n");
               
               }
               {
-                  Serial.printf ("[%10lu] [time][cronDaemon] reading /usr/share/zoneinfo\n", millis ());
+                  cout << "[time][cronDaemon] reading /usr/share/zoneinfo ... ";
                   // parse configuration file if it exists
-                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE];
-                  strcpy (buffer, "\n");
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/usr/share/zoneinfo")) {
-                      Serial.printf ("\n%s\n\n", buffer + 1);
+                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
+                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/usr/share/zoneinfo")) {
                       strcat (buffer, "\n");
-                      char __tz__ [100] = TZ;
-                      strBetween (__tz__, sizeof (__ntpServer1__), buffer, "\nTZ ", "\n");
+                      // cout << buffer << "\n";
 
-                      setenv ("TZ", __tz__, 1);
+                      char __TZ__ [100] = TZ;
+                      char *p;
+                      if ((p = stristr (buffer, "\nTZ"))) sscanf (p + 3, "%*[ =]%98[!-~]", __TZ__);                      
+
+                      setenv ("TZ", __TZ__, 1);
                       tzset ();
                       #ifdef __DMESG__
-                          dmesg ("[time][cronDaemon] TZ environment variable set to ", __tz__);
+                          dmesgQueue << "[time][cronDaemon] TZ environment variable set to " << __TZ__;
                       #endif
-                      Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon] TZ environment variable set to ", __tz__);
-
+                      cout << "OK, TZ environment variable set to " << __TZ__ << endl;
+                  } else {
+                      cout << "error\n";
                   }
               }
 
@@ -440,43 +600,50 @@
               if (!fileSystem.isFile ((char *) "/etc/ntp.conf")) {
                   // create directory structure
                   if (!fileSystem.isDirectory ((char *) "/etc")) { fileSystem.makeDirectory ((char *) "/etc"); }
-                  Serial.printf ("[%10lu] [time][cronDaemon] /etc/ntp.conf does not exist, creating default one ... ", millis ());
+                  cout << "[time][cronDaemon] /etc/ntp.conf does not exist, creating default one ... ";
                   bool created = false;
-                  File f = fileSystem.open ((char *) "/etc/ntp.conf", "w", true);
+                  File f = fileSystem.open ((char *) "/etc/ntp.conf", "w");
                   if (f) {
                       String defaultContent = F ( "# configuration for NTP - reboot for changes to take effect\r\n\r\n"
                                                   "server1 " DEFAULT_NTP_SERVER_1 "\r\n"
                                                   "server2 " DEFAULT_NTP_SERVER_2 "\r\n"
                                                   "server3 " DEFAULT_NTP_SERVER_3 "\r\n");
-                        created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
+                      created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
                       f.close ();
 
                       diskTrafficInformation.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                   }
-                  Serial.printf (created ? "created\n" : "error\n");
+                  cout << (created ? "created\n" : "error\n");
               }
               {
-                  Serial.printf ("[%10lu] [time][cronDaemon] reading /etc/ntp.conf\n", millis ());
+                  cout << "[time][cronDaemon] reading /etc/ntp.conf ... ";
                   // parse configuration file if it exists
-                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE];
-                  strcpy (buffer, "\n");
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/ntp.conf")) {
-                      Serial.printf ("\n%s\n\n", buffer + 1);
+                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
+                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/ntp.conf")) {
                       strcat (buffer, "\n");
-                      strBetween (__ntpServer1__, sizeof (__ntpServer1__), buffer, "\nserver1 ", "\n");
-                      strBetween (__ntpServer2__, sizeof (__ntpServer2__), buffer, "\nserver2 ", "\n");
-                      strBetween (__ntpServer3__, sizeof (__ntpServer3__), buffer, "\nserver3 ", "\n");
+                      // cout << buffer;
+
+                      *__ntpServer1__ = *__ntpServer2__ = *__ntpServer3__ = 0; 
+                      char *p;                    
+                      if ((p = stristr (buffer, "\nserver1"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer1__);
+                      if ((p = stristr (buffer, "\nserver2"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer2__);
+                      if ((p = stristr (buffer, "\nserver3"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer3__);
+
+                      // cout << __ntpServer1__ << ", " << __ntpServer1__ << ", " << __ntpServer1__ << endl;
+                      cout << "OK\n";
+                  } else {
+                      cout << "error\n";
                   }
-              } 
-              
+              }
+
               // read scheduled tasks from /etc/crontab
               if (!fileSystem.isFile ((char *) "/etc/crontab")) {
                   // create directory structure
                   if (!fileSystem.isDirectory ((char *) "/etc")) { fileSystem.makeDirectory ((char *) "/etc"); }          
-                  Serial.printf ("[%10lu] [time][cronDaemon] /etc/crontab does not exist, creating default one ... ", millis ());
+                  cout << "[time][cronDaemon] /etc/crontab does not exist, creating default one ... ";
                   bool created = false;
-                  File f = fileSystem.open ((char *) "/etc/crontab", "w", true);
+                  File f = fileSystem.open ((char *) "/etc/crontab", "w");
                   if (f) {
                       String defaultContent = F("# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
                                                 "#\r\n"
@@ -496,18 +663,16 @@
                     diskTrafficInformation.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                   }
-                  Serial.printf (created ? "created\n" : "error\n");
-
+                  cout << (created ? "created\n" : "error\n");
               }
               {
-                  Serial.printf ("[%10lu] [time][cronDaemon] reading /etc/crontab\n", millis ());
+                  cout << "[time][cronDaemon] reading /etc/crontab ... ";
                   // parse scheduled tasks if /etc/crontab exists
-                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE];
-                  strcpy (buffer, "\n");
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, (char *) "/etc/crontab")) {
-                      Serial.printf ("\n%s\n\n", buffer + 1);
-
+                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
+                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/crontab")) {
                       strcat (buffer, "\n");
+                      // cout << buffer;
+
                       char *p, *q;
                       p = buffer + 1;
                       while (*p) {
@@ -517,11 +682,14 @@
                               p = q + 1;
                           }
                         }
+
+                        cout << "OK, " << __cronTabEntries__ << " entries\n";
+                    } else {
+                        cout << "error\n";
                     }
-                }
-                
+              }
             } else {
-                Serial.printf ("[%10lu] [time][cronDaemon] file system not mounted, can't read or write configuration files\n", millis ());
+                cout << "[time][cronDaemon] file system not mounted, can't read or write configuration files\n";
             }
         #else
 
@@ -529,20 +697,20 @@
             setenv ("TZ", (char *) TZ, 1);
             tzset ();
             #ifdef __DMESG__
-                dmesg ("[time][cronDaemon] TZ environment variable set to ", (char *) TZ);
+                dmesgQueue << "[time][cronDaemon] TZ environment variable set to " << TZ;
             #endif
-            Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time][cronDaemon] TZ environment variable set to ", (char *) TZ);
+            cout << "[time][cronDaemon] TZ environment variable set to " << TZ << endl;
 
-            Serial.printf ("[%10lu] [time][cronDaemon] is starting without a file system\n", millis ());
+            cout << "[time][cronDaemon] is starting without a file system\n";
         #endif    
         
         // run periodic synchronization with NTP servers and execute cron commands in a separate thread
         #define tskNORMAL_PRIORITY 1
         if (pdPASS != xTaskCreate (__cronDaemon__, "cronDaemon", CRON_DAEMON_STACK_SIZE, (void *) cronHandler, tskNORMAL_PRIORITY, NULL)) {
             #ifdef __DMESG__
-                dmesg ("[time][cronDaemon] xTaskCreate error, could not start cronDaemon");
+                dmesgQueue << "[time][cronDaemon] xTaskCreate error, could not start cronDaemon";
             #endif
-            Serial.printf ("[%10lu] %s\r\n", millis (), "[time][cronDaemon] xTaskCreate error, could not start cronDaemon");
+            cout << "[time][cronDaemon] xTaskCreate error, could not start cronDaemon\n";
         }
     }
   
@@ -571,17 +739,17 @@
             strcat (buf, " to ");
             ascTime (localTime (t), buf + strlen (buf));
             #ifdef __DMESG__
-                dmesg ("[time] time corrected from ", buf);
+                dmesgQueue << "[time] time corrected from " << buf;
             #endif
-            Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] time corrected from ", buf);
+            cout << "[time] time corrected from " << buf << endl;
         } else {
             __startupTime__ = t - getUptime (); // recalculate            
             __timeHasBeenSet__ = true;
             ascTime (localTime (t), buf);
             #ifdef __DMESG__
-                dmesg ("[time] time set to ", buf); 
+                dmesgQueue << "[time] time set to " << buf; 
             #endif
-            Serial.printf ("[%10lu] %s%s\r\n", millis (), "[time] time set to ", buf);
+            cout << "[time] time set to " << buf << endl;
         }
     }
 
@@ -596,29 +764,6 @@
         struct tm st;
         return *localtime_r (&t, &st);
     }
-
-    // conversion function: converts GMT in time_t to local time in time_t, returns 0 if internal clock is not set
-    time_t timeToLocalTime (const time_t t) {
-        if (t < 1687461154) return 0; // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
-
-        // calculate local time in time_t and then the difference 
-//        struct tm gst; gmtime_r (&t, &gst);    time_t gt = mktime (&gst);
-        // struct tm lst; localtime_r (&t, &lst); time_t lt = mktime (&lst);
-
-// Serial.printf ("        %lu %lu %lu         %02i:%02i:%02i    %02i:%02i:%02i\r\n", (unsigned long) t, (unsigned long) gt, (unsigned long) lt,  gst.tm_hour, gst.tm_min, gst.tm_sec,    lst.tm_hour, lst.tm_min, lst.tm_sec);
-
-        //if (lt > t) return t - (lt - t);
-        //if (lt < t) return t + (t - lt);
-        return t;
-    }
-
-    // similar to time (void) but returns the local time instead of GMT
-    time_t localTime () {
-        time_t t = time (NULL);
-        if (t < 1687461154) return 0; // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
-        return timeToLocalTime (t);
-    }
-
 
     // a more convinient version of thread safe asctime_r function: converts struct tm to array of chars, buff should have at least 26 bytes
     char *ascTime (const struct tm st, char *buf) {
@@ -648,11 +793,6 @@
         setTimeOfDay (t);
     }
   
-    [[deprecated("Use localTime (void) instead.")]]  
-    time_t getLocalTime () { 
-      return localTime ();
-    }
-
     [[deprecated("Use gmTime (time_t) instead.")]]  
     struct tm timeToStructTime (time_t t) { return gmTime (t); }
 

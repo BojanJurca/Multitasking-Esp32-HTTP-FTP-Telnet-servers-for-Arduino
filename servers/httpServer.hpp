@@ -2,14 +2,14 @@
 
     httpServer.hpp 
   
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
     HTTP server can serve some HTTP requests itself (for example content of .html and other files) but the calling program
     can also provide its own httpRequestHandlerCallback function. Cookies and page redirection are supported. There is also
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    December 25, 2023, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -72,7 +72,7 @@
     #include <mbedtls/base64.h>
     #include <mbedtls/md.h>
     // fixed size strings    
-    #include "fsString.h"
+    #include "std/Cstring.hpp"
                                                                 
 
 #ifndef __HTTP_SERVER__
@@ -102,23 +102,23 @@
     #define HTTP_REPLY_STATUS_MAX_LENGTH 32                     // only first 3 characters are important
     #define HTTP_WS_FRAME_MAX_SIZE 1500                         // WebSocket send frame size and also read frame size (there are 2 buffers), MTU = 1500
     #define HTTP_CONNECTION_WS_TIME_OUT 300000                  // 300000 ms = 5 min for WebSocket connections, 0 for infinite
-    // #define WEB_SESSIONS                                        // comment this line out if you won't use web sessions
+    // #define WEB_SESSIONS                                     // comment this line out if you won't use web sessions
     #ifdef WEB_SESSIONS
         #define WEB_SESSION_TIME_OUT 300                        // 300 s = 5 min, 0 for infinite
 
-        #include "persistentKeyValuePairs.h"
+        #include "keyValueDatabase.hpp"
 
-        typedef fsString<64> webSessionToken_t;
+        typedef Cstring<64> webSessionToken_t;
         struct webSessionTokenInformation_t {
             time_t expires; // web session toke expiration time in GMT
-            fsString<64> userName; // USER_PASSWORD_MAX_LENGTH = 64
+            Cstring<64> userName; // USER_PASSWORD_MAX_LENGTH = 64
         };
 
-        persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t> webSessionTokenDatabase; // a database containing valid web session tokens
+        keyValueDatabase<webSessionToken_t, webSessionTokenInformation_t> webSessionTokenDatabase; // a database containing valid web session tokens
 
     #endif
 
-    // please note that the limit for getHttpRequestHeaderField and getHttpRequestCookie return values are defined by string #definition in fsString.h
+    // please note that the limit for getHttpRequestHeaderField and getHttpRequestCookie return values are defined by cstring #definition in Cstring.h
 
     #define reply400 "HTTP/1.0 400 Bad request\r\nConnection: close\r\nContent-Length:34\r\n\r\nFormat of HTTP request is invalid."
     #define reply404 "HTTP/1.0 404 Not found\r\nConnection: close\r\nContent-Length:10\r\n\r\nNot found."
@@ -128,7 +128,7 @@
 
     // ----- CODE -----
 
-    #include "dmesg_functions.h"
+    // #include "dmesg.hpp"
     #ifndef __TIME_FUNCTIONS__
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Implicitly including time_functions.h (needed to calculate expiration time of cookies)"
@@ -136,27 +136,7 @@
       #include "time_functions.h"
     #endif
     
-    #ifndef __STRISTR__
-      #define __STRISTR__
-      // missing C function in Arduino
-      char *stristr (char *haystack, char *needle) { 
-        if (!haystack || !needle) return NULL; // nonsense
-        int nCheckLimit = strlen (needle);                     
-        int hCheckLimit = strlen (haystack) - nCheckLimit + 1;
-        for (int i = 0; i < hCheckLimit; i++) {
-          int j = i;
-          int k = 0;
-          while (*(needle + k)) {
-              char nChar = *(needle + k ++); if (nChar >= 'a' && nChar <= 'z') nChar -= 32; // convert to upper case
-              char hChar = *(haystack + j ++); if (hChar >= 'a' && hChar <= 'z') hChar -= 32; // convert to upper case
-              if (nChar != hChar) break;
-          }
-          if (!*(needle + k)) return haystack + i; // match!
-        }
-        return NULL; // no match
-      }
-    #endif
-
+    
     #ifndef __SHA256__
       #define __SHA256__
         bool sha256 (char *buffer, size_t bufferSize, const char *clearText) { // converts clearText to 265 bit SHA, returns character representation in hexadecimal format of hash value
@@ -233,13 +213,19 @@
                               __state__ = RUNNING;
                             }
                           } else { // |key| > 24
-                            dmesg ("[WebSocket] WsRequest key too long");
+                              #ifdef __DMESG__
+                                  dmesgQueue << "[WebSocket] WsRequest key too long";
+                              #endif
                           }
                         } else { // j == NULL
-                          dmesg ("[WebSocket] WsRequest without key");
+                            #ifdef __DMESG__
+                                dmesgQueue << "[WebSocket] WsRequest without key";
+                            #endif
                         }
                       } else { // i == NULL
-                        dmesg ("[WebSocket] WsRequest without key");
+                          #ifdef __DMESG__
+                              dmesgQueue << "[WebSocket] WsRequest without key";
+                          #endif
                       }
 
                     }
@@ -310,17 +296,19 @@
                                               return WebSocket::ERROR;
                                             }
 
-                                            networkTrafficInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            socketTrafficInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            socketTrafficInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+                                            additionalNetworkInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
                                                                                            
                                             __lastActive__ = millis ();
                                             if (6 != (__bytesRead__ += i)) return WebSocket::NOT_AVAILABLE; // if we haven't got 6 bytes continue reading short header the next time available () is called
                                             // check if this frame type is supported
                                             if (!(__readFrame__ [0] & 0b10000000)) { // check fin bit
-                                              dmesg ("[WebSocket] frame type not supported");
-                                              closeWebSocket ();
-                                              return WebSocket::ERROR;
+                                                #ifdef __DMESG__
+                                                    dmesgQueue << "[WebSocket] frame type not supported";
+                                                #endif
+                                                closeWebSocket ();
+                                                return WebSocket::ERROR;
                                             }
                                             byte b  = __readFrame__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close
                                             if (b == WebSocket::CLOSE) {
@@ -329,9 +317,11 @@
                                               return WebSocket::CLOSE;
                                             }
                                             if (b != WebSocket::STRING && b != WebSocket::BINARY) { 
-                                              dmesg ("[WebSocket] only STRING and BINARY frame types are supported");
-                                              closeWebSocket ();
-                                              return WebSocket::ERROR;
+                                                #ifdef __DMESG__
+                                                    dmesgQueue << "[WebSocket] only STRING and BINARY frame types are supported";
+                                                #endif
+                                                closeWebSocket ();
+                                                return WebSocket::ERROR;
                                             } // NOTE: after this point only TEXT and BINRY frames are processed!
                                             // check payload length that also determines frame type
                                             __readBufferSize__ = __readFrame__ [1] & 0b01111111; // byte 1: mask bit is always 1 for packets that come from browsers, cut it off
@@ -359,9 +349,9 @@
                                               return WebSocket::ERROR;
                                             }
 
-                                            networkTrafficInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            socketTrafficInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            socketTrafficInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+                                            additionalNetworkInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
 
                                             __lastActive__ = millis ();
                                             if (8 != (__bytesRead__ += i)) return WebSocket::NOT_AVAILABLE; // if we haven't got 8 bytes continue reading medium header the next time available () is called
@@ -370,9 +360,11 @@
                                             __mask__ = __readFrame__ + 4; // bytes 4, 5, 6, 7
                                             __readBuffer__  = __readFrame__ + 8; // skip 8 bytes of header, check if __readFrame is large enough:
                                             if (__readBufferSize__ > HTTP_WS_FRAME_MAX_SIZE - 8) {
-                                              dmesg ("[WebSocket] can only receive frames of up to ", HTTP_WS_FRAME_MAX_SIZE - 8, (char *) " payload bytes");
-                                              closeWebSocket ();
-                                              return WebSocket::ERROR;
+                                                #ifdef __DMESG__
+                                                    dmesgQueue << "[WebSocket] can only receive frames of up to " << HTTP_WS_FRAME_MAX_SIZE - 8 << " payload bytes";
+                                                #endif
+                                                closeWebSocket ();
+                                                return WebSocket::ERROR;
                                             }
                                             __readFrameState__ = READING_PAYLOAD;
                                             __bytesRead__ = 0; // reset the counter, count only payload from now on
@@ -389,9 +381,9 @@
                                               return WebSocket::ERROR;
                                             }
 
-                                            networkTrafficInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            socketTrafficInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            socketTrafficInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+                                            additionalNetworkInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
                                         
                                             if (__readBufferSize__ != (__bytesRead__ += i)) return WebSocket::NOT_AVAILABLE; // if we haven't got all payload bytes continue reading the next time available () is called
                                             __lastActive__ = millis ();
@@ -410,14 +402,14 @@
           return NOT_AVAILABLE;
         }
 
-        string readString () { // reads String that arrived from browser (it is a calling program responsibility to check if data type is text)
+        cstring readString () { // reads string that arrived from browser (it is a calling program responsibility to check if data type is text)
                                // returns "" in case of communication error
           while (true) {
             switch (available ()) {
               case WebSocket::NOT_AVAILABLE:  delay (1);
                                               break;
               case WebSocket::STRING:         { 
-                                                string s ((char *) __readBuffer__); 
+                                                cstring s ((char *) __readBuffer__); 
                                                 __readFrameState__ = EMPTY;
                                                 return s;
                                               }
@@ -467,15 +459,19 @@
 
         bool __sendFrame__ (byte *buffer, size_t bufferSize, WEBSOCKET_DATA_TYPE dataType) { // returns true if frame has been successfully sent 
           if (bufferSize > 0xFFFF) { // this size fits in large frame size - not supported
-            dmesg ("[WebSocket] large frame size is not supported");
-            closeWebSocket ();
-            return false;                         
+              #ifdef __DMESG__
+                  dmesgQueue << "[WebSocket] large frame size is not supported";
+              #endif
+              closeWebSocket ();
+              return false;                         
           } 
           // byte *frame = NULL;
           if (bufferSize > HTTP_WS_FRAME_MAX_SIZE - 4) { // 4 bytes are needed for header
-            dmesg ("[WebSocket] frame size > ", HTTP_WS_FRAME_MAX_SIZE - 4, (char *) "is not supported");
-            closeWebSocket ();
-            return false;                         
+              #ifdef __DMESG__
+                  dmesgQueue << "[WebSocket] frame size > " << HTTP_WS_FRAME_MAX_SIZE - 4 << "is not supported";
+              #endif
+              closeWebSocket ();
+              return false;                         
           }           
           byte sendFrame [HTTP_WS_FRAME_MAX_SIZE];
           int sendFrameSize;
@@ -589,7 +585,9 @@
                                       return; // success
                                   }
                               }
-                              dmesg ("[httpConnection] xTaskCreate error"); // failure
+                              #ifdef __DMESG__
+                                  dmesgQueue << "[httpConnection] xTaskCreate error";
+                              #endif
                           }
 
         ~httpConnection ()  {
@@ -612,43 +610,45 @@
 
         char *getHttpRequest () { return __httpRequestAndReplyBuffer__; }
 
-        string getHttpRequestHeaderField (char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
-          char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
-          if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
-            p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
-            string s; while (*p >= ' ') s += *(p ++);
-            return s;
-          }
-          return "";
+        cstring getHttpRequestHeaderField (const char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
+            char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
+            if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
+                p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
+                cstring s; while (*p >= ' ') s += *(p ++);
+                return s;
+            }
+            return "";
         }
 
-        string getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
-          char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
-          if (p) {
-            p = strstr (p, cookieName); // find cookie name in HTTP header
-            if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
-              p += strlen (cookieName) + 1; while (*p == ' ' || *p == '=' ) p++; // p points to cookie value in HTTP request
-              string s; while (*p > ' ' && *p != ';') s += *(p ++);
-              return s;
+        cstring getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
+            char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
+            if (p) {
+                p = strstr (p, cookieName); // find cookie name in HTTP header
+                if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
+                    p += strlen (cookieName) + 1; while (*p == ' ' || *p == '=' ) p++; // p points to cookie value in HTTP request
+                    cstring s; while (*p > ' ' && *p != ';') s += *(p ++);
+                    return s;
+                }
             }
-          }
-          return "";
+            return "";
         }
 
         void setHttpReplyStatus (const char *status) { strncpy (__httpReplyStatus__, status, HTTP_REPLY_STATUS_MAX_LENGTH); __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH - 1] = 0; }
         
-        void setHttpReplyHeaderField (string fieldName, string fieldValue) { 
+        void setHttpReplyHeaderField (cstring fieldName, cstring fieldValue) { 
             __httpReplyHeader__ += fieldName;
             __httpReplyHeader__ +=  + ": ";
             __httpReplyHeader__ += fieldValue;
             __httpReplyHeader__ += "\r\n"; 
         }
 
-        void setHttpReplyCookie (string cookieName, string cookieValue, time_t expires = 0, string path = "/") { 
+        void setHttpReplyCookie (cstring cookieName, cstring cookieValue, time_t expires = 0, cstring path = "/") { 
           char e [50] = "";
           if (expires) {
               if (!time ()) { // time not set
-                  dmesg ("[httpConnection] could not set cookie expiration time since the current time has not been set yet");
+                  #ifdef __DMESG__
+                      dmesgQueue << "[httpConnection] could not set cookie expiration time since the current time has not been set yet";
+                  #endif
                   return;
               }
               struct tm st = gmTime (expires);
@@ -664,7 +664,7 @@
         }
 
         // combination of clientIP and User-Agent HTTP header field - used for calculation of web session token
-        String getClientSpecificInformation () { return String (__clientIP__) + getHttpRequestHeaderField ((char *) "User-Agent"); }
+        String getClientSpecificInformation () { return String (__clientIP__) + getHttpRequestHeaderField ("User-Agent"); }
 
 
         // support for web sessions
@@ -675,41 +675,45 @@
                 // generate new token
                 static int tokenCounter = 0;
                 webSessionToken_t webSessionToken;
-                sha256 (webSessionToken.c_str (), 64 + 1, (char *) (String (tokenCounter ++) + String (esp_random ()) + String (__clientIP__) + getHttpRequestHeaderField ((char *) "User-Agent")).c_str ());
+                sha256 (webSessionToken.c_str (), 64 + 1, (char *) (String (tokenCounter ++) + String (esp_random ()) + String (__clientIP__) + getHttpRequestHeaderField ("User-Agent")).c_str ());
                 
                 // insert the new token into token database together with information associated with it
-                persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
-                webSessionTokenDatabase.Insert (webSessionToken, {expires, userName}); // if Insert fails, the token will just not work
-                if (e != webSessionTokenDatabase.OK) dmesg ("[httpConnection] webSessionTokenDatabase.Insert error: ", e); 
-                              
+                signed char e = webSessionTokenDatabase.Insert (webSessionToken, {expires, userName}); // if Insert fails, the token will just not work
+                if (e) { // != OK
+                    #ifdef __DMESG__
+                        dmesgQueue << "[httpConnection] webSessionTokenDatabase.Insert error: " << e; 
+                    #endif
+                }             
                 return webSessionToken;
             }
 
             // check validity of a token in webSessionTokenDatabase
-            fsString<64> getUserNameFromToken (webSessionToken_t& webSessionToken) {
+            Cstring<64> getUserNameFromToken (webSessionToken_t& webSessionToken) {
                 // find token in the webSessionTokenDatabase
                 webSessionTokenInformation_t webSessionTokenInformation;
-                persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
-                e = webSessionTokenDatabase.FindValue (webSessionToken, &webSessionTokenInformation);
+                signed char e = webSessionTokenDatabase.FindValue (webSessionToken, &webSessionTokenInformation);
                 switch (e) {
-                    case webSessionTokenDatabase.OK:        if ((time () && webSessionTokenInformation.expires <= time ()) || webSessionTokenInformation.expires == 0)  
-                                                                return "";
-                                                            else
-                                                                return webSessionTokenInformation.userName;
-                    case webSessionTokenDatabase.NOT_FOUND: return "";
-                    default:                                dmesg ("[httpConnection] webSessionTokenDatabase.FindValue error: ", e); 
-                                                            return "";
+                    case err_ok:        if ((time () && webSessionTokenInformation.expires <= time ()) || webSessionTokenInformation.expires == 0)  
+                                            return "";
+                                        else
+                                            return webSessionTokenInformation.userName;
+                    case err_not_found: return "";
+                    default:                                
+                                    #ifdef __DMESG__
+                                        dmesgQueue << "[httpConnection] webSessionTokenDatabase.FindValue error: " << e; 
+                                    #endif
+                                    return "";
                 }
             }
 
             // updates the token in webSessionTokenDatabase
-            bool updateWebSessionToken (webSessionToken_t& webSessionToken, fsString<64>& userName, time_t expires) {
-                return (webSessionTokenDatabase.Update (webSessionToken, {expires, userName}) == webSessionTokenDatabase.OK);
+            bool updateWebSessionToken (webSessionToken_t& webSessionToken, Cstring<64>& userName, time_t expires) {
+                return (webSessionTokenDatabase.Update (webSessionToken, {expires, userName}) == OK);
             }
 
             // deletes the token from webSessionTokenDatabase
             bool deleteWebSessionToken (webSessionToken_t& webSessionToken) {
-                return (webSessionTokenDatabase.Delete (webSessionToken) == webSessionTokenDatabase.OK);
+                return (webSessionTokenDatabase.Delete (webSessionToken) == OK);
             }
 
         #endif
@@ -731,10 +735,10 @@
             char *__httpServerHomeDirectory__; // not used
         #endif
 
-        fsString<HTTP_BUFFER_SIZE> __httpRequestAndReplyBuffer__;
+        Cstring<HTTP_BUFFER_SIZE> __httpRequestAndReplyBuffer__;
 
         char  __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH] = "200 OK"; // by default
-        string __httpReplyHeader__ = ""; // by default
+        cstring __httpReplyHeader__ = ""; // by default
 
         static void __connectionTask__ (void *pvParameters) {
           // get "this" pointer
@@ -746,20 +750,25 @@
             bool keepAlive;
             char *endOfHttpRequest = NULL;
             do {
-              keepAlive = false;
-              receivedTotal = recvAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__.c_str () + receivedTotal, HTTP_BUFFER_SIZE - 1 - receivedTotal, (char *) "\r\n\r\n", HTTP_CONNECTION_TIME_OUT); // BJ remark: is - 1 necessary? recvAll already considers C string ending with 0 itself.
-              if (receivedTotal <= 0) {
-                if (errno != 11 && errno != 128) dmesg ("[httpConnection] recv error: ", errno, strerror (errno)); // don't record time-out, it often happens 
-                goto endOfConnection;
-              }
-
-              endOfHttpRequest = strstr (ths->__httpRequestAndReplyBuffer__, "\r\n\r\n"); 
-              if (!endOfHttpRequest) {
-                  dmesg ("[httpConnection] __httpRequestAndReplyBuffer__ too small for HTTP request");
-                  sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
+                receivedTotal = recvAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__.c_str () + receivedTotal, HTTP_BUFFER_SIZE - 1 - receivedTotal, (char *) "\r\n\r\n", HTTP_CONNECTION_TIME_OUT); // BJ remark: is - 1 necessary? recvAll already considers C string ending with 0 itself.
+                if (receivedTotal <= 0) {
+                    #ifdef __DMESG__
+                        if (errno != 11 && errno != 128) dmesgQueue << "[httpConnection] recv error: " << errno << " " << strerror (errno); // don't record time-out, it often happens 
+                    #endif
                   goto endOfConnection;
-              }
+                }
 
+                endOfHttpRequest = strstr (ths->__httpRequestAndReplyBuffer__, "\r\n\r\n"); 
+                if (!endOfHttpRequest) {
+                    #ifdef __DMESG__
+                        dmesgQueue << "[httpConnection] __httpRequestAndReplyBuffer__ too small for HTTP request";
+                    #endif
+                    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
+                    goto endOfConnection;
+                }
+
+                // connection: keep-alive?
+                keepAlive = (stristr (ths->__httpRequestAndReplyBuffer__, "CONNECTION: KEEP-ALIVE") != NULL);
 
                 // WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET 
   
@@ -767,7 +776,11 @@
                   WebSocket webSocket (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, ths->__clientIP__, ths->__serverIP__); 
                   if (webSocket.state () == WebSocket::RUNNING) {
                     if (ths->__wsRequestHandlerCallback__) ths->__wsRequestHandlerCallback__ (ths->__httpRequestAndReplyBuffer__, &webSocket);
-                    else dmesg ("[httpConnection]", " wsRequestHandlerCallback was not provided to handle WebSocket");
+                    else {
+                        #ifdef __DMESG__
+                            dmesgQueue << "[httpConnection]", " wsRequestHandlerCallback was not provided to handle WebSocket";
+                        #endif
+                    }
                   }
                   goto endOfConnection;
                 }
@@ -782,18 +795,23 @@
                         goto endOfConnection;
                     }
                 }
-                // DEBUG: Serial.printf ("[%s]\n", httpReplyContent.c_str ());
 
                 if (httpReplyContent != "") {
                   // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
-                  if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
-                    if (stristr ((char *) httpReplyContent.c_str (), (char *) "<HTML>")) ths->setHttpReplyHeaderField ("Content-Type", "text/html");
-                    else if (strstr ((char *) httpReplyContent.c_str (), "{"))           ths->setHttpReplyHeaderField ("Content-Type", "application/json");
-                    // ... add more if needed
-                    else                                                                 ths->setHttpReplyHeaderField ("Content-Type", "text/plain");
+                  if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), "CONTENT-TYPE")) { 
+                      if (stristr ((char *) httpReplyContent.c_str (), "<HTML")) {
+                          ths->setHttpReplyHeaderField ("Content-Type", "text/html");
+                      } else if (strstr ((char *) httpReplyContent.c_str (), "{")) {
+                          ths->setHttpReplyHeaderField ("Content-Type", "application/json");
+                      // ... add more if needed
+                      } else { 
+                          ths->setHttpReplyHeaderField ("Content-Type", "text/plain");
+                      }
                   }
-                  if (ths->__httpReplyHeader__.error ()) {
-                      dmesg ("[httpConnection] __httpReplyHeader__ too small for HTTP reply header");
+                  if (ths->__httpReplyHeader__.errorFlags ()) {
+                      #ifdef __DMESG__
+                          dmesgQueue << "[httpConnection] __httpReplyHeader__ too small for HTTP reply header";
+                      #endif
                       sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                       goto endOfConnection;
                   }
@@ -824,19 +842,22 @@
                   strncpy (&ths->__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (char *) httpReplyContent.c_str (), bytesToCopyThisTime);
                   ths->__httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
                   if (sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                    dmesg ("[httpConnection] send error: ", errno, strerror (errno));
-                    goto endOfConnection;
+                      #ifdef __DMESG__
+                          dmesgQueue << "[httpConnection] send error: " << errno << " " << strerror (errno);
+                      #endif
+                      goto endOfConnection;
                   }
                   int bytesSent = bytesToCopyThisTime; // already sent
                   while (bytesSent < httpReplyContentLen) {
                     bytesToCopyThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) 1500); // MTU = 1500, TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send)
                     if (sendAll (ths->__connectionSocket__, httpReplyContent.c_str () + bytesSent, bytesToCopyThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                      dmesg ("[httpConnection] send error: ", errno, strerror (errno));
-                      goto endOfConnection;
+                        #ifdef __DMESG__
+                            dmesgQueue << "[httpConnection] send error: " << errno << " " << strerror (errno);
+                        #endif
+                        goto endOfConnection;
                     }                    
                     bytesSent += bytesToCopyThisTime; // already sent
                   }
-                  // DEBUG: Serial.printf ("[httpConnection] reply length: %i\n", bytesSent);
                   // HTTP reply sent
                   goto nextHttpRequest;
                 }
@@ -850,9 +871,9 @@
                       if (p) {
                         *p = 0;
                         // get file name from HTTP request
-                        string fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
+                        cstring fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
                         if (fileName == "" || fileName == "/") fileName = "/index.html";
-                        fileName = string (ths->__httpServerHomeDirectory__) + (fileName.c_str () + 1); // __httpServerHomeDirectory__ always ends with /
+                        fileName = cstring (ths->__httpServerHomeDirectory__) + (fileName.c_str () + 1); // __httpServerHomeDirectory__ always ends with /
 
                         // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
                         if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
@@ -881,14 +902,16 @@
                                 goto endOfConnection;
                             }
                         }
-                        File f = fileSystem.open (fileName, "r", false);           
+                        File f = fileSystem.open (fileName, "r");           
                         if (f) {
                           if (!f.isDirectory ()) {
 
                             diskTrafficInformation.bytesRead += f.size (); // asume the whole file will be read - update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
-                            if (ths->__httpReplyHeader__.error ()) {
-                                dmesg ("[httpConnection] __httpReplyHeader__ too small for HTTP reply header");
+                            if (ths->__httpReplyHeader__.errorFlags ()) {
+                                #ifdef __DMESG__
+                                    dmesgQueue << "[httpConnection] __httpReplyHeader__ too small for HTTP reply header";
+                                #endif
                                 sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                                 xSemaphoreGive (__httpServerSemaphore__);
                                 goto endOfConnection;
@@ -906,7 +929,6 @@
                             ths->__httpRequestAndReplyBuffer__ += "Content-Length: ";
                             ths->__httpRequestAndReplyBuffer__ += httpReplyContentLen; 
                             ths->__httpRequestAndReplyBuffer__ += "\r\n\r\n";
-                            // DEBUG: Serial.printf ("(%s)", ths->__httpRequestAndReplyBuffer__);
 
                             unsigned long httpReplyHeaderLen = ths->__httpRequestAndReplyBuffer__.length ();
 
@@ -922,27 +944,28 @@
                             // delay (1); // yield ();
                             ths->__httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
                             if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                              dmesg ("[httpConnection] read-send error (1): ", errno, strerror (errno));
-                              f.close ();
-                              xSemaphoreGive (__httpServerSemaphore__);
-                              goto endOfConnection;
+                                #ifdef __DMESG__
+                                    dmesgQueue << "[httpConnection] read-send error (1): " << errno << " " << strerror (errno);
+                                #endif
+                                f.close ();
+                                xSemaphoreGive (__httpServerSemaphore__);
+                                goto endOfConnection;
                             }
-                            // DEBUG: Serial.printf ("first packet from the file: %i bytes\n|%s|\n\n", httpReplyHeaderLen + bytesReadThisTime, ths->__httpRequestAndReplyBuffer__);
                             int bytesSent = bytesReadThisTime; // already sent
                             while (bytesSent < httpReplyContentLen) {
                               bytesToReadThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) HTTP_BUFFER_SIZE);
                               bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [0], (unsigned long) bytesToReadThisTime);
-                              delay (25); // yield (); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
+                              delay (2); // yield (); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
                               if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                                dmesg ("[httpConnection] read-send error (2): ", errno, strerror (errno));
-                                f.close ();
-                                xSemaphoreGive (__httpServerSemaphore__);
-                                goto endOfConnection;
+                                  #ifdef __DMESG__
+                                      dmesgQueue << "[httpConnection] read-send error (2): " << errno << " " << strerror (errno);
+                                  #endif
+                                  f.close ();
+                                  xSemaphoreGive (__httpServerSemaphore__);
+                                  goto endOfConnection;
                               }                    
-                              // DEBUG: Serial.printf ("next packet from the file: %i bytes\n", bytesReadThisTime);
                               bytesSent += bytesReadThisTime; // already sent
                             }
-                            // DEBUG: Serial.printf ("[httpConnection] reply length: %i\n", bytesSent);
                             // HTTP reply sent
                             f.close ();
                             xSemaphoreGive (__httpServerSemaphore__);
@@ -957,31 +980,34 @@
                 #endif
   
                 // SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY
+
+                #ifdef __DMESG__
+                    dmesgQueue << "[httpServer] 404: " << (char *) ths->__httpRequestAndReplyBuffer__;
+                #endif
   
                 if (sendAll (ths->__connectionSocket__, reply404, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                  dmesg ("[httpConnection] send error: ", errno, strerror (errno));
-                  goto endOfConnection;
+                    #ifdef __DMESG__
+                        dmesgQueue << "[httpConnection] send error: " << errno << " " << strerror (errno);
+                    #endif
+                    // cout << "[httpServer] send error, closing connection\n";
+                    goto endOfConnection;
                 }
   
         nextHttpRequest:
               // if we are running out of ESP32's resources we won't try to keep the connection alive, this would slow down the server a bit but it would let still it handle requests from different clients
               if (ths->__connectionSocket__ >= LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 2) { // running out of sockets
-                  // DEBUG: Serial.printf ("[httpServer] running out of sockets\n");
-                  // dmesg ("[httpServer] warning: running out of sockets");
+                  // cout << "[httpServer] running out of sockets, closing connection\n";
                   goto endOfConnection; // running out of sockets
               }
               if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) { // there is not a memory block large enough evailable to start a new task that would handle the connection
-                  // DEBUG: Serial.printf ("[httpServer] running out of (large enough) memory blocks\n");              
-                  // dmesg ("[httpServer] warning: running out of (large enough) memory blocks");
+                  // cout << "[httpServer] running out of memory, closing connection\n";
                   goto endOfConnection; 
               }
 
-              // search for Keep-alive directive if the client wants to keep the connection alive for subsequent requests
-              char *p = stristr (ths->__httpRequestAndReplyBuffer__, (char *) "CONNECTION: KEEP-ALIVE");
-              if (p && p < endOfHttpRequest) {
-                  keepAlive = true;
-                  strcpy (ths->__httpRequestAndReplyBuffer__, endOfHttpRequest + 4);
-                  receivedTotal = strlen (ths->__httpRequestAndReplyBuffer__);
+              // connection: keep-alive?
+              if (keepAlive) {
+                  receivedTotal = 0;
+                  ths->__httpRequestAndReplyBuffer__ [0] = 0; 
                   // restore default values of member variables for the next HTTP request on the same TCP connection
                   strcpy (ths->__httpReplyStatus__, "200 OK"); 
                   ths->__httpReplyHeader__ = "";                  
@@ -993,7 +1019,6 @@
           } // code block
 
         endOfConnection:  
-          // DEBUG: Serial.printf ("[httpConnection] stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
 
           // all variables are freed now, unload the instance and stop the task (in this order)
           delete ths;
@@ -1041,7 +1066,9 @@
                         __firewallCallback__ = firewallCallback;
                         #ifdef __FILE_SYSTEM__
                             if (!httpServerHomeDirectory || !*httpServerHomeDirectory || strlen (httpServerHomeDirectory) >= sizeof (__httpServerHomeDirectory__) - 2) {
-                                dmesg ("[httpServer] invalid httpServerHomeDirectory");
+                                #ifdef __DMESG__
+                                    dmesgQueue << "[httpServer] invalid httpServerHomeDirectory";
+                                #endif
                                 return;
                             }
                             strcpy (__httpServerHomeDirectory__, httpServerHomeDirectory);
@@ -1057,7 +1084,9 @@
                             BaseType_t taskCreated = xTaskCreate (__listenerTask__, "httpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
                         #endif
                         if (pdPASS != taskCreated) {
-                          dmesg ("[httpServer] xTaskCreate error");
+                            #ifdef __DMESG__
+                                dmesgQueue << "[httpServer] xTaskCreate error";
+                            #endif
                         } else {
                           // wait until listener starts accepting connections
                           while (__state__ == STARTING) delay (1); 
@@ -1105,13 +1134,11 @@
                 // load database and start database cleaning task
                 xTaskCreate ([] (void *param) { 
                                                   // load existing tokens
-                                                  persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
-                                                  e = webSessionTokenDatabase.loadData ("/var/www/webSessionTokens.kvp");
-                                                  if (e == webSessionTokenDatabase.OK) {
-                                                      // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: %i tokens loaded at startup\n", webSessionTokenDatabase.size ());
-                                                  } else {
-                                                      dmesg ("[httpServer] webSessionCleaner: webSessionTokenDatabase.loadData error: ", e);
-                                                      dmesg ("[httpServer] webSessionCleaner: Truncating webSessionTokenDatabase");
+                                                  signed char e = webSessionTokenDatabase.loadData ("/var/www/webSessionTokens.db");
+                                                  if (e != OK) {
+                                                      #ifdef __DMESG__
+                                                          dmesgQueue << "[httpServer] webSessionCleaner: webSessionTokenDatabase.loadData error: " << e << ", truncating webSessionTokenDatabase";
+                                                      #endif
                                                       webSessionTokenDatabase.Truncate (); // forget all stored data and try to make it work from the start
                                                   }
 
@@ -1119,23 +1146,18 @@
                                                   while (true) {
                                                       webSessionToken_t expiredToken;
                                                       webSessionTokenInformation_t webSessionTokenInformation;
-                                                      persistentKeyValuePairs<webSessionToken_t, webSessionTokenInformation_t>::errorCode e;
                                                       for (auto p: webSessionTokenDatabase) {
-                                                          e = webSessionTokenDatabase.FindValue (p.key, &webSessionTokenInformation, p.blockOffset);
-                                                          if (e == webSessionTokenDatabase.OK && time () && webSessionTokenInformation.expires && webSessionTokenInformation.expires <= time ()) {
-                                                              expiredToken = p.key;
+                                                          signed char e = webSessionTokenDatabase.FindValue (p->key, &webSessionTokenInformation, p->blockOffset);
+                                                          if (e == OK && time () && webSessionTokenInformation.expires && webSessionTokenInformation.expires <= time ()) {
+                                                              expiredToken = p->key;
                                                               break;
-                                                          }  else {
-                                                              // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: token is stil valid %s for %i s\n", p.key, webSessionTokenInformation.expires - time ());
-                                                          }
+                                                          } 
                                                       }
                                                       if (expiredToken > "") {
-                                                          // DEBUG: Serial.printf ("[httpServer] webSessionCleaner: deleting expired token %s\n", expiredToken.c_str ());
                                                           webSessionTokenDatabase.Delete (expiredToken);
                                                       }
 
                                                       delay (6000); // repeat every 6 sec
-                                                      // DEBUG: Serial.printf ("[httpServer] webSessionCleaner taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
                                                   }
                                               }, 
                                               "webSessionCleaner", 4 * 1024, NULL, 1, NULL);                
@@ -1144,12 +1166,16 @@
             // start listener
             ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
             if (ths->__listeningSocket__ == -1) {
-              dmesg ("[httpServer] socket error: ", errno, strerror (errno));
+                #ifdef __DMESG__
+                    dmesgQueue << "[httpServer] socket error: " << errno << " " << strerror (errno);
+                #endif
             } else {
               // make address reusable - so we won't have to wait a few minutes in case server will be restarted
               int flag = 1;
               if (setsockopt (ths->__listeningSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag)) == -1) {
-                dmesg ("[httpServer] setsockopt error: ", errno, strerror (errno));
+                  #ifdef __DMESG__
+                      dmesgQueue << "[httpServer] setsockopt error: " << errno << " " << strerror (errno);
+                  #endif
               } else {
                 // bind listening socket to IP address and port     
                 struct sockaddr_in serverAddress; 
@@ -1158,32 +1184,45 @@
                 serverAddress.sin_addr.s_addr = inet_addr (ths->__serverIP__);
                 serverAddress.sin_port = htons (ths->__serverPort__);
                 if (bind (ths->__listeningSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                  dmesg ("[httpServer] bind error: ", errno, strerror (errno));
+                    #ifdef __DMESG__
+                        dmesgQueue << "[httpServer] bind error: " << errno << " " << strerror (errno);
+                    #endif
                } else {
                  // mark socket as listening socket
                  if (listen (ths->__listeningSocket__, 12) == -1) {
-                  dmesg ("[httpServer] listen error: ", errno, strerror (errno));
+                    #ifdef __DMESG__
+                        dmesgQueue << "[httpServer] listen error: " << errno << " " << strerror (errno);
+                    #endif
                  } else {
+
+                  // remember some information that netstat telnet command would use
+                  additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET] = { __LISTENING_SOCKET__, 0, 0, millis (), millis () };
           
                   // listener is ready for accepting connections
                   ths->__state__ = RUNNING;
-                  dmesg ("[httpServer] listener is running on core ", xPortGetCoreID ());
-                  dmesg ("[httpServer] home (root) directory is ", ths->__httpServerHomeDirectory__); 
+                  #ifdef __DMESG__
+                      dmesgQueue << "[httpServer] listener is running on core " << xPortGetCoreID ();
+                      dmesgQueue << "[httpServer] home (root) directory is " << ths->__httpServerHomeDirectory__; 
+                  #endif
                   while (ths->__listeningSocket__ > -1) { // while listening socket is opened
           
                       int connectingSocket;
                       struct sockaddr_in connectingAddress;
                       socklen_t connectingAddressSize = sizeof (connectingAddress);
-                      // DEBUG: Serial.printf ("[httpServer] listener taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
                       // while (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) delay (10); // there is no memory block large enough evailable to start a new task that would handle the new connection
                       connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
                       if (connectingSocket == -1) {
-                        if (ths->__listeningSocket__ > -1) dmesg ("[httpServer] accept error: ", errno, strerror (errno));
+                        if (ths->__listeningSocket__ > -1) {
+                            #ifdef __DMESG__
+                                dmesgQueue << "[httpServer] accept error: " << errno << " " << strerror (errno);
+                            #endif
+                        }
                       } else {
-                        socketTrafficInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
 
-                        // prepare network Traffic measurement information for connecting socket
-                        socketTrafficInformation [connectingSocket - LWIP_SOCKET_OFFSET] = {0, 0, millis (), millis ()};
+                        // remember some information that netstat telnet command would use
+                        additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
+                        additionalSocketInformation [connectingSocket - LWIP_SOCKET_OFFSET] = { __HTTP_SERVER_SOCKET__, 0, 0, millis (), millis () };
+
                         // get client's IP address
                         char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
                         // get server's IP address
@@ -1191,13 +1230,17 @@
                         if (getsockname (connectingSocket, (struct sockaddr *) &thisAddress, &len) != -1) inet_ntoa_r (thisAddress.sin_addr, serverIP, sizeof (serverIP));
                         // port number could also be obtained if needed: ntohs (thisAddress.sin_port);
                         if (ths->__firewallCallback__ && !ths->__firewallCallback__ (clientIP)) {
-                          dmesg ("[httpServer] firewall rejected connection from ", clientIP);
+                            #ifdef __DMESG__
+                                dmesgQueue <<"[httpServer] firewall rejected connection from " << clientIP;
+                            #endif
                           close (connectingSocket);
                         } else {
                           // make the socket non-blocking so that we can detect time-out
                           if (fcntl (connectingSocket, F_SETFL, O_NONBLOCK) == -1) {
-                            dmesg ("[httpServer] fcntl error: ", errno, strerror (errno));
-                            close (connectingSocket);
+                              #ifdef __DMESG__
+                                  dmesgQueue <<"[httpServer] fcntl error: " << errno << " " << strerror (errno);
+                              #endif
+                              close (connectingSocket);
                           } else {
                                 // create httpConnection instence that will handle the connection, then we can lose reference to it - httpConnection will handle the rest
                                 httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandlerCallback__, clientIP, serverIP, ths->__httpServerHomeDirectory__);
@@ -1219,7 +1262,9 @@
                       } // accept
 
                   } // while accepting connections
-                  dmesg ("[httpServer] stopped");
+                  #ifdef __DMESG__
+                      dmesgQueue << "[httpServer] stopped";
+                  #endif
           
                  } // listen
                } // bind

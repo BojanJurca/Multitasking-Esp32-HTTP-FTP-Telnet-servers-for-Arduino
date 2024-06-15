@@ -2,9 +2,9 @@
   
     fileSystem.hpp 
     
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
+    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
     
-    August 12, 2023, Bojan Jurca
+    May 22, 2024, Bojan Jurca
 
     FFAT or LittleFS for ESP32 built-in flash disk
 
@@ -15,17 +15,15 @@
 
         https://github.com/espressif/arduino-esp32/tree/master/libraries/SD
 
-        With the following exception: VDD is connected to 5V instead of 3V3, it looks like 3V3 is not enough to power the SD card
-
 */
 
 
     // ----- includes, definitions and supporting functions -----
 
-    #include <WiFi.h>
     #include <FS.h>
     // fixed size strings
-    #include "fsString.h"
+    #include "std/Cstring.hpp"
+    #include "std/console.hpp"
 
 
 #ifndef __FILE_SYSTEM__
@@ -125,33 +123,33 @@
                         __builtinFlashDiskMounted__ = true;
                     } else {
                         if (formatIfUnformatted) {
-                            Serial.printf ("[%10lu] [fileSystem] formatting, please wait ...\n", millis ());
+                            cout << "[fileSystem] formatting, please wait ... ";
                             if (__fileSystem__.format ()) {
-                                Serial.printf ("[%10lu] [fileSystem] ... formatted\n", millis ());
+                                cout << "[fileSystem] ... formatted\n";
                                 #ifdef __DMESG__
-                                    dmesg ("[fileSystem] formatted.");
+                                    dmesgQueue << "[fileSystem] formatted";
                                 #endif
                                 if (__fileSystem__.begin (false)) {
                                     __builtinFlashDiskMounted__ = true;
                                 }
                             } else {
-                                Serial.printf ("[%10lu] [fileSystem] ... formatting failed\n", millis ());
+                                cout << "[fileSystem] ... formatting failed\n";
                                 #ifdef __DMESG__
-                                    dmesg ("[fileSystem] formatting failed.");
+                                    dmesgQueue << "[fileSystem] formatting failed";
                                 #endif
                             }
                         }
                     }
 
                     if (__builtinFlashDiskMounted__) {
-                        Serial.printf ("[%10lu] [fileSystem] FAT mounted\n", millis ());
+                        cout << "[fileSystem] FAT mounted\n";
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] FAT mounted"); 
+                            dmesgQueue << "[fileSystem] FAT mounted"; 
                         #endif
                     } else { 
-                        Serial.printf ("[%10lu] [fileSystem] failed to mount FAT\n", millis ());
+                        cout << "[fileSystem] failed to mount FAT\n";
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] failed to mount FAT");
+                            dmesgQueue << "[fileSystem] failed to mount FAT";
                         #endif
                     }
                     return __builtinFlashDiskMounted__;
@@ -169,33 +167,33 @@
                         __builtinFlashDiskMounted__ = true;
                     } else {
                         if (formatIfUnformatted) {
-                            Serial.printf ("[%10lu] [fileSystem] formatting, please wait ...\n", millis ());
+                            cout << "[fileSystem] formatting, please wait ... ";
                             if (__fileSystem__.format ()) {
-                                Serial.printf ("[%10lu] [fileSystem] ... formatted\n", millis ());
+                                cout << "[fileSystem] ... formatted\n";
                                 #ifdef __DMESG__
-                                    dmesg ("[fileSystem] formatted.");
+                                    dmesgQueue << "[fileSystem] formatted";
                                 #endif
                                 if (__fileSystem__.begin (false)) {
                                     __builtinFlashDiskMounted__ = true;
                                 }
                             } else {
-                                Serial.printf ("[%10lu] [fileSystem] ... formatting failed\n", millis ());
+                                cout <<  "[fileSystem] ... formatting failed\n";
                                 #ifdef __DMESG__
-                                    dmesg ("[fileSystem] formatting failed.");
+                                    dmesgQueue << "[fileSystem] formatting failed";
                                 #endif
                             }
                         }
                     }
 
                     if (__builtinFlashDiskMounted__) {
-                        Serial.printf ("[%10lu] [fileSystem] LittleFS mounted\n", millis ());
+                        cout << "[fileSystem] LittleFS mounted\n";
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] LittleFS mounted"); 
+                            dmesgQueue << "[fileSystem] LittleFS mounted"; 
                         #endif
                     } else {
-                        Serial.printf ("[%10lu] [fileSystem] failed to mount LittleFS\n", millis ());
+                        cout << "[fileSystem] failed to mount LittleFS\n";
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] failed to mount LittleFS");
+                            dmesgQueue << "[fileSystem] failed to mount LittleFS";
                         #endif
                     }
                     return __builtinFlashDiskMounted__;
@@ -212,9 +210,9 @@
                     __SDcardMounted__ = false;
 
                     if (!mountPoint || *mountPoint != '/' || strlen (mountPoint) >= sizeof (__SDcardMountPoint__) - 1) {
-                        Serial.printf ("[%10lu] [fileSystem] invalid SD card mount point: %s\n", millis (), mountPoint);
+                        cout << "[fileSystem] invalid SD card mount point: " << mountPoint << endl;
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] invalid SD card mount point: ", mountPoint); 
+                            dmesgQueue << "[fileSystem] invalid SD card mount point: " << mountPoint; 
                         #endif
                         return false;
                     }
@@ -237,9 +235,9 @@
                             }
                             // check success
                             if (!isDirectory (mountPoint)) {
-                                Serial.printf ("[%10lu] [fileSystem] can't make the SD mount point directory: %s\n", millis (), mountPoint);
+                                cout << "[fileSystem] can't make the SD mount point directory: " << mountPoint << endl;
                                 #ifdef __DMESG__
-                                    dmesg ("[fileSystem] can't make the SD mount point directory: ", mountPoint); 
+                                    dmesgQueue << "[fileSystem] can't make the SD mount point directory: " << mountPoint; 
                                 #endif
                                 return false;
                             }
@@ -247,26 +245,26 @@
                     }
                      
                     if (!SD.begin (pinCS)) {
-                        Serial.printf ("[%10lu] [fileSystem] failed to mount SD card\n", millis ());
+                        cout <<  "[fileSystem] failed to mount SD card\n";
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] failed to mount SD card"); 
+                            dmesgQueue << "[fileSystem] failed to mount SD card"; 
                         #endif
                         return false;
                     }
 
                     if (SD.cardType () == CARD_NONE) {
-                        Serial.printf ("[%10lu] [fileSystem] no SD card attached\n", millis ());
+                        cout <<  "[fileSystem] no SD card attached\n";
                         #ifdef __DMESG__
-                            dmesg ("[fileSystem] no SD card attached"); 
+                            dmesgQueue << "[fileSystem] no SD card attached"; 
                         #endif
                         return false;
                     }
 
                     __SDcardMounted__ = true;
 
-                    Serial.printf ("[%10lu] [fileSystem] SD card mounted to %s\n", millis (), mountPoint);
+                    cout << "[fileSystem] SD card mounted to " << mountPoint << endl;
                     #ifdef __DMESG__
-                        dmesg ("[fileSystem] SD card mounted to ", mountPoint); 
+                        dmesgQueue << "[fileSystem] SD card mounted to " << mountPoint; 
                     #endif
 
                     return true;
@@ -328,9 +326,17 @@
                 return __fileSystem__.open (path); 
             }
 
-            // opens the file
+            File open (const char* path, const char* mode) { 
+                // builtin flash disk or SD card?
+                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                    if (pointsToSDcard (path)) return SD.open (SDcardPath (path), mode);  
+                #endif
 
-            File open (const char* path, const char* mode, const bool create) { 
+                // directory points to builtin flash disk
+                return __fileSystem__.open (path, mode); 
+            }
+
+            File open (const char* path, const char* mode, bool create) { 
                 // builtin flash disk or SD card?
                 #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
                     if (pointsToSDcard (path)) return SD.open (SDcardPath (path), mode, create);  
@@ -339,6 +345,7 @@
                 // directory points to builtin flash disk
                 return __fileSystem__.open (path, mode, create); 
             }
+
 
             // reads entire configuration file in the buffer - returns success, it also removes \r characters, double spaces, comments, ...
 
@@ -349,7 +356,7 @@
                 bool inComment = false;       // if reading comment text
                 char lastCharacter = 0;       // the last character read from the file
             
-                File f = open (fileName, "r", false);
+                File f = open (fileName, "r");
                 if (f) {
                     if (!f.isDirectory ()) {
                       
@@ -396,7 +403,7 @@
                     if (pointsToSDcard (fileName)) {
                         if (!SD.remove (SDcardPath (fileName))) {
                             #ifdef __DMESG__
-                                dmesg ("[fileSystem][SD] unable to delete ", fileName); 
+                                dmesgQueue << "[fileSystem][SD] unable to delete " << fileName; 
                             #endif
                             return false;
                         }
@@ -407,7 +414,7 @@
                 // builtin flash disk
                 if (!__fileSystem__.remove (fileName)) {
                     #ifdef __DMESG__
-                        dmesg ("[fileSystem] unable to delete ", fileName); 
+                        dmesgQueue << "[fileSystem] unable to delete " << fileName; 
                     #endif
                     return false;
                 }
@@ -422,7 +429,7 @@
                     if (pointsToSDcard (directory)) {
                         if (!SD.mkdir (SDcardPath (directory))) {
                             #ifdef __DMESG__
-                                dmesg ("[fileSystem][SD] unable to make ", directory); 
+                                dmesgQueue << "[fileSystem][SD] unable to make " << directory; 
                             #endif
                             return false;
                         }
@@ -433,7 +440,7 @@
                 // builtin flash disk
                 if (!__fileSystem__.mkdir (directory)) {
                     #ifdef __DMESG__
-                        dmesg ("[fileSystem] unable to make ", directory);
+                        dmesgQueue << "[fileSystem] unable to make " << directory;
                     #endif
                     return false;
                 }
@@ -449,14 +456,14 @@
                         // is it a SD card mount point?
                         if (strlen (directory) == strlen (__SDcardMountPoint__) - 1) {
                             #ifdef __DMESG__
-                                dmesg ("[fileSystem][SD] can not remove SC card mount point ", directory); 
+                                dmesgQueue << "[fileSystem][SD] can not remove SC card mount point " << directory; 
                             #endif
                             return false;
                         }
 
                         if (!SD.rmdir (SDcardPath (directory))) {
                             #ifdef __DMESG__
-                                dmesg ("[fileSystem][SD] unable to remove ", directory); 
+                                dmesgQueue << "[fileSystem][SD] unable to remove " << directory; 
                             #endif
                             return false;
                         }
@@ -467,7 +474,7 @@
                 // builtin flash disk
                 if (!__fileSystem__.rmdir (directory)) {
                     #ifdef __DMESG__
-                        dmesg ("[fileSystem] unable to remove ", directory);
+                        dmesgQueue << "[fileSystem] unable to remove " << directory;
                     #endif
                     return false;
                 }
@@ -483,14 +490,14 @@
                         if (pointsToSDcard (pathTo)) {
                             if (!SD.rename (SDcardPath (pathFrom), SDcardPath (pathTo))) {
                                 #ifdef __DMESG__
-                                    dmesg ("[fileSystem][SD] unable to rename ", pathFrom);
+                                    dmesgQueue << "[fileSystem][SD] unable to rename " << pathFrom;
                                 #endif
                                 return false;
                             }
                             return true;
                         } else {
                             #ifdef __DMESG__
-                                dmesg ("[fileSystem][SD] can't mix builtin flash disk and SD card with rename");
+                                dmesgQueue << "[fileSystem][SD] can't mix builtin flash disk and SD card with rename";
                             #endif
                             return false;
                         }
@@ -500,7 +507,7 @@
                 // both paths point to builtin flash disk
                 if (!__fileSystem__.rename (pathFrom, pathTo)) {
                     #ifdef __DMESG__
-                        dmesg ("[fileSystem] unable to rename ", pathFrom); 
+                        dmesgQueue << "[fileSystem] unable to rename " << pathFrom; 
                     #endif
                     return false;
                 }
@@ -509,20 +516,20 @@
 
             // makes the full path out of relative path and working directory, for example if working directory is /usr and relative patj is a.txt then full path is /usr/a.txt
 
-            string makeFullPath (const char *relativePath, const char *workingDirectory) { 
+            cstring makeFullPath (const char *relativePath, const char *workingDirectory) { 
                 char *p = relativePath [0] ? (char *) relativePath : (char *) "/"; // relativePath should never be empty
 
-                string s;
+                cstring s;
                 if (p [0] == '/') { // if path begins with / then it is already supposed to be fullPath
                     s = p; 
                 } else if (!strcmp (p, ".")) { // . means the working directory
                     s = workingDirectory;
                 } else if (p [0] == '.' && p [1] == '/') { // if path begins with ./ then fullPath = workingDirectory + the rest of paht
-                    s = string (workingDirectory);
+                    s = workingDirectory;
                     if (s [s.length () - 1] != '/') s += '/'; 
                     s += (p + 2); 
                 } else { // else fullPath = workingDirectory + path
-                    s = string (workingDirectory);
+                    s = workingDirectory;
                     if (s [s.length () - 1] != '/') s += '/'; 
                     s += p; 
                 }
@@ -550,7 +557,7 @@
 
             bool isDirectory (const char *fullPath) {
                 bool b = false;
-                File f = open (fullPath, "r", false);
+                File f = open (fullPath, "r");
                 if (f) {
                     b = f.isDirectory ();
                     f.close ();
@@ -562,7 +569,7 @@
   
             bool isFile (const char *fullPath) {
                 bool b = false;
-                File f = open (fullPath, "r", false);
+                File f = open (fullPath, "r");
                 if (f) {
                     b = !f.isDirectory ();
                     f.close ();
@@ -572,15 +579,15 @@
 
             // returns information about file or directory in UNIX like text line
 
-            string fileInformation (const char *fileOrDirectory, bool showFullPath = false) { // returns UNIX like text with file information
-                string s;
-                File f = open (fileOrDirectory, "r", false);
+            cstring fileInformation (const char *fileOrDirectory, bool showFullPath = false) { // returns UNIX like text with file information
+                cstring s;
+                File f = open (fileOrDirectory, "r");
                 if (f) { 
                     unsigned long fSize = 0;
                     struct tm fTime = {};
                     time_t lTime = f.getLastWrite ();
                     localtime_r (&lTime, &fTime);
-                    sprintf (s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // string = fsString<350> so we have enough space
+                    sprintf (s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // cstring = Cstring<350> so we have enough space
                     strftime (s.c_str () + strlen (s.c_str ()), 25, " %b %d %H:%M      ", &fTime);  
                     if (showFullPath || !strcmp (fileOrDirectory, "/")) {
                         s += fileOrDirectory;
@@ -608,31 +615,5 @@
 
     // create a working instance before including time_functions.h, time_functions.h will use the fileSystem instance
     fileSys fileSystem;
-
-    // strBetween function, usefull for parsing configuration files content
-
-    char *strBetween (char *buffer, size_t bufferSize, char *src, const char *left, const char *right) { // copies substring of src between left and right to buffer or "" if not found or buffer too small, return bufffer
-      *buffer = 0;
-      char *l, *r;
-
-      if (*left) l = strstr (src, left);
-      else l = src;
-      
-      if (l) {  
-        l += strlen (left);
-
-        if (*right) r = strstr (l, right);
-        else r = l + strlen (l);
-        
-        if (r) { 
-          int len = r - l;
-          if (len < bufferSize - 1) { 
-            strncpy (buffer, l, len); 
-            buffer [len] = 0; 
-          }
-        }
-      }    
-      return buffer;                                                     
-    }
 
 #endif
