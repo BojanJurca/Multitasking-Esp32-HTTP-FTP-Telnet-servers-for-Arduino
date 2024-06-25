@@ -71,7 +71,7 @@
 	<div class='d1'>
 		<div class='d2'>&nbsp;Built-in LED<br>&nbsp;<small><small>Use of nice controls.</small></small></div>
 		<div class='d5'>
-			<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLed (this.checked)'><div class='slider round'></div></label>
+			<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLED (this.checked)'><div class='slider round'></div></label>
 		</div>
 	</div>
 	<hr />
@@ -113,9 +113,7 @@
 
 	<script type='text/javascript'>
 
-		var freeHeapTO;
-		var freeBlockTO;
-		var httpRequestCountTO;
+		var TO;
 
 		// correct canvas scaling and sizes
 		function resizeCanvases () {
@@ -132,18 +130,10 @@
 			document.getElementById ('rssiGraph').getContext ('2d').scale (canvasScaleWidth, 1);
 
 			// schedule REST calls with small delays so that all requests would not be sent to ESP32 at the same time
-			clearTimeout (freeHeapTO);
-			freeHeapTO = setTimeout (function () {
-				client.request ('/freeHeap', 'GET', function (json) {document.getElementById ('freeHeap').innerText = lineGraph (json,'freeHeapGraph','#0961aa') + ' KB';});
-			}, 100);
-			clearTimeout (freeBlockTO);
-			freeBlockTO = setTimeout (function () {
-				client.request ('/freeBlock', 'GET', function (json) {document.getElementById ('freeBlock').innerText = lineGraph (json,'freeBlockGraph','#0961aa') + ' KB';});
+			clearTimeout (TO);
+			TO = setTimeout (function () {
+				refreshAllGraphs ();
 			}, 300);
-			clearTimeout (httpRequestCountTO);
-			httpRequestCountTO = setTimeout (function () {
-				client.request ('/httpRequestCount', 'GET', function (json) {document.getElementById('httpRequestCount').innerText = lineGraph (json, 'httpRequestCountGraph', '#2597f4') + ' / min';});
-			}, 500);
 		}
 		resizeCanvases ();
 		window.addEventListener ('resize', (e) => {         
@@ -195,29 +185,53 @@
 			}, 3000);				
 		}
 
-		function getAndRefreshLedState () { // read led state from ESP and refresh GUI
-			client.request ('/builtInLed', 'GET', function (json) {refreshLedState (json);});
+		function refreshLED () { // read led state from ESP and refresh GUI
+			let client = new httpClient ();
+			client.request ('/builtInLed','GET',function (json) {
+				var obj=JSON.parse (json);
+				document.getElementById ('ledSwitch').disabled = false; 
+				document.getElementById ('ledSwitch').checked = (obj.builtInLed == 'on');
+			});
 		}
 
-		function turnLed (switchIsOn) { // send desired led state to ESP and refresh GUI
-			client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off' , 'PUT', function (json) {refreshLedState (json);});
+		refreshLED (); // GUI initialization at load
+
+		function turnLED (switchIsOn) { // send desired led state to ESP and refresh GUI
+			let client = new httpClient ();
+			client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off', 'PUT', function (json){
+				var obj = JSON.parse (json);
+				document.getElementById ('ledSwitch').disabled = false; 
+				document.getElementById ('ledSwitch').checked= (obj.builtInLed == 'on');
+			});
 		}
 
-		function refreshLedState (json) { // refresh ledSwitch state with latest information from ESP
-			var obj = JSON.parse (json);
-			document.getElementById ('ledSwitch').disabled = false; 
-			document.getElementById ('ledSwitch').checked = (obj.builtInLed == 'on');
+		setTimeout (function () { // refresh up time with latest information from ESP each second
+			setInterval (function () {
+				let client = new httpClient ();
+				client.request ('/upTime','GET', function (json) {
+					document.getElementById ('upTime').innerText = (JSON.parse (json).upTime);
+				});
+			}, 1000);
+		}, 100);
+
+		// deprecated: refresh 3 graphs at load
+		// client.request ('/freeHeapGraph', 'GET', function (json) {document.getElementById ('freeHeap').innerText = lineGraph (JSON.parse (json), 'freeHeapGraph', '#0961aa') + ' KB';});
+		// client.request ('/freeBlockGraph', 'GET', function (json) {document.getElementById ('freeBlock').innerText = lineGraph (JSON.parse (json), 'freeBlockGraph', '#0961aa') + ' KB';});
+		// client.request ('/httpRequestCountGraph', 'GET', function (json) {document.getElementById ('httpRequestCount').innerText = lineGraph (JSON.parse (json), 'httpRequestCountGraph', '#2597f4') + ' / min';});
+
+		function refreshAllGraphs () { // read data from ESP and refresh GUI
+			let client = new httpClient ();
+			client.request ('/allGraphs', 'GET', function (json) {
+				let obj = JSON.parse (json);
+				document.getElementById ('httpRequestCount').innerText = lineGraph (obj.httpRequestCount, 'httpRequestCountGraph','#2597f4', 5) + ' / min';
+				document.getElementById ('freeHeap').innerText = lineGraph (obj.freeHeap, 'freeHeapGraph','#0961aa', 5) + ' KB';
+				document.getElementById ('freeBlock').innerText = lineGraph (obj.freeBlock, 'freeBlockGraph','#0961aa', 5) + ' KB';
+			});
 		}
 
-		getAndRefreshLedState (); // GUI initialization at load
 
-		function refreshUpTime (json) { // refresh up time with latest information from ESP
-			document.getElementById ('upTime').innerText = (JSON.parse (json).upTime);
-		}
-
-		function lineGraph(json,contextId,graphColour){
-
-			var obj=JSON.parse (json);
+		function lineGraph (obj, contextId, graphColour, scaleModule) {
+			// var obj=JSON.parse (json);
 			if (obj.value.length == 0) return '';
 			var retVal = obj.value [0];
 			var minVal = parseInt (obj.value [0]);
@@ -240,16 +254,23 @@
 			var ctx = c.getContext ('2d');
 
 			var ox = 30;
-			var fx = 18; if (obj.value.length > 24) fx = (c.width - ox - 3) / 60;
+			var fx;
+			if (obj.value.length <= 24) {
+				fx = (c.width - ox - 15) / 24;
+			} else {
+				fx = (c.width - ox - 15) / 60;
+			}
+
 			var fy = (c.height - 20) / (minVal - maxVal);
 			oy = c.height - 20 + 2 - fy * minVal; // leave 2 * text height free, 2 is half of linegraph width
-			ctx.clearRect (0, 0, 500, c.height); // c.width is not neccessary 500
+			ctx.clearRect (0, 0, c.width, c.height);
 			ctx.font = '10px Verdana';
 			ctx.fillText (maxVal, 10, 10);
 			ctx.fillText (midVal, 10, c.height / 2);
 			ctx.fillText (minVal, 10, c.height - 10);
 			for (i = 0; i < obj.scale.length; i++) {
-				ctx.fillText (obj.scale [i], ox + fx * (i + 1) - 5, c.height);
+				if (obj.scale [i] % scaleModule == 0)
+					ctx.fillText (obj.scale [i], ox + fx * (i + 1) - 5, c.height);
 			}
 			ctx.beginPath ();
 			ctx.moveTo (ox + fx,oy + fy * parseInt (obj.value [0]));
@@ -263,27 +284,6 @@
 			return retVal;
 		}
 
-		setInterval (function () {
-			client.request ('/upTime', 'GET', function (json) {refreshUpTime (json);});
-		}, 1000);
-
-		setTimeout (function () {
-			setInterval (function () {
-				client.request ('/freeHeap', 'GET', function (json) {document.getElementById ('freeHeap').innerText = lineGraph (json, 'freeHeapGraph', '#0961aa') + ' KB';});
-			}, 60000);
-		}, 100);
-
-		setTimeout (function () {
-			setInterval (function () {
-				client.request ('/freeBlock', 'GET', function (json) {document.getElementById ('freeBlock').innerText = lineGraph (json, 'freeBlockGraph', '#0961aa') + ' KB';});
-			}, 60000);
-		}, 300);
-
-		setTimeout (function () {
-			setInterval (function () {
-				client.request ('/httpRequestCount', 'GET', function (json) {document.getElementById ('httpRequestCount').innerText = lineGraph (json, 'httpRequestCountGraph', '#2597f4') + ' / min';});
-			}, 60000);
-		}, 500);
 
 		// WebSocket streaming:
 		// we should have a circular queue od measurements here but since we already have
@@ -330,7 +330,7 @@
 								}
 							}
 
-							document.getElementById ('rssi').innerText=lineGraph ('{"scale":[' + rssiScaleJson + '],"value":[' + rssiValueJson + ']}', 'rssiGraph','#ff8533') + ' dBm';
+							document.getElementById ('rssi').innerText=lineGraph (JSON.parse ('{"scale":[' + rssiScaleJson + '],"value":[' + rssiValueJson + ']}'), 'rssiGraph','#ff8533') + ' dBm';
 
 						};
 						myFileReader.readAsArrayBuffer (evt.data);
@@ -373,6 +373,11 @@
 	<div class='d1' style='height: 42px;'>
 		<div class='d3'>&nbsp;<a href="/example07.html">example07.html</a></div>
 		<div class='d2'><small><small>Example of cookie set by web server.</small></small></div>
+	</div>
+	<hr />
+	<div class='d1' style='height: 42px;'>
+		<div class='d3'>&nbsp;<a href="/example10.html">example10.html</a></div>
+		<div class='d2'><small><small>The use of websockets.</small></small></div>
 	</div>
 	<hr />
 	<div class='d1' style='height: 42px;'>
