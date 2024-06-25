@@ -8,7 +8,7 @@
 
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
      
-    May 22, 2024, Bojan Jurca
+    Jun 25, 2024, Bojan Jurca
 
 
     PLEASE NOTE THAT THIS FILE IS JUST A TEMPLATE. YOU CAN INCLUDE OR EXCLUDE FUNCTIONALITIES YOU NEED OR DON'T NEED IN Esp32_servers_config.h.
@@ -18,6 +18,10 @@
 */
 
 #include <WiFi.h>
+#include "servers/std/Cstring.hpp"
+#include "servers/std/console.hpp"
+
+
 // --- PLEASE MODIFY THIS FILE FIRST! --- This is where you can configure your network credentials, which servers will be included, etc ...
 #include "Esp32_servers_config.h"
 
@@ -87,14 +91,17 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                                                                       sprintf (httpResponseContentBuffer, "{\"id\":\"%s\",\"upTime\":\"%s\"}", HOSTNAME, c);
                                                                                       return httpResponseContentBuffer;
                                                                                   }                                                                    
-                    else if (httpRequestStartsWith ("GET /freeHeap "))            { // used by index.html: REST function for static HTML page
-                                                                                      return freeHeap.toJson ();
-                                                                                  }
-                    else if (httpRequestStartsWith ("GET /freeBlock "))           { // used by index.html
-                                                                                      return freeBlock.toJson ();
-                                                                                  }
-                    else if (httpRequestStartsWith ("GET /httpRequestCount "))    { // used by index.html: REST function for static HTML page
-                                                                                      return httpRequestCount.toJson ();
+                    else if (httpRequestStartsWith ("GET /freeHeapGraph "))           { // deprecated: REST function for static HTML page
+                                                                                          return freeHeap.toJson ();
+                                                                                      }
+                    else if (httpRequestStartsWith ("GET /freeBlockGraph "))          { // deprecated: REST function for static HTML page
+                                                                                          return freeBlock.toJson ();
+                                                                                      }
+                    else if (httpRequestStartsWith ("GET /httpRequestCountGraph "))   { // deprecated: REST function for static HTML page
+                                                                                          return httpRequestCount.toJson ();
+                                                                                      }
+                    else if (httpRequestStartsWith ("GET /allGraphs "))           { // used by index.html: REST function for static HTML page
+                                                                                      return "{\"httpRequestCount\": " + httpRequestCount.toJson () + " , \"freeHeap\": " + freeHeap.toJson () + " , \"freeBlock\": " + freeBlock.toJson () + "}";
                                                                                   }
                     else if (httpRequestStartsWith ("GET /niceSwitch1 "))         { // used by example 05.html: REST function for static HTML page
                                                                                       returnNiceSwitch1State:
@@ -114,11 +121,11 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceSlider3/"))         { // used by example 05.html: REST function for static HTML page
                                                                                       niceSlider3 = atoi (httpRequest + 17);
-                                                                                      Serial.printf ("[Got request from web browser for niceSlider3]: %i\n", niceSlider3);
+                                                                                      cout << "[Got request from web browser for niceSlider3]: " << niceSlider3 << endl;
                                                                                       goto returnNiceSlider3Value; // return success (or possible failure) back to the client
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceButton4/pressed ")) { // used by example 05.html: REST function for static HTML page
-                                                                                      Serial.printf ("[Got request from web browser for niceButton4]: pressed\n");
+                                                                                      cout << "[Got request from web browser for niceButton4]: pressed\n";
                                                                                       return "{\"id\":\"niceButton4\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                   }
                     else if (httpRequestStartsWith ("GET /niceRadio5 "))          { // used by example 05.html: REST function for static HTML page
@@ -127,12 +134,12 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceRadio5/"))          { // used by example 05.html: REST function for static HTML page
                                                                                       httpRequest [18] = 0;
-                                                                                      Serial.println (httpRequest + 16);
+                                                                                      cout << httpRequest + 16 << endl;
                                                                                       strcpy (niceRadio5, strstr (httpRequest + 16, "am") ? "am" : "fm");
                                                                                       goto returnNiceRadio5Value; // return success (or possible failure) back to the client
                                                                                   }
                     else if (httpRequestStartsWith ("PUT /niceButton6/pressed ")) { // used by example 05.html: REST function for static HTML page
-                                                                                      Serial.printf ("[Got request from web browser for niceButton6]: pressed\n");
+                                                                                      cout << "[Got request from web browser for niceButton6]: pressed\n";
                                                                                       return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
                                                                                   }
 
@@ -205,6 +212,48 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
 // PLEASE NOTE: since httpServer is implemented as a multitasking server, wsRequestHandlerCallback function can run in different tasks at the same time.
 //              Therefore wsRequestHandlerCallback function must be reentrant.
 
+
+            // Example 10 - basic WebSockets demonstration
+            
+            void example10_webSockets (WebSocket *webSocket) {
+                while (true) {
+                    switch (webSocket->available ()) {
+                        case WebSocket::NOT_AVAILABLE:    delay (1);
+                                                          break;
+                        case WebSocket::STRING:       { // text received
+                                                          cstring s = webSocket->readString ();
+                                                          cout << "[example 10] got text from browser over webSocket: " << s << endl;
+                                                          break;
+                                                      }
+                        case WebSocket::BINARY:       { // binary data received
+                                                          byte buffer [256];
+                                                          int bytesRead = webSocket->readBinary (buffer, sizeof (buffer));
+                                                          cout << "[example 10] got " << bytesRead << " bytes of binary data from browser over webSocket\n";
+                                                          // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 16 bit integers
+                                                          // (I know they are 16 bit integers because I have written javascript client example myself but this information can not be obtained from webSocket)
+                                                          int16_t *i = (int16_t *) buffer;
+                                                          while ((byte *) (i + 1) <= buffer + bytesRead) 
+                                                              cout << *i ++;
+                                                          cout << "[example 10] if the sequence is -21 13 -8 5 -3 2 -1 1 0 1 1 2 3 5 8 13 21 34 55 89 144 233 377 610 987 1597 2584 4181 6765 10946 17711 28657\n"
+                                                                  "             it means that both, endianness and complements are compatible with javascript client.\n";
+                                                          // send text data
+                                                          if (!webSocket->sendString ("Thank you webSocket client, I'm sending back 8 32 bit binary floats.")) goto errorInCommunication;
+                    
+                                                          // send binary data
+                                                          float geometricSequence [8] = {1.0}; for (int i = 1; i < 8; i++) geometricSequence [i] = geometricSequence [i - 1] / 2;
+                                                          if (!webSocket->sendBinary ((byte *) geometricSequence, sizeof (geometricSequence))) goto errorInCommunication;
+                                                                          
+                                                          break; // this is where webSocket connection ends - in our simple "protocol" browser closes the connection but it could be the server as well ...
+                                                                // ... just "return;" in this case (instead of break;)
+                                                      }
+                        default: // WebSocket::ERROR, WebSocket::CLOSE, WebSocket::TIME_OUT
+                    errorInCommunication:     
+                                                          cout << "[example 10] closing WebSocket\n";
+                                                          return; // close this connection
+                    }
+                }
+            }
+
 void wsRequestHandlerCallback (char *wsRequest, WebSocket *webSocket) {
     // this callback function is supposed to handle WebSocket communication - once it returns WebSocket will be closed
   
@@ -230,6 +279,8 @@ void wsRequestHandlerCallback (char *wsRequest, WebSocket *webSocket) {
                                                                         } while (webSocket->sendBinary ((byte *) &c, sizeof (c))); // keep sending RSSI information as long as web browser is receiving it
                                                                     }
 
+              else if (wsRequestStartsWith ("GET /example10_WebSockets")) example10_webSockets (webSocket); // used by example10.html
+
 }
 
 
@@ -249,15 +300,15 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING CODE -----     
                             if (argv0is ("led") && argv1is ("state"))                 { // led state telnet command
-                                                                                        return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
+                                                                                          return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
                                                                                       } 
                     else if (argv0is ("turn") && argv1is ("led") && argv2is ("on"))   { // turn led on telnet command
-                                                                                        digitalWrite (LED_BUILTIN, HIGH);
-                                                                                        return "Led is on.";
+                                                                                          digitalWrite (LED_BUILTIN, HIGH);
+                                                                                          return "Led is on.";
                                                                                       }
                     else if (argv0is ("turn") && argv1is ("led") && argv2is ("off"))  { // turn led off telnet command
-                                                                                        digitalWrite (LED_BUILTIN, LOW);
-                                                                                        return "Led is off.";
+                                                                                          digitalWrite (LED_BUILTIN, LOW);
+                                                                                          return "Led is off.";
                                                                                       }
 
                     // ----- USED FOR DEMONSTRATION OF RETRIEVING INFORMATION FROM WEB SESSION TOKEN DATABASE, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
@@ -298,7 +349,7 @@ void cronHandlerCallback (const char *cronCommand) {
     #define cronCommandIs(X) (!strcmp (cronCommand, X))  
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
-                    if (cronCommandIs ("ONCE_AN_HOUR"))                         {   // built-in cron event, triggers once an hour even if the time is not known
+                    if (cronCommandIs ("ONCE_AN_HOUR"))                         {   // built-in cron event, triggers once an hour even if the time is not (yet) known
                                                                                     // check if ESP32 works in WIFI_STA mode
                                                                                     wifi_mode_t wifiMode = WIFI_OFF;
                                                                                     if (esp_wifi_get_mode (&wifiMode) != ESP_OK) {
@@ -335,30 +386,30 @@ void cronHandlerCallback (const char *cronCommand) {
                                                                                         }
                                                                                     }
                                                                                 }
-                    else if (cronCommandIs ("gotTime"))                        {   // triggers only once - the first time ESP32 sets its clock (when it gets time from NTP server for example)
+                    else if (cronCommandIs ("gotTime"))                         {   // triggers only once - the first time ESP32 sets its clock (when it gets time from NTP server for example)
                                                                                     char buf [26]; // 26 bytes are needed
                                                                                     ascTime (localTime (time ()), buf);
-                                                                                    Serial.println ("Got time at " + String (buf) + " (local time), do whatever needs to be done the first time the time is known.");
+                                                                                    cout << "Got time at " << buf << " (local time), do whatever needs to be done the first time the time is known.";
                                                                                 }           
                     else if (cronCommandIs ("newYear'sGreetingsToProgrammer"))  {   // triggers at the beginning of each year
-                                                                                    Serial.printf ("[%10lu] [cronDaemon] *** HAPPY NEW YEAR ***!\n", millis ());    
+                                                                                    cout << "[cronDaemon] *** HAPPY NEW YEAR ***!\n";
                                                                                 }
                     else if (cronCommandIs ("onMinute"))                        {   // triggers each minute - collect some measurements for the purpose of this demonstration
                                                                                     struct tm st = localTime (time ()); 
                                                                                     freeHeap.push_back ( { (unsigned char) st.tm_min, (int) (ESP.getFreeHeap () / 1024) } ); // take s sample of free heap in KB 
-                                                                                    freeHeap.push_back ( { (unsigned char) st.tm_min, (int) (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) / 1024) } ); // take s sample of free heap in KB 
+                                                                                    freeBlock.push_back ( { (unsigned char) st.tm_min, (int) (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) / 1024) } ); // take s sample of free heap in KB 
                                                                                     httpRequestCount.push_back_and_reset_valueCounter (st.tm_min);          // take sample of number of web connections that arrived last minute 
                                                                                 }
 }
 
 
 void setup () {
-    Serial.begin (115200);
-    Serial.println (cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
+    cinit (); // Serial.begin (115200);
+    cout << MACHINETYPE "(" << (int) ESP.getCpuFreqMHz () << " MHz) " HOSTNAME " SDK: " << ESP.getSdkVersion () << " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__ << endl; 
 
 
     #ifdef FILE_SYSTEM
-        // 1. Mount file system - this is the first thing to do since all the configuration files reside on the file system.
+        // 1. Mount file system - this is the first thing to do since all the configuration files reside on the file system
         #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
             // fileSystem.formatLittleFs (); Serial.printf ("\nFormatting file system with LittleFS ...\n\n"); // format flash disk to start everithing from the scratch
             fileSystem.mountLittleFs (true);                                            
@@ -396,13 +447,15 @@ void setup () {
 
     // 5. Start the servers.
     #ifdef __HTTP_SERVER__                                    // all the arguments are optional
-        httpServer *httpSrv = new (std::nothrow) httpServer ( httpRequestHandlerCallback, // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                                              wsRequestHandlerCallback,   // a callback function that will handle WS requests, NULL to ignore WS requests
-                                                              "0.0.0.0",                  // start HTTP server on all available IP addresses
-                                                              80,                         // default HTTP port
-                                                              NULL,                       // we won't use firewallCallback function for HTTP server FOR DEMONSTRATION PURPOSES
+        httpServer *httpSrv = new (std::nothrow) httpServer ( httpRequestHandlerCallback, // (optional) a callback function that will handle HTTP requests that are not handled by webServer itself
+                                                              wsRequestHandlerCallback,   // (optional) a callback function that will handle WS requests, NULL to ignore WS requests
+                                                              "0.0.0.0",                  // (optional) start HTTP server on all available IP addresses
+                                                              80,                         // (optional) default HTTP port
+                                                              NULL,                       // (optional) we won't use firewallCallback function for HTTP server FOR DEMONSTRATION PURPOSES
                                                               "/var/www/html");           // (optional) httpServer root directory, the default is "/var/www/html"
-        if (!httpSrv && httpSrv->state () != httpServer::RUNNING) {
+        if (httpSrv && httpSrv->state () == httpServer::RUNNING) {
+            cout << "[httpServer] started\n";
+        } else {
             #ifdef __DMESG__
                 dmesgQueue << "[httpServer] did not start";
             #endif
@@ -410,10 +463,12 @@ void setup () {
         }
     #endif
     #ifdef __FTP_SERVER__                                 // all the arguments are optional
-        ftpServer *ftpSrv = new (std::nothrow) ftpServer ("0.0.0.0",          // start FTP server on all available ip addresses
-                                                          21,                 // default FTP port
-                                                          firewallCallback);  // let's use firewallCallback function for FTP server FOR DEMONSTRATION PURPOSES
-        if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) {
+        ftpServer *ftpSrv = new (std::nothrow) ftpServer ("0.0.0.0",          // (optional) start FTP server on all available ip addresses
+                                                          21,                 // (optional) default FTP port
+                                                          firewallCallback);  // (optional) let's use firewallCallback function for FTP server FOR DEMONSTRATION PURPOSES
+        if (ftpSrv && ftpSrv->state () == ftpServer::RUNNING) {
+            cout << "[ftpServer] started\n";
+        } else {
             #ifdef __DMESG__
                 dmesgQueue << "[ftpServer] did not start";
             #endif
@@ -421,15 +476,17 @@ void setup () {
         }
     #endif
     #ifdef __TELNET_SERVER__                                        // all the arguments are optional
-        telnetServer *telnetSrv = new (std::nothrow) telnetServer ( telnetCommandHandlerCallback, // a callback function that will handle Telnet commands that are not handled by telnetServer itself
-                                                                    "0.0.0.0",                    // start Telnet server on all available ip addresses 
-                                                                    23,                           // default Telnet port
-                                                                    firewallCallback);            // let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES
-        if (telnetSrv && telnetSrv->state () != telnetServer::RUNNING) {
+        telnetServer *telnetSrv = new (std::nothrow) telnetServer ( telnetCommandHandlerCallback, // (optional) a callback function that will handle Telnet commands that are not handled by telnetServer itself
+                                                                    "0.0.0.0",                    // (optional) start Telnet server on all available ip addresses 
+                                                                    23,                           // (optional) default Telnet port
+                                                                    firewallCallback);            // (optional) let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES
+        if (telnetSrv && telnetSrv->state () == telnetServer::RUNNING) {
+            cout << "[telnetServer] started\n";
+        } else {
             #ifdef __DMESG__
                 dmesgQueue << "[telnetServer] did not start";
             #endif
-            cout << "[telnetServer] did not start\n";          
+            cout << "[telnetServer] did not start\n";
         }
     #endif
 
