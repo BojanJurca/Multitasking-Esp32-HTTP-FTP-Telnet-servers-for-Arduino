@@ -15,7 +15,7 @@
  *    - Update (key, callback function, optional blockoffset) - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
  *
  *    - Upsert (key, new value)                               - update the value if the key already exists, else insert a new one
- *    - Update (key, callback function, default value)        - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
+ *    - Upsert (key, callback function, default value)        - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
  *
  *    - Delete (key)                                          - deletes key-value pair identified by the key
  *    - Truncate                                              - deletes all key-value pairs
@@ -50,7 +50,7 @@
  *            - data file offset (uint16_t) of a free block
  *            - size of a free block (int16_t)
  * 
- * May 22, 2024, Bojan Jurca
+ * Jun 25, 2024, Bojan Jurca
  *  
  */
 
@@ -494,16 +494,14 @@
                     return err_ok;
                 } else { // not found or error
                     signed char e = Map<keyType, uint32_t>::errorFlags ();
-                    if (e == err_not_found) {
-                        // log_i ("error (key): NOT_FOUD");
-                        __errorFlags__ |= err_not_found;
-                        Unlock ();  
-                        return err_not_found;
-                    } else {
-                        // log_i ("error: some other error, check result");
+                    if (e) { // error
                         __errorFlags__ |= e;
                         Unlock ();  
                         return e;
+                    } else {
+                        __errorFlags__ |= err_not_found;
+                        Unlock ();  
+                        return err_not_found;                      
                     }
                 }
             }
@@ -543,16 +541,14 @@
                     uint32_t *pBlockOffset = Map<keyType, uint32_t>::find (key);
                     if (!pBlockOffset) { // if not found or error
                         signed char e = Map<keyType, uint32_t>::errorFlags ();
-                        if (e) { // != OK
-                            // log_i ("error (key): NOT_FOUD");
-                            __errorFlags__ |= err_not_found;
-                            Unlock ();  
-                            return err_not_found;
-                        } else {
-                            // log_i ("error: some other error, check result");
+                        if (e) { // error
                             __errorFlags__ |= e;
                             Unlock ();  
                             return e;
+                        } else {
+                            __errorFlags__ |= err_not_found;
+                            Unlock ();
+                            return err_not_found;
                         }
                     }
                     blockOffset = *pBlockOffset;
@@ -624,16 +620,20 @@
 
                 // 1. get blockOffset
                 if (!pBlockOffset) { // find block offset if not provided by the calling program
+      
                     // log_i ("step 1: looking for block offset in Map");
                     Map<keyType, uint32_t>::clearErrorFlags ();
                     pBlockOffset = Map<keyType, uint32_t>::find (key);
                     if (!pBlockOffset) { // if not found
                         signed char e = Map<keyType, uint32_t>::errorFlags ();
-                        if (e) { // != OK
-                            // log_e ("block offset not found for some kind of error occured");
+                        if (e) { // error
                             __errorFlags__ |= e;
                             Unlock ();  
                             return e;
+                        } else {
+                            __errorFlags__ |= err_not_found;
+                            Unlock ();
+                            return err_not_found;
                         }
                     }
                 } else {
@@ -647,7 +647,7 @@
                 keyType storedKey;
                 valueType storedValue;
 
-                signed char e = __readBlock__ (blockSize, storedKey, storedValue, *pBlockOffset, true);
+                signed char e  = __readBlock__ (blockSize, storedKey, storedValue, *pBlockOffset, true);
                 if (e) { // != OK
                     // log_e ("read block error");
                     Unlock ();  
@@ -662,7 +662,6 @@
                     Unlock ();  
                     return err_data_changed; // shouldn't happen, but check anyway ...
                 }
-
                 // 3. calculate new block and data size
                 // log_i ("step 3: calculate block size");
                 size_t dataSize = sizeof (int16_t); // block size information
@@ -1360,6 +1359,7 @@
             *  This function does not handle the __semaphore__.
             */
 
+
             signed char __readBlock__ (int16_t& blockSize, keyType& key, valueType& value, uint32_t blockOffset, bool skipReadingValue = false) {
                 // reposition file pointer to the beginning of a block
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
@@ -1402,7 +1402,7 @@
                             }
                     }
                 } else {
-                    // fixed size key
+                    // fixed size key                
                     if (__dataFile__.read ((uint8_t *) &key, sizeof (key)) != sizeof (key)) {
                         // log_e ("read key error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
@@ -1416,7 +1416,7 @@
                 // read value
                 if (!skipReadingValue) {
                     if (is_same<valueType, String>::value) { // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                        // read the file until 0 is read
+                        // read the file until 0 is read               
                         while (__dataFile__.available ()) { 
                                 char c = (char) __dataFile__.read (); 
                                 if (!c) break;
@@ -1430,7 +1430,7 @@
                                 }
                         }
                     } else {
-                        // fixed size value
+                        // fixed size value               
                         if (__dataFile__.read ((uint8_t *) &value, sizeof (value)) != sizeof (value)) {
                             // log_e ("read value error err_file_io");
                             #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
@@ -1441,7 +1441,7 @@
                         }                                
                     }
                 }
-                // log_i ("OK");
+                // log_i ("OK");            
                 return err_ok;
             }
 

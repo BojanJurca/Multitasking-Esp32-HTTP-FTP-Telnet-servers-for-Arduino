@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    May 22, 2024, Bojan Jurca
+    Jun 25, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -111,7 +111,7 @@
     #include "std/vector.hpp"                               // for vi and tree commands only
 
     #include "version_of_servers.h"                         // version of this software, used in uname command
-    #define UNAME cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__  + " with C++: " + cstring ((unsigned int) __cplusplus) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
+    #define UNAME cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled: " __DATE__ " " __TIME__  + " C++: " + cstring ((unsigned int) __cplusplus) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
 
 
     // ----- CODE -----
@@ -1674,7 +1674,7 @@
 
             // keep directory names saved in vector for later recursion   
             vector<cstring> dirList (5); 
-            if (dirList.push_back (fp) != OK) return "Out of memory";
+            if (dirList.push_back (fp)) return "Out of memory";
             bool firstRecord = true;
             while (dirList.size () != 0) {
 
@@ -1694,9 +1694,9 @@
                         // save directory name for later recursion
                         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS // f.name contains only a file name without path
                             cstring dp = fp; if (dp [dp.length () - 1] != '/') dp += '/'; dp += f.name ();                          
-                            if (dirList.push_back (dp) != OK) { d.close (); return "Out of memory"; }
+                            if (dirList.push_back (dp)) { d.close (); return "Out of memory"; }
                         #else                                                                                       // f.name contains full file path
-                            if (dirList.push_back (f.name ()) != OK) { d.close (); return "Out of memory"; }
+                            if (dirList.push_back (f.name ())) { d.close (); return "Out of memory"; }
                         #endif
                     } else {
                         #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) || FILE_SYSTEM == FILE_SYSTEM_LITTLEFS // f.name contains only a file name without path
@@ -2021,7 +2021,7 @@
 
                   switch (c) {
                     case '\r':  break; // ignore
-                    case '\n':  if (ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.push_back ("") != OK) { // always leave at least 32 KB free for other things that may be running on ESP32
+                    case '\n':  if (ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.push_back ("")) { // always leave at least 32 KB free for other things that may be running on ESP32
                                   f.close (); 
                                   return fp + " is too long. Out of memory"; 
                                 }
@@ -2030,10 +2030,10 @@
                                   return fp + " has too many lines for this simple text editor."; 
                                 }
                                 break; 
-                    case '\t':  if (!lines.size ()) if (lines.push_back ("") != OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
+                    case '\t':  if (!lines.size ()) if (lines.push_back ("")) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
                                 if (!lines [lines.size () - 1].concat ("    ")) return "Out of memory"; // treat tab as 4 spaces, check success of concatenation
                                 break;
-                    default:    if (!lines.size ()) if (lines.push_back ("") != OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
+                    default:    if (!lines.size ()) if (lines.push_back ("")) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
                                 if (!lines [lines.size () - 1].concat (c)) return "Out of memory"; // check success of concatenation
                                 break;
                   }
@@ -2043,7 +2043,7 @@
               f.close ();
             } else return cstring ("Can't read ") + fp;
           }    
-          if (!lines.size ()) if (lines.push_back ("") != OK) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
+          if (!lines.size ()) if (lines.push_back ("")) return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
   
           // 3. discard any already pending characters from client
           while (recvTelnetChar (true)) recvTelnetChar (false);
@@ -2285,7 +2285,7 @@
                         break;
               case '\n': // enter
                         // split current line at cursor into textCursorY + 1 and textCursorY
-                        if (lines.size () >= MAX_LINES || ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.insert (textCursorY + 1, lines [textCursorY].substring (textCursorX)) != OK) { 
+                        if (lines.size () >= MAX_LINES || ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.insert (textCursorY + 1, lines [textCursorY].substring (textCursorX))) { 
                           message = " Out of memory or too many lines ";
                         } else {
                           lines [textCursorY] = lines [textCursorY].substring (0, textCursorX);
