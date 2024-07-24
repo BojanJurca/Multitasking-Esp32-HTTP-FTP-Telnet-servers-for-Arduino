@@ -23,12 +23,10 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
-    #include <lwip/netdb.h>
-    #include <time.h>
-    #include <lwip/netdb.h>
     #include "std/Cstring.hpp"
     #include "std/console.hpp"
     #include "netwk.h"
+    #include <ctime>
 
 
 #ifndef __TIME_FUNCTIONS__
@@ -58,15 +56,13 @@
     void setTimeOfDay (time_t);
     struct tm gmTime (time_t);
     struct tm localTime (time_t);
-    char *ascTime (const struct tm, char *);
+    char *ascTime (const struct tm, char *buf, size_t len);
     time_t getUptime ();
-    char *ntpDate (const char *);
-    char *ntpDate ();
     bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, const char *, bool);
     bool cronTabAdd (const char *, bool);
     int cronTabDel (const char *);
     void startCronDaemon (void (* cronHandler) (const char *), size_t);
-
+    void timeavailable(struct timeval *t);
 
     // TUNNING PARAMETERS
 
@@ -104,229 +100,13 @@
 
     bool __timeHasBeenSet__ = false;
     RTC_DATA_ATTR time_t __startupTime__;
-  
+
+
     static SemaphoreHandle_t __cronSemaphore__ = xSemaphoreCreateRecursiveMutex (); // controls access to cronDaemon's variables
 
     char __ntpServer1__ [255] = DEFAULT_NTP_SERVER_1; // DNS host name may have max 253 characters
     char __ntpServer2__ [255] = DEFAULT_NTP_SERVER_2; // DNS host name may have max 253 characters
     char __ntpServer3__ [255] = DEFAULT_NTP_SERVER_3; // DNS host name may have max 253 characters 
-  
-    // synchronizes time with NTP server, returns error message
-    char *ntpDate (const char *ntpServer) {
-        if (WiFi.localIP ().toString () == "0.0.0.0") {
-            #ifdef __DMESG__
-                dmesgQueue << "[NTP] not connected to WiFi";
-            #endif
-            return (char *) "Not connected to WiFi";
-        }
-
-        // Based on Let's make a NTP Client in C: https://lettier.github.io/posts/2016-04-26-lets-make-a-ntp-client-in-c.html
-        // which I'm keeping here as close to the original as possible due to its comprehensive explanation.
-
-        // »Network Time Protocol«
-
-        typedef struct {
-            uint8_t li_vn_mode;       // Eight bits. li, vn, and mode.
-                                      // li.   Two bits.   Leap indicator.
-                                      // vn.   Three bits. Version number of the protocol.
-                                      // mode. Three bits. Client will pick mode 3 for client.
-            uint8_t stratum;          // Eight bits. Stratum level of the local clock.
-            uint8_t poll;             // Eight bits. Maximum interval between successive messages.
-            uint8_t precision;        // Eight bits. Precision of the local clock.
-            uint32_t rootDelay;       // 32 bits. Total round trip delay time.
-            uint32_t rootDispersion;  // 32 bits. Max error aloud from primary clock source.
-            uint32_t refId;           // 32 bits. Reference clock identifier.
-            uint32_t refTm_s;         // 32 bits. Reference time-stamp seconds.
-            uint32_t refTm_f;         // 32 bits. Reference time-stamp fraction of a second.
-            uint32_t origTm_s;        // 32 bits. Originate time-stamp seconds.
-            uint32_t origTm_f;        // 32 bits. Originate time-stamp fraction of a second.
-            uint32_t rxTm_s;          // 32 bits. Received time-stamp seconds.
-            uint32_t rxTm_f;          // 32 bits. Received time-stamp fraction of a second.
-            uint32_t txTm_s;          // 32 bits and the most important field the client cares about. Transmit time-stamp seconds.
-            uint32_t txTm_f;          // 32 bits. Transmit time-stamp fraction of a second.
-        } ntp_packet;                 // Total: 384 bits or 48 bytes.
-
-        // »The NTP message consists of a 384 bit or 48 byte data structure containing 17 fields. Note that the order of li, vn, and mode 
-        //  is important. We could use three bit fields but instead we’ll combine them into a single byte to avoid any implementation-defined 
-        //  issues involving endianness, LSB, and/or MSB.«
-
-        // »Populate our Message«
-
-        // Create and zero out the packet. All 48 bytes worth.
-        ntp_packet packet = {};
-        // Set the first byte's bits to 00,011,011 for li = 0, vn = 3, and mode = 3. The rest will be left set to zero.
-        *((char *) &packet + 0) = 0x1b; // Represents 27 in base 10 or 00011011 in base 2.
-
-        // »First we zero-out or clear out the memory of our structure and then fill it in with leap indicator zero, version number three, and mode 3. 
-        // The rest we can leave blank and still get back the time from the server.«
-
-        // »Setup our Socket and Server Data Structure«
-
-        // Create a UDP socket, convert the host-name to an IP address, set the port number,
-        // connect to the server, send the packet, and then read in the return packet.
-
-        struct hostent *server;       // Server data structure.
-        struct sockaddr_in serv_addr; // Server address data structure.
-
-        int sockfd = socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP); // Create a UDP socket.
-        if (sockfd < 0) {
-            #ifdef __DMESG__
-                dmesgQueue << "[NTP] socket() error: " << errno << " " << strerror (errno);
-            #endif
-            return (char *) "Could not open a socket";
-        }
-
-        // remember some information that netstat telnet command would use
-        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET] = { __NTP_SOCKET__, 0, 0, millis (), millis () };
-
-        // remember some information that netstat telnet command would use
-        // additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET] = { __NTP_SOCKET__, 0, 0, millis (), millis () };
-
-        // Setup socket timeout to 1s, this will limit the time we wait for NTP reply
-        struct timeval tout = {1, 0};
-        if (setsockopt (sockfd, SOL_SOCKET, SO_RCVTIMEO, &tout, sizeof (tout)) < 0) {
-            #ifdef __DMESG__
-                dmesgQueue << "[NTP] setsockopt() error: " << errno << strerror (errno);
-            #endif
-            close (sockfd);
-            return (char *) "Could not set socket time-out";
-        }
-
-        server = gethostbyname (ntpServer); // Convert URL to IP.
-        if (server == NULL) {
-            #ifdef __DMESG__
-                dmesgQueue << "[NTP] gethostbyname() error: " << errno << strerror (errno);
-            #endif
-            return (char *) "NTP server not found";
-        }
-
-        // Zero out the server address structure.
-        bzero ((char *) &serv_addr, sizeof (serv_addr));
-
-        serv_addr.sin_family = AF_INET;
-        // Copy the server's IP address to the server address structure.
-        bcopy ((char *) server->h_addr, (char *) &serv_addr.sin_addr.s_addr, server->h_length);
-
-        // Convert the port number integer to network big-endian style and save it to the server address structure.
-        serv_addr.sin_port = htons (123);
-
-        // »Before we can start communicating we have to setup our socket, server and server address structures. We will be using the 
-        //  User Datagram Protocol (versus TCP) for our socket since the server we are sending our message to is listening on port 
-        //  number 123 using UDP.«
-
-        // »Send our Message to the Server«
-
-        // Call up the server using its IP address and port number.
-
-        if (connect (sockfd, (struct sockaddr *) &serv_addr, sizeof (serv_addr)) < 0) {
-            #ifdef __DMESG__
-                dmesgQueue << "[NTP] connect() error: " << errno << " " << strerror (errno);
-            #endif          
-            close (sockfd);
-            return (char *) "Could not connect to NTP server";
-        }
-
-        // Send it the NTP packet it wants. If n == -1, it failed.
-        int n;
-        n = sendto (sockfd, (char *) &packet, sizeof (ntp_packet), 0, (struct sockaddr *) &serv_addr, sizeof (serv_addr));
-        if (n < 0) {
-            #ifdef __DMESG__
-                dmesgQueue << "[NTP] sendto() error: " << errno << " " << strerror (errno);
-            #endif          
-            close (sockfd);
-            return (char *) "Could not sent NTP packet";
-        }
-
-        additionalNetworkInformation.bytesSent += n; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].bytesSent += n; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-
-        // remember some information that netstat telnet command would use
-        // additionalNetworkInformation.bytesSent += n;
-        // additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].bytesSent += n;
-        // additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis (); 
-  
-        // »With our message payload, socket, server and address setup, we can now send our message to the server. 
-        //  To do this, we write our 48 byte struct to the socket.«
-
-        // »Read in the Return Message«
-
-        // Wait and receive the packet back from the server. If n == -1, it failed.
-
-        int fromlen;
-        struct sockaddr_in from;
-        n = recvfrom (sockfd, (char *) &packet, sizeof (ntp_packet), 0, (struct sockaddr *) &from, (socklen_t*) &fromlen);
-        if (n < 0) {
-          #ifdef __DMESG__
-                dmesgQueue << "[NTP] recvfrom() error: " <<  errno << " " << strerror (errno);
-            #endif          
-            close (sockfd);
-            return (char *) "Could not receive NTP packet";
-        }
-
-        // remember some information that netstat telnet command would use
-        additionalNetworkInformation.bytesReceived += n;
-        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].bytesReceived += n;
-        additionalSocketInformation [sockfd - LWIP_SOCKET_OFFSET].lastActiveMillis = millis (); 
-
-        // »Now that our message is sent, we block or wait for the response by reading from the socket. The message we get back should be the same
-        //  size as the message we sent. We will store the incoming message in packet just like we stored our outgoing message.«
-
-        // »Parse the Return Message«
-
-        // These two fields contain the time-stamp seconds as the packet left the NTP server.
-        // The number of seconds correspond to the seconds passed since 1900.
-        // ntohl() converts the bit/byte order from the network's to host's "endianness".
-
-        packet.txTm_s = ntohl (packet.txTm_s); // Time-stamp seconds.
-        packet.txTm_f = ntohl (packet.txTm_f); // Time-stamp fraction of a second.
-
-        // Extract the 32 bits that represent the time-stamp seconds (since NTP epoch) from when the packet left the server.
-        // Subtract 70 years worth of seconds from the seconds since 1900.
-        // This leaves the seconds since the UNIX epoch of 1970.
-        // (1900)------------------(1970)**************************************(Time Packet Left the Server)
-
-        #define NTP_TIMESTAMP_DELTA 2208988800
-        time_t txTm = (time_t) (packet.txTm_s - NTP_TIMESTAMP_DELTA);
-
-        // »The message we get back is in network order or big-endian form. Depending on the machine you run this on, ntohl will transform the bits 
-        //  from either big to little or big to big-endian. You can think of big or little-endian as reading from left to right or tfel ot thgir respectively.
-        //
-        //  With the data in the order we need it, we can now subtract the delta and cast the resulting number to a time-stamp number. 
-        //  Note that NTP_TIMESTAMP_DELTA = 2208988800ull which is the NTP time-stamp of 1 Jan 1970 or put another way 2,208,988,800 unsigned long long seconds.«
-
-        setTimeOfDay (txTm);
-        #ifdef __DMESG__
-            dmesgQueue << "[time] synchronized with " << ntpServer;
-        #endif
-        close (sockfd);
-        cout << "[time] synchronized with " << ntpServer << endl;
-
-        return (char *) ""; // OK
-    }
-  
-    char *ntpDate () { // synchronizes time with NTP servers, returns error message
-        char *s;
-        if (!*(s = ntpDate (__ntpServer1__))) return (char *) ""; 
-        #ifdef __DMESG__
-            dmesgQueue << "[time] " << s; 
-        #endif
-        cout << "[time] " << s << endl;
-        delay (1);
-        if (!*(s = ntpDate (__ntpServer2__))) return (char *) ""; 
-        #ifdef __DMESG__
-            dmesgQueue << "[time] " << s; 
-        #endif
-        cout << "[time] " << s << endl;
-        delay (1);
-        if (!*(s = ntpDate (__ntpServer3__))) return (char *) ""; 
-        #ifdef __DMESG__
-            dmesgQueue << "[time] " << s; 
-        #endif
-        cout << "[time] " << s << endl;
-        return (char *) "NTP servers are not available.";
-    }
   
     int __cronTabEntries__ = 0;
   
@@ -459,11 +239,6 @@
             dmesgQueue << "[time][cronDaemon] is running on core " << xPortGetCoreID ();
         #endif
         cout << "[time][cronDaemon] started\n";
-        do {     // try to set/synchronize the time, retry after 1 minute if unsuccessfull 
-            delay (15000);
-            if (!*ntpDate ()) break; // success
-            delay (45000);
-        } while (!time ());
 
         void (* cronHandler) (const char *) = (void (*) (const char *)) ptrCronHandler;  
         unsigned long lastMinuteCheckMillis = millis ();
@@ -489,9 +264,6 @@
             if (millis () - lastDayCheckMillis >= 86400000) { 
                 lastDayCheckMillis = millis ();
                 if (cronHandler != NULL) cronHandler ("ONCE_A_DAY");
-
-                // 2. synchronize time with NTP servers
-                ntpDate ();  
             } 
 
             // 3. execute cron commands from cron table
@@ -561,9 +333,9 @@
                   bool created = false;
                   File f = fileSystem.open ("/usr/share/zoneinfo", "w");
                   if (f) {
-                      String defaultContent = F ( "# timezone configuration - reboot for changes to take effect\r\n"
+                      String defaultContent =     "# timezone configuration - reboot for changes to take effect\r\n"
                                                   "# choose one of available (POSIX) timezones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv\r\n\r\n"
-                                                  "TZ " TZ "\r\n");
+                                                  "TZ " TZ "\r\n";
                     created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
                     f.close ();
 
@@ -693,9 +465,9 @@
             }
         #else
 
-            // set the default timezone
-            setenv ("TZ", (char *) TZ, 1);
-            tzset ();
+            // set the default timezone and NTP configs
+            configTzTime(TZ, __ntpServer1__, __ntpServer2__, __ntpServer3__);
+
             #ifdef __DMESG__
                 dmesgQueue << "[time][cronDaemon] TZ environment variable set to " << TZ;
             #endif
@@ -721,12 +493,29 @@
         return t;
     }
 
-    // returns the number of seconfs ESP32 has been running
+    // returns the number of seconds ESP32 has been running
     time_t getUptime () {
         time_t t = time (NULL);
         return __timeHasBeenSet__ ? t - __startupTime__ :  millis () / 1000; // if the time has already been set, 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
     }
   
+    char *ascTime (const struct tm st, char *buf, size_t len) {
+        // asctime_r (&st, buf);
+        // char *p; for (p = buf; *p >= ' '; p ++); *p = 0; // rtrim ending \n
+        // return buf;
+
+        std::strftime(buf, len, "%Y/%m/%d %T", &st);
+        //sprintf (buf, "%04i/%02i/%02i %02i:%02i:%02i", 1900 + st.tm_year, 1 + st.tm_mon, st.tm_mday, st.tm_hour, st.tm_min, st.tm_sec);
+        return buf; 
+    }
+
+    void timeavailable(struct timeval *t) {
+        #ifdef __DMESG__
+            dmesgQueue << "[time][cronDaemon] Got time adjustment from NTP";
+        #endif
+    __timeHasBeenSet__ = true;
+    }
+
     // sets internal clock, also sets/corrects __startupTime__ internal variable
     void setTimeOfDay (time_t t) {         
         time_t oldTime = time (NULL);
@@ -735,9 +524,9 @@
 
         char buf [100];
         if (__timeHasBeenSet__) {
-            ascTime (localTime (oldTime), buf);
+            ascTime (localTime (oldTime), buf, sizeof(buf));
             strcat (buf, " to ");
-            ascTime (localTime (t), buf + strlen (buf));
+            ascTime (localTime (t), buf + strlen (buf), sizeof(buf)-strlen (buf));
             #ifdef __DMESG__
                 dmesgQueue << "[time] time corrected from " << buf;
             #endif
@@ -745,7 +534,7 @@
         } else {
             __startupTime__ = t - getUptime (); // recalculate            
             __timeHasBeenSet__ = true;
-            ascTime (localTime (t), buf);
+            ascTime (localTime (t), buf, sizeof(buf));
             #ifdef __DMESG__
                 dmesgQueue << "[time] time set to " << buf; 
             #endif
@@ -764,17 +553,6 @@
         struct tm st;
         return *localtime_r (&t, &st);
     }
-
-    // a more convinient version of thread safe asctime_r function: converts struct tm to array of chars, buff should have at least 26 bytes
-    char *ascTime (const struct tm st, char *buf) {
-        // asctime_r (&st, buf);
-        // char *p; for (p = buf; *p >= ' '; p ++); *p = 0; // rtrim ending \n
-        // return buf;
-        
-        sprintf (buf, "%04i/%02i/%02i %02i:%02i:%02i", 1900 + st.tm_year, 1 + st.tm_mon, st.tm_mday, st.tm_hour, st.tm_min, st.tm_sec);
-        return buf; 
-    }
-
 
     // ----- backward compatibility -----
 
@@ -799,7 +577,7 @@
     [[deprecated("Use ascTime (struct tm, char*) instead.")]]  
     bool timeToString (char *buf, size_t bufSize, time_t t) {
         if (bufSize >= 26) {
-            ascTime (gmTime (t), buf);
+            ascTime (gmTime (t), buf, bufSize);
             return true;    
         }
         return false;
