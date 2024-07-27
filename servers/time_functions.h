@@ -62,7 +62,7 @@
     bool cronTabAdd (const char *, bool);
     int cronTabDel (const char *);
     void startCronDaemon (void (* cronHandler) (const char *), size_t);
-    void timeavailable(struct timeval *t);
+    void timeavAilable (struct timeval *t);
 
     // TUNNING PARAMETERS
 
@@ -466,7 +466,7 @@
         #else
 
             // set the default timezone and NTP configs
-            configTzTime(TZ, __ntpServer1__, __ntpServer2__, __ntpServer3__);
+            configTzTime (TZ, __ntpServer1__, __ntpServer2__, __ntpServer3__);
 
             #ifdef __DMESG__
                 dmesgQueue << "[time][cronDaemon] TZ environment variable set to " << TZ;
@@ -509,11 +509,11 @@
         return buf; 
     }
 
-    void timeavailable(struct timeval *t) {
+    void timeAvailable (struct timeval *t) {
         #ifdef __DMESG__
             dmesgQueue << "[time][cronDaemon] Got time adjustment from NTP";
         #endif
-    __timeHasBeenSet__ = true;
+        __timeHasBeenSet__ = true;
     }
 
     // sets internal clock, also sets/corrects __startupTime__ internal variable
