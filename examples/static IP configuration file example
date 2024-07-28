@@ -1,0 +1,14 @@
+# Exmple of /network/interfaces file for static IP configuration
+
+# WiFi STA(tion) configuration - reboot for changes to take effect
+
+# get IP address from DHCP
+#   iface STA inet dhcp
+
+# use static IP address (example below)
+  iface STA inet static
+     address 10.18.1.4
+     netmask 255.255.255.0
+     gateway 10.18.1.1
+     dns1    193.189.160.13
+     dns2    193.189.160.23
