@@ -9,7 +9,7 @@
     a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
     also supported.
   
-    May 22, 2024, Bojan Jurca
+    Jul 18, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -71,12 +71,16 @@
     #endif
     #include <mbedtls/base64.h>
     #include <mbedtls/md.h>
-    // fixed size strings    
     #include "std/Cstring.hpp"
                                                                 
 
 #ifndef __HTTP_SERVER__
   #define __HTTP_SERVER__
+
+    #ifdef SHOW_COMPILE_TIME_INFORMATION
+        #pragma message "__HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__"
+    #endif
+
 
     #ifdef HTTP_SERVER_CORE
         #ifdef SHOW_COMPILE_TIME_INFORMATION
@@ -86,10 +90,10 @@
 
     #ifndef __FILE_SYSTEM__
       #ifdef SHOW_COMPILE_TIME_INFORMATION
-          #pragma message "Compiling httpServer.h without file system (fileSystem.hpp), httpServer will not be able to serve files"
+          #pragma message "Compiling httpServer.hpp without file system (fileSystem.hpp), httpServer will not be able to serve files"
       #endif
     #endif
-  
+
 
     // ----- TUNNING PARAMETERS -----
 
@@ -103,9 +107,43 @@
     #define HTTP_WS_FRAME_MAX_SIZE 1500                         // WebSocket send frame size and also read frame size (there are 2 buffers), MTU = 1500
     #define HTTP_CONNECTION_WS_TIME_OUT 300000                  // 300000 ms = 5 min for WebSocket connections, 0 for infinite
     // #define WEB_SESSIONS                                     // comment this line out if you won't use web sessions
+
+
+    #ifndef WEB_SESSIONS
+      #ifdef SHOW_COMPILE_TIME_INFORMATION
+          #pragma message "Compiling httpServer.hpp without web sessions, web session login/logout will not be available"
+      #endif
+    #endif
+
+
+    // ----- CODE -----
+
+
+    #define reply400 "HTTP/1.0 400 Bad request\r\nConnection: close\r\nContent-Length:34\r\n\r\nFormat of HTTP request is invalid."
+    #define reply404 "HTTP/1.0 404 Not found\r\nConnection: close\r\nContent-Length:10\r\n\r\nNot found."
+    #define reply503 "HTTP/1.0 503 Service unavailable\r\nConnection: close\r\nContent-Length:39\r\n\r\nHTTP server is not available right now."
+    #define reply507 "HTTP/1.0 507 Insuficient storage\r\nConnection: close\r\nContent-Length:41\r\n\r\nThe buffers of HTTP server are too small."
+
+
+    #ifndef __NETWK__
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "Implicitly including netwk.h"
+        #endif
+        #include "netwk.h"  // sendAll and recvAll functions are declared there
+    #endif
+
     #ifdef WEB_SESSIONS
+        #ifndef __FILE_SYSTEM__
+            #pragma error "fileSystem.hpp must be included in order to use WEB_SESSIONs - key-value session token database needs flash disk"
+        #endif
+
         #define WEB_SESSION_TIME_OUT 300                        // 300 s = 5 min, 0 for infinite
 
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #ifndef __KEY_VALUE_DATABASE_HPP__
+                #pragma message "Implicitly including keyValueDatabase.hpp"
+            #endif
+        #endif
         #include "keyValueDatabase.hpp"
 
         typedef Cstring<64> webSessionToken_t;
@@ -115,28 +153,10 @@
         };
 
         keyValueDatabase<webSessionToken_t, webSessionTokenInformation_t> webSessionTokenDatabase; // a database containing valid web session tokens
-
     #endif
-
     // please note that the limit for getHttpRequestHeaderField and getHttpRequestCookie return values are defined by cstring #definition in Cstring.h
 
-    #define reply400 "HTTP/1.0 400 Bad request\r\nConnection: close\r\nContent-Length:34\r\n\r\nFormat of HTTP request is invalid."
-    #define reply404 "HTTP/1.0 404 Not found\r\nConnection: close\r\nContent-Length:10\r\n\r\nNot found."
-    #define reply503 "HTTP/1.0 503 Service unavailable\r\nConnection: close\r\nContent-Length:39\r\n\r\nHTTP server is not available right now."
-    #define reply507 "HTTP/1.0 507 Insuficient storage\r\nConnection: close\r\nContent-Length:41\r\n\r\nThe buffers of HTTP server are too small."
 
-
-    // ----- CODE -----
-
-    // #include "dmesg.hpp"
-    #ifndef __TIME_FUNCTIONS__
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "Implicitly including time_functions.h (needed to calculate expiration time of cookies)"
-        #endif
-      #include "time_functions.h"
-    #endif
-    
-    
     #ifndef __SHA256__
       #define __SHA256__
         bool sha256 (char *buffer, size_t bufferSize, const char *clearText) { // converts clearText to 265 bit SHA, returns character representation in hexadecimal format of hash value
@@ -645,13 +665,13 @@
         void setHttpReplyCookie (cstring cookieName, cstring cookieValue, time_t expires = 0, cstring path = "/") { 
           char e [50] = "";
           if (expires) {
-              if (!time ()) { // time not set
+              if (expires < 1687461154) { // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
                   #ifdef __DMESG__
-                      dmesgQueue << "[httpConnection] could not set cookie expiration time since the current time has not been set yet";
+                      dmesgQueue << "[httpConnection] can't set cookie expiratin time for the time has not been set yet";
                   #endif
-                  return;
               }
-              struct tm st = gmTime (expires);
+              struct tm st;
+              gmtime_r (&expires, &st);
               strftime (e, sizeof (e), "; Expires=%a, %d %b %Y %H:%M:%S GMT", &st);
           }
           // save whole fieldValue into cookieName to save stack space

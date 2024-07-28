@@ -1,6 +1,6 @@
 /*
 
-    network.h
+    netwk.h
 
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
@@ -13,7 +13,7 @@
       /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses
       /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
 
-    May 22, 2024, Bojan Jurca
+    Jul 18, 2024, Bojan Jurca
 
 */
 
@@ -40,10 +40,21 @@
 #ifndef __NETWK__
     #define __NETWK__
 
+    #ifdef SHOW_COMPILE_TIME_INFORMATION
+        #pragma message "__NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__ __NETWK__"
+    #endif
+
+
     #ifndef __FILE_SYSTEM__
       #ifdef SHOW_COMPILE_TIME_INFORMATION
-          #pragma message "Compiling network.h without file system (file_system.h), network.h will not use configuration files"
+          #pragma message "Compiling netwk.h without file system (fileSystem.hpp), netwk.h will not use configuration files"
       #endif
+    #endif
+
+
+    // ----- TUNNING PARAMETERS -----
+    #ifndef POVER_SAVING_MODE
+        #define POVER_SAVING_MODE   WIFI_PS_NONE // WIFI_PS_NONE or WIFI_PD_MIN_MODEM or WIFI_PS_MAX_MODEM // please check: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
     #endif
 
 
@@ -776,19 +787,23 @@
         } 
 
         // set WiFi mode
-        if (*staSSID)
-            if (*apSSID)
+        if (*staSSID) {
+            if (*apSSID) {
                 WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
-            else
+            } else {
                 WiFi.mode (WIFI_STA); // only STA mode
-        else
+            }
+        } else {
             if (*apSSID)
                 WiFi.mode (WIFI_AP); // only AP mode
+        }
+        // power saving?
+        esp_wifi_set_ps (POVER_SAVING_MODE); // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
 
         arp (-1); // call arp immediatelly after network is set up to obtain the pointer to ARP table    
 
         // rename hostname for all adapters
-        esp_netif_t *netif = esp_netif_next_unsafe (NULL);
+        esp_netif_t *netif = esp_netif_next (NULL);
         while (netif) {
             if (esp_netif_set_hostname (netif, HOSTNAME) != ESP_OK) {
                 #ifdef __DMESG__
@@ -796,7 +811,7 @@
                 #endif
                 cout << "[network] couldn't change adapter's hostname" << endl;
             }
-            netif = esp_netif_next_unsafe (netif);
+            netif = esp_netif_next (netif);
         }
 
     }

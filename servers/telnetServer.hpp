@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    Jun 25, 2024, Bojan Jurca
+    Jul 18, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -41,9 +41,7 @@
 
     #include <WiFi.h>
     // hard reset by triggering watchdog
-///    #include <esp_int_wdt.h>
     #include <esp_task_wdt.h>
-    // fixed size strings
     #include "std/Cstring.hpp"
     #include "ESP32_ping.hpp"
 
@@ -52,14 +50,22 @@
     #define __TELNET_SERVER__
 
     #ifdef SHOW_COMPILE_TIME_INFORMATION
+        #pragma message "__TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__ __TELNET_SERVER__"
+    #endif
+
+
+    #ifdef TELNET_SERVER_CORE
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "telnetServer will run only on #defined core"
+        #endif
+    #endif
+
+    #ifdef SHOW_COMPILE_TIME_INFORMATION
         #ifndef __FILE_SYSTEM__
             #pragma message "Compiling telnetServer.hpp without file system (fileSystem.hpp), some commands, like ls, vi, pwd, ... will not be available"  
         #endif
         #ifndef __TIME_FUNCTIONS__
             #pragma message "Compiling telnetServer.hpp without time functions (time_functions.h), some commands, like ntpdate, crontab, ... will not be available"  
-        #endif
-        #ifndef __NETWK__
-            #pragma message "Compiling telnetServer.hpp without network functions (netwk.h), some commands, like ifconfig, arp, ... will not be available"  
         #endif
         #ifndef __HTTP_CLIENT__
             #pragma message "Compiling telnetServer.hpp without HTTP client (httpClient.h), curl command will not be available"  
@@ -71,6 +77,7 @@
             #pragma message "Compiling telnetServer.hpp without FTP client (ftpClient.h), ftpput and ftpget commands will not be available"  
         #endif
     #endif
+
 
     // TUNNING PARAMETERS
 
@@ -108,13 +115,22 @@
         #endif
     #endif
 
-    #include "std/vector.hpp"                               // for vi and tree commands only
-
-    #include "version_of_servers.h"                         // version of this software, used in uname command
-    #define UNAME cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled: " __DATE__ " " __TIME__  + " C++: " + cstring ((unsigned int) __cplusplus) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
-
 
     // ----- CODE -----
+
+    #include "version_of_servers.h"
+    #define UNAME cstring (MACHINETYPE " (") + cstring ((int) ESP.getCpuFreqMHz ()) + " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + " " VERSION_OF_SERVERS " compiled: " __DATE__ " " __TIME__  + " C++: " + cstring ((unsigned int) __cplusplus) // + " IDF:" + String (ESP_IDF_VERSION_MAJOR) + "." + String (ESP_IDF_VERSION_MINOR) + "." + String (ESP_IDF_VERSION_PATCH)
+
+    #ifdef __FILE_SYSTEM__
+        #include "std/vector.hpp"   // for vi and tree commands only
+    #endif
+
+    #ifndef __NETWK__
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "Implicitly including netwk.h"
+        #endif
+        #include "netwk.h"  // sendAll and recvAll functions are declared there
+    #endif
 
     #ifndef __USER_MANAGEMENT__
         #ifdef SHOW_COMPILE_TIME_INFORMATION
@@ -612,7 +628,6 @@
 
             else if (argv0Is ("ntpdate"))   {
                                                 if (argc == 1) return __ntpdate__ ();
-                                                if (argc == 2) return __ntpdate__ (argv [1]);
                                                 return "Wrong syntax, use ntpdate [ntpServer]";
                                             }
 
@@ -625,18 +640,14 @@
                                             return "Wrong syntax, use ping <target computer>"; 
                                         }
 
-        #ifdef __NETWK__
+        else if (argv0Is ("ifconfig"))  {
+                                              if (argc == 1) return ifconfig (__connectionSocket__);
+                                              return "Wrong syntax, use arp";              
+                                        }
 
-            else if (argv0Is ("ifconfig"))  {
-                                                  if (argc == 1) return ifconfig (__connectionSocket__);
-                                                  return "Wrong syntax, use arp";              
-                                            }
+        else if (argv0Is ("arp"))       { return argc == 1 ? arp (__connectionSocket__) : "Wrong syntax, use arp"; }
 
-            else if (argv0Is ("arp"))       { return argc == 1 ? arp (__connectionSocket__) : "Wrong syntax, use arp"; }
-
-            else if (argv0Is ("iw"))        { return argc == 1 ? iw (__connectionSocket__) : "Wrong syntax, use iw"; }
-
-        #endif
+        else if (argv0Is ("iw"))        { return argc == 1 ? iw (__connectionSocket__) : "Wrong syntax, use iw"; }
 
         #ifdef __DMESG__
 
@@ -759,7 +770,7 @@
 
         #ifdef __FILE_SYSTEM__        
       
-          #if FILE_SYSTEM == FILE_SYSTEM_FAT
+          #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
 
             else if (argv0Is ("mkfs.fat")) { 
                                               if (argc == 1) {
@@ -890,19 +901,17 @@
                               #endif
                               "\r\n      date [-set <YYYY/MM/DD hh:mm:ss>]"
                               #ifdef __TIME_FUNCTIONS__                                
-                                "\r\n      ntpdate [<ntpServer>]"
+                                "\r\n      ntpdate"
                                 "\r\n      crontab"
                               #endif
-                                "\r\n  network commands:"
-                                "\r\n      ping <terget computer>"
-                              #ifdef __NETWK__
-                                "\r\n      ifconfig"
-                                "\r\n      arp"
-                                "\r\n      iw"
-                                "\r\n      netstat [<n>]   (where 0 < n <= 3600)"
-                                "\r\n      kill <socket>   (where socket is a valid socket)"
-                              #endif
-                                "\r\n      telnet <server> [port]"
+                              "\r\n  network commands:"
+                              "\r\n      ping <terget computer>"
+                              "\r\n      ifconfig"
+                              "\r\n      arp"
+                              "\r\n      iw"
+                              "\r\n      netstat [<n>]   (where 0 < n <= 3600)"
+                              "\r\n      kill <socket>   (where socket is a valid socket)"
+                              "\r\n      telnet <server> [port]"
                               #ifdef __HTTP_CLIENT__
                                 "\r\n      curl [method] http://url"
                               #endif
@@ -915,7 +924,7 @@
                               #endif
                               #ifdef __FILE_SYSTEM__
                                 "\r\n  file commands:"
-                                #if FILE_SYSTEM == FILE_SYSTEM_FAT
+                                #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
                                 "\r\n      mkfs.fat"
                                 #endif
                                 #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
@@ -948,12 +957,10 @@
                                   "\r\n      /etc/ntp.conf                             (contains NTP time servers names)"
                                   "\r\n      /etc/crontab                              (contains scheduled tasks)"
                                 #endif
-                                #ifdef __NETWK__
-                                  "\r\n      /network/interfaces                       (contains STA(tion) configuration)"
-                                  "\r\n      /etc/wpa_supplicant/wpa_supplicant.conf   (contains STA(tion) credentials)"
-                                  "\r\n      /etc/dhcpcd.conf                          (contains A(ccess) P(oint) configuration)"
-                                  "\r\n      /etc/hostapd/hostapd.conf                 (contains A(ccess) P(oint) credentials)"
-                                #endif
+                                "\r\n      /network/interfaces                       (contains STA(tion) configuration)"
+                                "\r\n      /etc/wpa_supplicant/wpa_supplicant.conf   (contains STA(tion) credentials)"
+                                "\r\n      /etc/dhcpcd.conf                          (contains A(ccess) P(oint) configuration)"
+                                "\r\n      /etc/hostapd/hostapd.conf                 (contains A(ccess) P(oint) credentials)"
                                 #ifdef __FTP_CLIENT__
                                   "\r\n      /etc/ftp/ftpclient.cf                     (contains ftpput and ftpget default settings)"
                                 #endif
@@ -1068,8 +1075,6 @@
 
                             switch (additionalSocketInformation [i - LWIP_SOCKET_OFFSET].lastUsedAs) {
                                 case __LISTENING_SOCKET__:      sprintf (s + 87, "%6lu s Listening socket", (millis () - additionalSocketInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000);                                
-                                                                break;
-                                case __NTP_SOCKET__:            sprintf (s + 57, "%8lu      %10lu      %6lu s NTP client", additionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesReceived - lastAdditionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesReceived, additionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesSent - lastAdditionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesSent, (millis () - additionalSocketInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000);
                                                                 break;
                                 case __PING_SOCKET__:           sprintf (s + 57, "%8lu      %10lu      %6lu s Ping client", additionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesReceived - lastAdditionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesReceived, additionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesSent - lastAdditionalSocketInformation [i - LWIP_SOCKET_OFFSET].bytesSent, (millis () - additionalSocketInformation [i - LWIP_SOCKET_OFFSET].lastActiveMillis) / 1000);
                                                                 break;
@@ -1192,17 +1197,19 @@
             return s;
         }
 
-        cstring __ntpdate__ (char *ntpServer = NULL) {
-            cstring r;
-            if (ntpServer) {
-                char *p = ntpDate (ntpServer);
-                if (*p) return p; // ntpDate reported an error
-            } else {
-                char *p = ntpDate ();
-                if (*p) return p; // ntpDate reported an error
-            }
-            ascTime (localTime (time (NULL)), r.c_str ());
-            return cstring ("Time synchronized, currrent time is ") + r + ".";
+        cstring __ntpdate__ () {
+            unsigned long l = __timeHasBeenSet__; // NTP update counter
+            sntp_restart ();
+            unsigned long startMillis = millis ();
+            while (millis () - startMillis < 10000 && l == __timeHasBeenSet__)
+                delay (1);
+
+            if (l == __timeHasBeenSet__)
+                return "Time not synchronized.";
+
+            char result [27];
+            ascTime (localTime (time (NULL)), result, sizeof (result));
+            return cstring ("Time synchronized, currrent time is ") + result + ".";
         }
 
         const char *__cronTab__ (telnetConnection *tcn) {
@@ -1212,7 +1219,7 @@
                 } else {
                     for (int i = 0; i < __cronTabEntries__; i ++) {
                         cstring s;
-                        char c [30];
+                        char c [27];
                         if (__cronEntry__ [i].second == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second);      s += c; }
                         if (__cronEntry__ [i].minute == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute);      s += c; }
                         if (__cronEntry__ [i].hour == ANY)        s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour);        s += c; }
@@ -1220,7 +1227,7 @@
                         if (__cronEntry__ [i].month == ANY)       s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month);       s += c; }
                         if (__cronEntry__ [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += c; }
                         if (__cronEntry__ [i].lastExecuted) {
-                                                                  ascTime (localTime (__cronEntry__ [i].lastExecuted), c);
+                                                                  ascTime (localTime (__cronEntry__ [i].lastExecuted), c, sizeof (c));
                                                                   s += " "; s += c; s += " "; 
                                                             } else { 
                                                                   s += " (not executed yet)  "; 
@@ -1313,16 +1320,18 @@
               for (auto e: dmesgQueue) { // scan dmesgQueue with iterator where the locking mechanism is already implemented
 
                   if (firstRecord) firstRecord = false; else s = "\r\n";
-                  char c [25];
+                  char c [27];
                   if (trueTime && e.time > 1687461154) { // 2023/06/22 21:12:34, any valid time should be greater than this
                       struct tm slt; 
                       localtime_r (&e.time, &slt); 
-                      strftime (c, sizeof (c), "[%y/%m/%d %H:%M:%S] ", &slt);
+                      strftime (c, sizeof (c), "[%Y/%m/%d %T] ", &slt);
                   } else {
                       sprintf (c, "[%10lu] ", e.milliseconds);
                   }
                   s += c;
                   s += e.message;
+                  if (e.message.errorFlags () & err_overflow)
+                      s += "...";
                   lastBack = dmesgQueue.back (); // remember the last change in case -f is specified
                   if (sendTelnet (s) <= 0) break;
               
@@ -1553,7 +1562,7 @@
             }
         #endif
 
-        #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+        #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
             const char *__mkfs__ (telnetConnection *tcn) {
                 if (sendTelnet ("formatting LittleFs file system, please wait ... ") <= 0) return ""; 
                 fileSystem.unmount ();

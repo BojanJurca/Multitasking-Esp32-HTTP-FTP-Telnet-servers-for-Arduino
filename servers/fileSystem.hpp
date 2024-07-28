@@ -4,15 +4,12 @@
     
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
     
-    May 22, 2024, Bojan Jurca
+    Jul 18, 2024, Bojan Jurca
 
-    FFAT or LittleFS for ESP32 built-in flash disk
+    LittleFS or FFAT (and/or SD) for ESP32 built-in flash disk
 
         https://github.com/espressif/arduino-esp32/blob/master/libraries/FS/src/FS.cpp
         https://github.com/espressif/arduino-esp32/blob/master/libraries/FFat/src/FFat.h
-
-    SD card
-
         https://github.com/espressif/arduino-esp32/tree/master/libraries/SD
 
 */
@@ -29,6 +26,11 @@
 #ifndef __FILE_SYSTEM__
     #define __FILE_SYSTEM__
 
+    #ifdef SHOW_COMPILE_TIME_INFORMATION
+        #pragma message "__FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__ __FILE_SYSTEM__"
+    #endif
+
+
     // TUNNING PARAMETERS
 
     #define FILE_PATH_MAX_LENGTH (256 - 1) // the number of characters of longest full file path on FAT (not counting closing 0) 
@@ -37,42 +39,81 @@
         #define FILE_SYSTEM_FAT      1   
         #define FILE_SYSTEM_LITTLEFS 2
         #define FILE_SYSTEM_SD_CARD  4
-    // one of the above
+    // #define FILE_SYSTEM  FILE_SYSTEM_LITTLEFS // one of the above or combination (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+
     #ifndef FILE_SYSTEM
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "FILE_SYSTEM was not defined previously, #defining the default FILE_SYSTEM_FAT in file_system.h"
+        // try guessing which file system to use (if some libraries are already included)
+        #ifdef LFS_H 
+            // LittleFS file system library already included
+            #ifdef SHOW_COMPILE_TIME_INFORMATION
+                #pragma message "FILE_SYSTEM was not defined previously, #defining the FILE_SYSTEM_LITTLEFS in fileSystem.hpp"
+            #endif
+            #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // by default
+        #else
+            #ifdef _FFAT_H
+                // FFat file system library already included
+                #ifdef _SD_H_ 
+                    // SD file system library already included (besides Ffat)
+                    #ifdef SHOW_COMPILE_TIME_INFORMATION
+                        #pragma message "FILE_SYSTEM was not defined previously, #defining the (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) in fileSystem.hpp"
+                    #endif
+                    #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
+                #else
+                    // use only Ffat
+                    #ifdef SHOW_COMPILE_TIME_INFORMATION
+                        #pragma message "FILE_SYSTEM was not defined previously, #defining the default FILE_SYSTEM_FAT in fileSystem.hpp"
+                    #endif
+                    #define FILE_SYSTEM FILE_SYSTEM_FAT
+                #endif
+            #else
+                #ifdef _SD_H_ 
+                    // SD file system library already included
+                    #ifdef SHOW_COMPILE_TIME_INFORMATION
+                        #pragma message "FILE_SYSTEM was not defined previously, #defining the FILE_SYSTEM_SD_CARD in fileSystem.hpp"
+                    #endif
+                    #define FILE_SYSTEM FILE_SYSTEM_SD_CARD
+                #else
+                    // no file system library already included
+                    #ifdef SHOW_COMPILE_TIME_INFORMATION
+                        #pragma message "FILE_SYSTEM was not defined previously, #defining the default FILE_SYSTEM_LITTLEFS in fileSystem.hpp"
+                    #endif
+                    #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // by default
+                #endif
+            #endif
         #endif
-        #define FILE_SYSTEM FILE_SYSTEM_FAT // by default
     #endif
 
     #if (FILE_SYSTEM & (FILE_SYSTEM_FAT | FILE_SYSTEM_LITTLEFS)) == (FILE_SYSTEM_FAT | FILE_SYSTEM_LITTLEFS)
         #pragma error "FILE_SYSTEM can't be both, FILE_SYSTEM_FAT and FILE_SYSTEM_LITTLEFS, at the same time"
     #endif
 
-    #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
+    #if FILE_SYSTEM == FILE_SYSTEM_FAT
         #include <FFat.h>
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Compiling fileSystem.hpp for FAT file system"
         #endif
+        #define __fileSystem__ FFat
     #endif
-    #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+    #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
         #include <LittleFS.h>
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Compiling fileSystem.hpp for LittleFS file system"
         #endif
+        #define __fileSystem__ LittleFS
     #endif
-    #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+    #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD // FILE_SYSTEM == FILE_SYSTEM_SD_CARD or FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
         #include <SD.h>
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Compiling fileSystem.hpp for SD card"
         #endif
+        #define __fileSystem__ SD
     #endif
 
 
     // ----- CODE -----
 
 
-    // log network Traffic information for each socket
+    // log disk Traffic information
     struct diskTrafficInformationType {
         unsigned long bytesRead;
         unsigned long bytesWritten;
@@ -80,58 +121,37 @@
     diskTrafficInformationType diskTrafficInformation = {}; // measure disk Traffic on ESP32 level
 
 
-    #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
-        #define __fileSystem__ FFat
-    #elif (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-        #define __fileSystem__ LittleFS
-    #else
-        #pragma error "FILE_SYSTEM should be eighter FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS"
-    #endif
-    #if FILE_SYSTEM == FILE_SYSTEM_SD_CARD // just that the code compiles in case SD card is the only file system
-        #define __fileSystem__ SD
-    #endif
-
-    class fileSys { 
+    class fileSystem_t { 
 
         public:
 
-            fileSys () {} // constructor
+            fileSystem_t () {} // constructor
 
             // format (only the built-in flash disk can be formated with LittleFs or FAT, SD card can not be formatted)
 
-            #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT || (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-                [[deprecated("Use formatFAT or formatLittleFS instead.")]]  
-                inline bool format () __attribute__((always_inline)) { return __fileSystem__.format (); }
-                #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
-                    inline bool formatFAT () __attribute__((always_inline)) { return __fileSystem__.format (); }
-                #endif
-                #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-                    inline bool formatLittleFs () __attribute__((always_inline)) { return __fileSystem__.format (); }
-                #endif
+            #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
+                inline bool formatFAT () __attribute__((always_inline)) { return __fileSystem__.format (); }
             #endif
+            #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
+                inline bool formatLittleFs () __attribute__((always_inline)) { return __fileSystem__.format (); }
+            #endif
+
 
             // mounts built-in flash disk
 
-            #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT
-                bool mount (bool formatIfUnformatted) { return mountFAT (formatIfUnformatted); }
+            #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT // FILE_SYSTEM == FILE_SYSTEM_SD_CARD or FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                 bool mountFAT (bool formatIfUnformatted) { 
-                    if (__builtinFlashDiskMounted__) return false; // already mounted
+                    if (mounted ()) return false; // already mounted
 
-                    __builtinFlashDiskMounted__ = false;
-                    
-                    if (__fileSystem__.begin (false)) {
-                        __builtinFlashDiskMounted__ = true;
-                    } else {
+                    if (!__fileSystem__.begin (false)) {
                         if (formatIfUnformatted) {
-                            cout << "[fileSystem] formatting, please wait ... ";
+                            cout << "[fileSystem] formatting FAT, please wait ... ";
                             if (__fileSystem__.format ()) {
                                 cout << "[fileSystem] ... formatted\n";
                                 #ifdef __DMESG__
                                     dmesgQueue << "[fileSystem] formatted";
                                 #endif
-                                if (__fileSystem__.begin (false)) {
-                                    __builtinFlashDiskMounted__ = true;
-                                }
+                                __fileSystem__.begin (false);
                             } else {
                                 cout << "[fileSystem] ... formatting failed\n";
                                 #ifdef __DMESG__
@@ -141,41 +161,35 @@
                         }
                     }
 
-                    if (__builtinFlashDiskMounted__) {
+                    if (mounted ()) {
                         cout << "[fileSystem] FAT mounted\n";
                         #ifdef __DMESG__
                             dmesgQueue << "[fileSystem] FAT mounted"; 
                         #endif
+                        return true;
                     } else { 
                         cout << "[fileSystem] failed to mount FAT\n";
                         #ifdef __DMESG__
                             dmesgQueue << "[fileSystem] failed to mount FAT";
                         #endif
+                        return flse;
                     }
-                    return __builtinFlashDiskMounted__;
                 }
 
             #endif
-            #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-                bool mount (bool formatIfUnformatted) { return mountLittleFs (formatIfUnformatted); }
+            #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
                 bool mountLittleFs (bool formatIfUnformatted) { 
-                    if (__builtinFlashDiskMounted__) return false; // already mounted
-
-                    __builtinFlashDiskMounted__ = false;
+                    if (mounted ()) return false; // already mounted
                     
-                    if (__fileSystem__.begin (false)) {
-                        __builtinFlashDiskMounted__ = true;
-                    } else {
+                    if (!__fileSystem__.begin (false)) {
                         if (formatIfUnformatted) {
-                            cout << "[fileSystem] formatting, please wait ... ";
+                            cout << "[fileSystem] formatting LittleFS, please wait ... ";
                             if (__fileSystem__.format ()) {
                                 cout << "[fileSystem] ... formatted\n";
                                 #ifdef __DMESG__
                                     dmesgQueue << "[fileSystem] formatted";
                                 #endif
-                                if (__fileSystem__.begin (false)) {
-                                    __builtinFlashDiskMounted__ = true;
-                                }
+                                __fileSystem__.begin (false);
                             } else {
                                 cout <<  "[fileSystem] ... formatting failed\n";
                                 #ifdef __DMESG__
@@ -185,29 +199,27 @@
                         }
                     }
 
-                    if (__builtinFlashDiskMounted__) {
+                    if (mounted ()) {
                         cout << "[fileSystem] LittleFS mounted\n";
                         #ifdef __DMESG__
                             dmesgQueue << "[fileSystem] LittleFS mounted"; 
                         #endif
+                        return true;
                     } else {
                         cout << "[fileSystem] failed to mount LittleFS\n";
                         #ifdef __DMESG__
                             dmesgQueue << "[fileSystem] failed to mount LittleFS";
                         #endif
+                        return false;
                     }
-                    return __builtinFlashDiskMounted__;
                 }
 
             #endif
 
             // mounts SD card, provide pin connected to CS and a mount point for SD card to the fileSystem
-
-            #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+            #if FILE_SYSTEM  == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                 bool mountSD (const char *mountPoint = "/SD", uint8_t pinCS = 5) {
-                    if (__SDcardMounted__) return false; // already mounted
-
-                    __SDcardMounted__ = false;
+                    if (SDmounted ()) return false; // already mounted
 
                     if (!mountPoint || *mountPoint != '/' || strlen (mountPoint) >= sizeof (__SDcardMountPoint__) - 1) {
                         cout << "[fileSystem] invalid SD card mount point: " << mountPoint << endl;
@@ -223,7 +235,7 @@
 
                     // if builtin flash disk file system is already mounted then create mountPoint directory on builtin flash disk which would make operations like list directory much easier 
                     // note that SD card is not mounted yet at this point so mountPOint will not get redirected to SD
-                    if (__builtinFlashDiskMounted__) {
+                    if (mounted ()) {
                         if (!isDirectory (mountPoint)) {
                             // create directory tree
                             for (int i = 1; i < strlen (__SDcardMountPoint__); i++) {
@@ -260,8 +272,6 @@
                         return false;
                     }
 
-                    __SDcardMounted__ = true;
-
                     cout << "[fileSystem] SD card mounted to " << mountPoint << endl;
                     #ifdef __DMESG__
                         dmesgQueue << "[fileSystem] SD card mounted to " << mountPoint; 
@@ -271,84 +281,93 @@
                 } 
             #endif
 
-            #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+            #if FILE_SYSTEM  == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                 inline char *SDcardMountPoint () __attribute__((always_inline)) { return __SDcardMountPoint__; }
             #endif            
 
             // unmounts file system
 
-            #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT || (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
-                void unmount () {
-                    __builtinFlashDiskMounted__ = false;
-                    __fileSystem__.end ();
-                }
-            #endif
+            void unmount () { __fileSystem__.end (); }
 
-            #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
-                void unmountSD () {
-                    __SDcardMounted__ = false;
-                    SD.end ();
-                }
+            #if FILE_SYSTEM  == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+                void unmountSD () { SD.end (); }
             #endif     
 
-            // is a file system mounted?       
 
-            bool mounted () { return __builtinFlashDiskMounted__ || __SDcardMounted__; } // if file system is mounted or not 
+            // tells is a file system is mounted - this covers also the case when SD is used as main and only file system
+            bool mounted () { // if file system is mounted or not 
+                #if FILE_SYSTEM == FILE_SYSTEM_LITTLEFS
+                    return LittleFS.totalBytes (); // if LittleFS is not mounted totalBytes returns 0
+                #elif FILE_SYSTEM == FILE_SYSTEM_FAT
+                    return FFat.totalBytes (); // if FFat is not mounted totalBytes returns 0 
+                #elif FILE_SYSTEM == FILE_SYSTEM_SD_CARD
+                    return SD.totalBytes (); // if SD is not mounted totalBytes returns 0 
+                #elif FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+                    return FFat.totalBytes (); // if FFat is not mounted totalBytes returns 0 
+                #elif
+                    #pragma error "FILE_SYSTEM is not correctly #defined" 
+                #endif
+            }
 
-            // tells wether the path points to builtin flash disk or to SD card
+            // is SD card mounted to FAT mount point - only in case when SD is used besides FAT, which is the main file system
+            #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+                bool SDmounted () { return SD.totalBytes (); } // if SD is not mounted totalBytes returns 0
+            #endif
 
-            #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+
+            // tells wether the path points to builtin flash disk or to SD card mount point
+            #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                 bool pointsToSDcard (const char *fullPath) {
-                    if (!__SDcardMounted__) return false;
+                    if (!SDmounted ()) return false;
                     if (strstr (fullPath, __SDcardMountPoint__) == fullPath) return true; // fullPath points to SD card like mountPoint = /SD/ and fullPath = /SD/a.txt
                     if (strstr (__SDcardMountPoint__, fullPath) == __SDcardMountPoint__ && strlen (fullPath) == strlen (__SDcardMountPoint__) - 1) return true; // fullPath points to SD card like mountPoint = /SD/ and fullPath = /SD
                     return false;
                 }
             #endif     
 
-            // calculates path to SD card from full path ant SD card mount point
 
+            // calculates path to SD card from full path ant SD card mount point
             #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
                 const char *SDcardPath (const char *fullPath) {
                     return strlen (fullPath) < strlen (__SDcardMountPoint__) ? "/" : fullPath + strlen (__SDcardMountPoint__) - 1;
                 }
             #endif                 
 
+
             // opens the file
 
             File open (const char* path) { 
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (path)) return SD.open (SDcardPath (path));  
                 #endif
 
-                // directory points to builtin flash disk
+                // directory points to main file system
                 return __fileSystem__.open (path); 
             }
 
             File open (const char* path, const char* mode) { 
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (path)) return SD.open (SDcardPath (path), mode);  
                 #endif
 
-                // directory points to builtin flash disk
+                // directory points to main file system
                 return __fileSystem__.open (path, mode); 
             }
 
             File open (const char* path, const char* mode, bool create) { 
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (path)) return SD.open (SDcardPath (path), mode, create);  
                 #endif
 
-                // directory points to builtin flash disk
+                // directory points to main file system
                 return __fileSystem__.open (path, mode, create); 
             }
 
 
             // reads entire configuration file in the buffer - returns success, it also removes \r characters, double spaces, comments, ...
-
             bool readConfigurationFile (char *buffer, size_t bufferSize, const char *fileName) {
                 *buffer = 0;
                 int i = 0; // index in the buffer
@@ -399,7 +418,7 @@
 
             bool deleteFile (const char *fileName) {
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (fileName)) {
                         if (!SD.remove (SDcardPath (fileName))) {
                             #ifdef __DMESG__
@@ -411,7 +430,7 @@
                     }
                 #endif
 
-                // builtin flash disk
+                // main file system
                 if (!__fileSystem__.remove (fileName)) {
                     #ifdef __DMESG__
                         dmesgQueue << "[fileSystem] unable to delete " << fileName; 
@@ -425,7 +444,7 @@
 
             bool makeDirectory (const char *directory) {
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (directory)) {
                         if (!SD.mkdir (SDcardPath (directory))) {
                             #ifdef __DMESG__
@@ -437,7 +456,7 @@
                     }
                 #endif
 
-                // builtin flash disk
+                // main file system
                 if (!__fileSystem__.mkdir (directory)) {
                     #ifdef __DMESG__
                         dmesgQueue << "[fileSystem] unable to make " << directory;
@@ -451,7 +470,7 @@
 
             bool removeDirectory (const char *directory) {
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (directory)) {
                         // is it a SD card mount point?
                         if (strlen (directory) == strlen (__SDcardMountPoint__) - 1) {
@@ -471,7 +490,7 @@
                     }
                 #endif
 
-                // builtin flash disk
+                // main file system
                 if (!__fileSystem__.rmdir (directory)) {
                     #ifdef __DMESG__
                         dmesgQueue << "[fileSystem] unable to remove " << directory;
@@ -481,11 +500,12 @@
                 return true;    
             }
 
+
             // renames file or directory
 
             bool rename (const char* pathFrom, const char* pathTo) {
                 // builtin flash disk or SD card?
-                #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
+                #if FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                     if (pointsToSDcard (pathFrom)) {
                         if (pointsToSDcard (pathTo)) {
                             if (!SD.rename (SDcardPath (pathFrom), SDcardPath (pathTo))) {
@@ -504,7 +524,7 @@
                     } 
                 #endif
                 
-                // both paths point to builtin flash disk
+                // both paths point to main file system
                 if (!__fileSystem__.rename (pathFrom, pathTo)) {
                     #ifdef __DMESG__
                         dmesgQueue << "[fileSystem] unable to rename " << pathFrom; 
@@ -513,6 +533,7 @@
                 }
                 return true; 
             }
+
 
             // makes the full path out of relative path and working directory, for example if working directory is /usr and relative patj is a.txt then full path is /usr/a.txt
 
@@ -603,9 +624,6 @@
 
         private:
 
-            bool __builtinFlashDiskMounted__ = false;
-            bool __SDcardMounted__ = false;
-
             #if (FILE_SYSTEM & FILE_SYSTEM_SD_CARD) == FILE_SYSTEM_SD_CARD
                 char __SDcardMountPoint__ [FILE_PATH_MAX_LENGTH] = "";
             #endif
@@ -614,6 +632,6 @@
 
 
     // create a working instance before including time_functions.h, time_functions.h will use the fileSystem instance
-    fileSys fileSystem;
+    fileSystem_t fileSystem;
 
 #endif

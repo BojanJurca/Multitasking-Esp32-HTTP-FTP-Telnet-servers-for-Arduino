@@ -6,7 +6,7 @@
 
     Cron daemon synchronizes the time with NTP server accessible from internet once a day.
 
-    May 22, 2024, Bojan Jurca
+    Jul 27, 2024, Bojan Jurca
 
     Nomenclature used in time_functions.h - for easier understaning of the code:
 
@@ -23,17 +23,17 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
+    #include <ctime>
+    #include <esp_sntp.h>
     #include "std/Cstring.hpp"
     #include "std/console.hpp"
-    #include "netwk.h"
-    #include <ctime>
 
 
 #ifndef __TIME_FUNCTIONS__
     #define __TIME_FUNCTIONS__
 
     #ifndef TZ
-        #ifdef TIMEZONE        
+        #ifdef TIMEZONE    
             #define TZ TIMEZONE
         #else
             #ifdef SHOW_COMPILE_TIME_INFORMATION
@@ -62,7 +62,8 @@
     bool cronTabAdd (const char *, bool);
     int cronTabDel (const char *);
     void startCronDaemon (void (* cronHandler) (const char *), size_t);
-    void timeavAilable (struct timeval *t);
+    void __timeAvailable__ (struct timeval *);
+
 
     // TUNNING PARAMETERS
 
@@ -98,15 +99,11 @@
 
     // ----- CODE -----
 
-    bool __timeHasBeenSet__ = false;
-    RTC_DATA_ATTR time_t __startupTime__;
+    unsigned long __timeHasBeenSet__ = 0;
+    RTC_DATA_ATTR time_t __startupTime__ = 0;
 
 
     static SemaphoreHandle_t __cronSemaphore__ = xSemaphoreCreateRecursiveMutex (); // controls access to cronDaemon's variables
-
-    char __ntpServer1__ [255] = DEFAULT_NTP_SERVER_1; // DNS host name may have max 253 characters
-    char __ntpServer2__ [255] = DEFAULT_NTP_SERVER_2; // DNS host name may have max 253 characters
-    char __ntpServer3__ [255] = DEFAULT_NTP_SERVER_3; // DNS host name may have max 253 characters 
   
     int __cronTabEntries__ = 0;
   
@@ -252,6 +249,10 @@
             if (millis () - lastMinuteCheckMillis >= 60000) { 
                 lastMinuteCheckMillis = millis ();
                 if (cronHandler != NULL) cronHandler ("ONCE_A_MINUTE");
+
+                // if the time has note been set yet try doing it now
+                if (!time ())
+                    sntp_restart ();
             }
 
             // trigger "EVERY_HOUR" built in event? (triggers regardles wether real time is known or not)
@@ -264,10 +265,13 @@
             if (millis () - lastDayCheckMillis >= 86400000) { 
                 lastDayCheckMillis = millis ();
                 if (cronHandler != NULL) cronHandler ("ONCE_A_DAY");
+
+                // synchronize time with NTP servers once a day
+                sntp_restart ();
             } 
 
             // 3. execute cron commands from cron table
-            time_t now = time (NULL);
+            time_t now = time ();
             if (!now) continue; // if the time is not known cronDaemon can't do anythig
             static time_t previous = now;
             for (time_t l = previous + 1; l <= now; l++) {
@@ -333,9 +337,9 @@
                   bool created = false;
                   File f = fileSystem.open ("/usr/share/zoneinfo", "w");
                   if (f) {
-                      String defaultContent =     "# timezone configuration - reboot for changes to take effect\r\n"
+                      String defaultContent = F ( "# timezone configuration - reboot for changes to take effect\r\n"
                                                   "# choose one of available (POSIX) timezones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv\r\n\r\n"
-                                                  "TZ " TZ "\r\n";
+                                                  "TZ " TZ "\r\n");
                     created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
                     f.close ();
 
@@ -345,6 +349,7 @@
                   cout << (created ? "created\n" : "error\n");
               
               }
+              char __TZ__ [100] = TZ;
               {
                   cout << "[time][cronDaemon] reading /usr/share/zoneinfo ... ";
                   // parse configuration file if it exists
@@ -353,7 +358,7 @@
                       strcat (buffer, "\n");
                       // cout << buffer << "\n";
 
-                      char __TZ__ [100] = TZ;
+                      // char __TZ__ [100] = TZ;
                       char *p;
                       if ((p = stristr (buffer, "\nTZ"))) sscanf (p + 3, "%*[ =]%98[!-~]", __TZ__);                      
 
@@ -396,14 +401,24 @@
                       strcat (buffer, "\n");
                       // cout << buffer;
 
-                      *__ntpServer1__ = *__ntpServer2__ = *__ntpServer3__ = 0; 
-                      char *p;                    
-                      if ((p = stristr (buffer, "\nserver1"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer1__);
-                      if ((p = stristr (buffer, "\nserver2"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer2__);
-                      if ((p = stristr (buffer, "\nserver3"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer3__);
+                      char ntpServer1 [255] = ""; // DNS host name may have max 253 characters
+                      char ntpServer2 [255] = ""; // DNS host name may have max 253 characters
+                      char ntpServer3 [255] = ""; // DNS host name may have max 253 characters 
 
-                      // cout << __ntpServer1__ << ", " << __ntpServer1__ << ", " << __ntpServer1__ << endl;
-                      cout << "OK\n";
+                      char *p;                    
+                      if ((p = stristr (buffer, "\nserver1"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", ntpServer1);
+                      if ((p = stristr (buffer, "\nserver2"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", ntpServer2);
+                      if ((p = stristr (buffer, "\nserver3"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", ntpServer3);
+
+                      // cout << ntpServer1 << ", " << ntpServer1 << ", " << ntpServer1 << endl;
+
+                      // configTime (0, 0, ntpServer1, ntpServer2, ntpServer3);
+                      configTzTime (__TZ__, ntpServer1, ntpServer2, ntpServer3);
+                      sntp_set_time_sync_notification_cb (__timeAvailable__);
+                      #ifdef __DMESG__
+                          dmesgQueue << "[time][cronDaemon] NTP servers set to " << ntpServer1 << ", " << ntpServer2 << ", " << ntpServer3;
+                      #endif
+                      cout << "OK, NTP servers set to " << ntpServer1 << ", " << ntpServer2 << ", " << ntpServer3 << endl; 
                   } else {
                       cout << "error\n";
                   }
@@ -462,18 +477,19 @@
               }
             } else {
                 cout << "[time][cronDaemon] file system not mounted, can't read or write configuration files\n";
+
+                // set the default timezone and NTP configs
+                configTzTime (TZ, DEFAULT_NTP_SERVER_1, DEFAULT_NTP_SERVER_2, DEFAULT_NTP_SERVER_3);
+                sntp_set_time_sync_notification_cb (__timeAvailable__);
+
             }
         #else
+            cout << "[time][cronDaemon] is starting without a file system\n";
 
             // set the default timezone and NTP configs
-            configTzTime (TZ, __ntpServer1__, __ntpServer2__, __ntpServer3__);
+            configTzTime (TZ, DEFAULT_NTP_SERVER_1, DEFAULT_NTP_SERVER_2, DEFAULT_NTP_SERVER_3);
+            sntp_set_time_sync_notification_cb (__timeAvailable__);
 
-            #ifdef __DMESG__
-                dmesgQueue << "[time][cronDaemon] TZ environment variable set to " << TZ;
-            #endif
-            cout << "[time][cronDaemon] TZ environment variable set to " << TZ << endl;
-
-            cout << "[time][cronDaemon] is starting without a file system\n";
         #endif    
         
         // run periodic synchronization with NTP servers and execute cron commands in a separate thread
@@ -500,20 +516,19 @@
     }
   
     char *ascTime (const struct tm st, char *buf, size_t len) {
-        // asctime_r (&st, buf);
-        // char *p; for (p = buf; *p >= ' '; p ++); *p = 0; // rtrim ending \n
-        // return buf;
-
-        std::strftime(buf, len, "%Y/%m/%d %T", &st);
-        //sprintf (buf, "%04i/%02i/%02i %02i:%02i:%02i", 1900 + st.tm_year, 1 + st.tm_mon, st.tm_mday, st.tm_hour, st.tm_min, st.tm_sec);
+        strftime(buf, len, "%Y/%m/%d %T", &st);
         return buf; 
     }
 
-    void timeAvailable (struct timeval *t) {
+    void __timeAvailable__ (struct timeval *t) {
         #ifdef __DMESG__
-            dmesgQueue << "[time][cronDaemon] Got time adjustment from NTP";
+            char result [27];
+            ascTime (localTime (t->tv_sec), result, sizeof (result));
+            dmesgQueue << "[time][cronDaemon] got time adjustment from NTP: " << result;
         #endif
-        __timeHasBeenSet__ = true;
+        if (!__startupTime__)
+            __startupTime__ = t->tv_sec - getUptime (); // recalculate
+        __timeHasBeenSet__ ++;
     }
 
     // sets internal clock, also sets/corrects __startupTime__ internal variable
@@ -532,8 +547,8 @@
             #endif
             cout << "[time] time corrected from " << buf << endl;
         } else {
-            __startupTime__ = t - getUptime (); // recalculate            
-            __timeHasBeenSet__ = true;
+            __startupTime__ = t - getUptime (); // recalculate
+            __timeHasBeenSet__ ++;
             ascTime (localTime (t), buf, sizeof(buf));
             #ifdef __DMESG__
                 dmesgQueue << "[time] time set to " << buf; 
@@ -553,70 +568,5 @@
         struct tm st;
         return *localtime_r (&t, &st);
     }
-
-    // ----- backward compatibility -----
-
-    [[deprecated("Use time (void) instead.")]]  
-    time_t getGmt () { 
-      return time ();
-    }
-
-    [[deprecated("Use setTimeOfDay (time_t) instead.")]]  
-    void setGmt (time_t t) {
-        setTimeOfDay (t);
-    }
-
-    [[deprecated("Use setTimeOfDay (time_t) instead.")]]  
-    void setLocalTime (time_t t) { 
-        setTimeOfDay (t);
-    }
-  
-    [[deprecated("Use gmTime (time_t) instead.")]]  
-    struct tm timeToStructTime (time_t t) { return gmTime (t); }
-
-    [[deprecated("Use ascTime (struct tm, char*) instead.")]]  
-    bool timeToString (char *buf, size_t bufSize, time_t t) {
-        if (bufSize >= 26) {
-            ascTime (gmTime (t), buf, bufSize);
-            return true;    
-        }
-        return false;
-    }  
-
-    #define KAL_TIMEZONE                      "EET-2"
-    #define MSK_TIMEZONE                      "MSK-3"
-    #define SAM_TIMEZONE                      "<+04>-4"
-    #define YEK_TIMEZONE                      "<+05>-5"
-    #define OMS_TIMEZONE                      "<+06>-6"
-    #define KRA_TIMEZONE                      "<+07>-7"
-    #define IRK_TIMEZONE                      "<+08>-8"
-    #define YAK_TIMEZONE                      "<+09>-9"
-    #define VLA_TIMEZONE                      "<+10>-10"
-    #define SRE_TIMEZONE                      "<+11>-11"
-    #define PET_TIMEZONE                      "<+12>-12"
-    #define JAPAN_TIMEZONE                    "<+09>-9"
-    #define CHINA_TIMEZONE                    "<+08>-8"
-    #define WET_TIMEZONE                      "GMT0BST,M3.5.0/1,M10.5.0"
-    #define ICELAND_TIMEZONE                  "GMT0"
-    #define CET_TIMEZONE                      "CET-1CEST,M3.5.0,M10.5.0/3"
-    #define EET_TIMEZONE                      "EET-2EEST,M3.5.0/3,M10.5.0/4"
-    #define FET_TIMEZONE                      "<+04>-4"
-    #define NEWFOUNDLAND_TIMEZONE             "NST3:30NDT1:30"
-    #define ATLANTIC_TIMEZONE                 "NZST-12NZDT,M9.5.0,M4.1.0/3"
-    #define ATLANTIC_NO_DST_TIMEZONE          "AST4"
-    #define EASTERN_TIMEZONE                  "EST5EDT,M3.2.0,M11.1.0"
-    #define EASTERN_NO_DST_TIMEZONE           "<+05>-5"
-    #define CNTRAL_TIMEZONE                   "CST6CDT,M3.2.0,M11.1.0"
-    #define CNTRAL_NO_DST_TIMEZONE            "CST6"
-    #define MOUNTAIN_TIMEZONE                 "MST7MDT,M3.2.0,M11.1.0"
-    #define MOUNTAIN_NO_DST_TIMEZONE          "MST"
-    #define PACIFIC_TIMEZONE                  "PST8PDT,M3.2.0,M11.1.0"
-    #define ALASKA_TIMEZNE                    "AKST9AKDT,M3.2.0,M11.1.0"
-    #define HAWAII_ALEUTIAN_TIMEZONE          "HST10"
-    #define HAWAII_ALEUTIAN_NO_DST_TIMEZONE   "<-10>10"
-    #define AMERICAN_SAMOA_TIMEZONE           "<-11>11"
-    #define BAKER_HOWLAND_ISLANDS_TIMEZONE    "<-12>12"
-    #define WAKE_ISLAND_TIMEZONE              "<+12>-12"
-    #define CHAMORRO_TIMEZONE                 "<+10>-10"    
 
 #endif

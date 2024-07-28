@@ -15,7 +15,7 @@
             - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
             - https://www.cyberciti.biz/faq/understanding-etcshadow-file/          
 
-    May 23, 2023, Bojan Jurca
+    Jul 18, 2024, Bojan Jurca
 
    Nomenclature used in userManagement.hpp - for easier understaning of the code:
 
@@ -37,6 +37,10 @@
 #ifndef __USER_MANAGEMENT__
   #define __USER_MANAGEMENT__
 
+    #ifdef SHOW_COMPILE_TIME_INFORMATION
+        #pragma message "__USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__"
+    #endif
+
   
     // TUNNING PARAMETERS
 
@@ -47,9 +51,9 @@
     // one of the above
     #ifndef USER_MANAGEMENT
         #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "USER_MANAGEMENT was not defined previously, #defining the default UNIX_LIKE_USER_MANAGEMENT in userManagement.hpp"
+            #pragma message "USER_MANAGEMENT was not defined previously, #defining the default NO_USER_MANAGEMENT in userManagement.hpp"
         #endif
-        #define USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // by default
+        #define USER_MANAGEMENT NO_USER_MANAGEMENT // by default
     #endif
 
     #define USER_PASSWORD_MAX_LENGTH 64   // the number of characters of longest user name or password 

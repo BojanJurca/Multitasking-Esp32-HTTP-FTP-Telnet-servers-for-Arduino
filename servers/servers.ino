@@ -16,11 +16,11 @@
 // #define TEST_DMESG
 // #define TEST_FS
 // #define TEST_FTP
-// #define TEST_TELNET
+#define TEST_TELNET
 // #define TEST_SMTP_CLIENT
 // #define TEST_USER_MANAGEMENT
 // #define TEST_TIME_FUNCTIONS
-#define TEST_HTTP_SERVER_AND_CLIENT
+// #define TEST_HTTP_SERVER_AND_CLIENT
 
 
 #ifdef DBG
@@ -100,8 +100,10 @@
 
         // fileSystem.format ();
         // fileSystem.formatFAT ();
-        // fileSystem.formatLittleFs ();
+
         fileSystem.mountLittleFs (true);
+        // fileSystem.formatLittleFs ();
+
         // fileSystem.mountFAT (true); // built-in falsh disk
         // fileSystem.mountSD ("/", 5); // SD Card if attached
     }
@@ -118,45 +120,47 @@
 
 #ifdef TEST_FTP // TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP
 
-    #define USER_MANAGEMENT NO_USER_MANAGEMENT // USER_MANAGEMENT UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
-    #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
+    #define SHOW_COMPILE_TIME_INFORMATION
 
-    #include "dmesg.hpp"
+    #define FILE_SYSTEM             FILE_SYSTEM_LITTLEFS
     #include "fileSystem.hpp"
-    #include "time_functions.h"
+
+    #define DEFAULT_STA_SSID        "YOUR_STA_SSID"
+    #define DEFAULT_STA_PASSWORD    "YOUR_STA_PASSWORD"
     #include "netwk.h"
+    
+    #define USER_MANAGEMENT         NO_USER_MANAGEMENT
     #include "userManagement.hpp"
+    
     #include "ftpServer.hpp"
-    #include "ftpClient.h"
 
     ftpServer *myFtpServer = NULL;
 
-  void setup () {
+void setup () {
     Serial.begin (115200);
 
-    fileSystem.mountFAT (true);
-    fileSystem.mountSD ("/SD", 5);
+    fileSystem.mountLittleFs (true);
 
-    startWiFi ();
-    startCronDaemon (NULL);
+    startWiFi (); // or just call:    WiFi.begin (DEFAULT_STA_SSID, DEFAULT_STA_PASSWORD);
 
-    myFtpServer = new ftpServer ((char *) "0.0.0.0", 21, NULL);
-    if (myFtpServer->state () != ftpServer::RUNNING) {
-      Serial.printf (":(\n");
+    myFtpServer = new ftpServer ();
+    if (myFtpServer->state () == ftpServer::RUNNING) {
+        Serial.printf ("FTP server started\n");
     } else {
-      Serial.printf (":)\n");
+        Serial.printf ("FTP server did not start\n");
     }
 
-    while (WiFi.localIP ().toString () == "0.0.0.0") { delay (1000); Serial.printf ("   .\n"); } // wait until we get IP from router
+    while (WiFi.localIP ().toString () == "0.0.0.0") { // wait until we get IP from router
+        delay (1000); 
+        Serial.printf ("   .\n"); 
+    } 
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
     delay (100);
+}
 
-    Serial.println (ftpPut ((char *) "/b", (char *) "/a", (char *) "root", (char *) "root", 21, (char *) "10.18.1.200"));  
-  }
-
-  void loop () {
+void loop () {
     
-  }
+}
 
 #endif // TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP TEST_FTP 
 
@@ -168,7 +172,7 @@
 
   // include all .h files telnet server is using to test the whole functionality
   
-      #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD: (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
+//      #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD: (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
  
       #include "std/console.hpp"
       #include "dmesg.hpp"
@@ -181,6 +185,12 @@
       #define USER_MANAGEMENT NO_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
       #include "userManagement.hpp"
       #include "telnetServer.hpp"
+
+#include "httpClient.h"
+#include "ftpClient.h"
+#include "smtpClient.h"
+
+#include "telnetServer.hpp"
 
   String telnetCommandHandlerCallback (int argc, char *argv [], telnetConnection *tcn) {
 

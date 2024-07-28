@@ -6,7 +6,7 @@
   
     FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
 
-    May 22, 2024, Bojan Jurca
+    Jul 18, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -38,21 +38,21 @@
     // ----- includes, definitions and supporting functions -----
 
     #include <WiFi.h>
-    // fixed size strings
     #include "std/Cstring.hpp"
 
 
 #ifndef __FTP_SERVER__
     #define __FTP_SERVER__
 
+    #ifdef SHOW_COMPILE_TIME_INFORMATION
+        #pragma message "__FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__ __FTP_SERVER__"
+    #endif
+
+
     #ifdef FTP_SERVER_CORE
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "ftpServer will run only on #defined core"
         #endif
-    #endif
-
-    #ifndef __FILE_SYSTEM__
-        #error "You can't use ftpServer.h without file_system.h. Either #include file_system.h prior to including ftpServer.h or exclude ftpServer.h"
     #endif
 
 
@@ -67,29 +67,37 @@
     #define ftpServiceUnavailable (char *) "421 FTP service is currently unavailable\r\n"
 
     #ifndef HOSTNAME
-      #define "MyESP32Server"                               // use default if not defined previously
+        #define "MyESP32Server"                                 // use default if not defined previously
     #endif
     
 
     // ----- CODE -----
 
+    #ifndef __FILE_SYSTEM__
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "Implicitly including fileSystem.hpp" 
+        #endif
+        #include "fileSystem.hpp" // all file name and file info related functions are there
+    #endif
+
+    #ifndef __NETWK__
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "Implicitly including netwk.h"
+        #endif
+        #include "netwk.h"  // sendAll and recvAll functions are declared there
+    #endif
+
     #ifndef __USER_MANAGEMENT__
         #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "Implicitly including user_management.h"
+            #pragma message "Implicitly including userManagement.hpp" // checkUserNameAndPassword and getHomeDirectory functions are declared there
         #endif
-        #include "user_management.h"    // for logging in
-    #endif
-    #ifndef __TIME_FUNCTIONS__
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "Implicitly including time_functions.h (needed to display file times)"
-        #endif
-        #include "time_functions.h"
+        #include "userManagement.hpp"
     #endif
 
     // control ftpServer critical sections
     static SemaphoreHandle_t __ftpServerSemaphore__ = xSemaphoreCreateMutex (); 
 
-    // log what is going on within telnetServer
+    // log what is going on within ftpServer
     byte ftpServerConcurentTasks = 0;
     byte ftpServerConcurentTasksHighWatermark = 0;
 

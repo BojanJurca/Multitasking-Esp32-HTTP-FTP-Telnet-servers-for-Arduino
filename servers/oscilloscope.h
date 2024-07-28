@@ -50,7 +50,7 @@
 
 
     // some ESP32 boards read analog values inverted, uncomment the following line to invert read values back again 
-    #define INVERT_ADC1_GET_RAW
+    // #define INVERT_ADC1_GET_RAW
 
     // some ESP32 boards have wI2S interface which improoves analog sampling (for a single signal), uncomment the following line if your bord has an I2S interface
     // #define USE_I2S_INTERFACE
