@@ -8,7 +8,7 @@
 
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
      
-    Jun 25, 2024, Bojan Jurca
+    Jul 28, 2024, Bojan Jurca
 
 
     PLEASE NOTE THAT THIS FILE IS JUST A TEMPLATE. YOU CAN INCLUDE OR EXCLUDE FUNCTIONALITIES YOU NEED OR DON'T NEED IN Esp32_servers_config.h.
@@ -388,7 +388,7 @@ void cronHandlerCallback (const char *cronCommand) {
                                                                                 }
                     else if (cronCommandIs ("gotTime"))                         {   // triggers only once - the first time ESP32 sets its clock (when it gets time from NTP server for example)
                                                                                     char buf [26]; // 26 bytes are needed
-                                                                                    ascTime (localTime (time ()), buf);
+                                                                                    ascTime (localTime (time ()), buf, sizeof (buf));
                                                                                     cout << "Got time at " << buf << " (local time), do whatever needs to be done the first time the time is known.";
                                                                                 }           
                     else if (cronCommandIs ("newYear'sGreetingsToProgrammer"))  {   // triggers at the beginning of each year
@@ -424,25 +424,25 @@ void setup () {
     #endif
 
 
-    // 2. Start cron daemon - it will synchronize internal ESP32's clock with NTP servers once a day and execute cron commands.
+    // 2. Start the WiFi (STAtion and/or A(ccess) P(oint), DHCP or static IP, depending on the configuration files.
+    // fileSystem.deleteFile ("/network/interfaces");                         // contation STA(tion) configuration       - deleting this file would cause creating default one
+    // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");     // contation STA(tion) credentials         - deleting this file would cause creating default one
+    // fileSystem.deleteFile ("/etc/dhcpcd.conf");                            // contains A(ccess) P(oint) configuration - deleting this file would cause creating default one
+    // fileSystem.deleteFile ("/etc/hostapd/hostapd.conf");                   // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
+    startWiFi ();   
+
+
+    // 3. Start cron daemon - it will synchronize internal ESP32's clock with NTP servers once a day and execute cron commands.
     // fileSystem.deleteFile ("/usr/share/zoneinfo");                         // contains timezone information           - deleting this file would cause creating default one
     // fileSystem.deleteFile ("/etc/ntp.conf");                               // contains ntp server names for time sync - deleting this file would cause creating default one
     // fileSystem.deleteFile ("/etc/crontab");                                // scontains cheduled tasks                - deleting this file would cause creating empty one
     startCronDaemon (cronHandlerCallback);
 
 
-    // 3. Write the default user management files /etc/passwd and /etc/passwd it they don't exist yet (it only makes sense with UNIX_LIKE_USER_MANAGEMENT).
+    // 4. Write the default user management files /etc/passwd and /etc/passwd it they don't exist yet (it only makes sense with UNIX_LIKE_USER_MANAGEMENT).
     // fileSystem.deleteFile ("/etc/passwd");                                 // contains users' accounts information    - deleting this file would cause creating default one
     // fileSystem.deleteFile ("/etc/passwd");                                 // contains users' passwords               - deleting this file would cause creating default one
     userManagement.initialize ();
-
-
-    // 4. Start the WiFi (STAtion and/or A(ccess) P(oint), DHCP or static IP, depending on the configuration files.
-    // fileSystem.deleteFile ("/network/interfaces");                         // contation STA(tion) configuration       - deleting this file would cause creating default one
-    // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf");     // contation STA(tion) credentials         - deleting this file would cause creating default one
-    // fileSystem.deleteFile ("/etc/dhcpcd.conf");                            // contains A(ccess) P(oint) configuration - deleting this file would cause creating default one
-    // fileSystem.deleteFile ("/etc/hostapd/hostapd.conf");                   // contains A(ccess) P(oint) credentials   - deleting this file would cause creating default one
-    startWiFi ();   
 
 
     // 5. Start the servers.

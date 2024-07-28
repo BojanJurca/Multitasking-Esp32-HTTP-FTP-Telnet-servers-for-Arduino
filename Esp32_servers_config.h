@@ -6,13 +6,21 @@
 // #define SHOW_COMPILE_TIME_INFORMATION
 
 
+/* use PSRAM?
+#define QUEUE_MEMORY_TYPE   PSRAM_MEM
+#define MAP_MEMORY_TYPE     PSRAM_MEM
+#define VECTOR_MEMORY_TYPE  PSRAM_MEM
+bool psramused = psramInit ();
+*/
+
+
 // include version_of_servers.h to include version information
 #include "./servers/version_of_servers.h"
 // include dmesg.hpp which is useful for run-time debugging - for dmesg telnet command
 #include "./servers/dmesg.hpp"
 
 
-// 1. TIME:    #define which time settings, wil be used with time_functions.h - will be included later
+// 1. TIME LOCALIZATION:    #define which time settings, wil be used with time_functions.h - will be included later
 // define which 3 NTP servers will be called to get current GMT (time) from
 // this information will be written into /etc/ntp.conf file if file_system.h will be included
 #define DEFAULT_NTP_SERVER_1 "1.si.pool.ntp.org"  // <- replace with your information
@@ -25,7 +33,6 @@
 // 2. FILE SYSTEM:     #define which file system you want to use
 // the file system must correspond to Tools | Partition scheme setting: FILE_SYSTEM_FAT (for FAT partition scheme), FILE_SYSTEM_LITTLEFS (for SPIFFS partition scheme) or FILE_SYSTEM_SD_CARD (if SC card is attached)
 // FAT file system can be bitwise combined with FILE_SYSTEM_SD_CARD, like #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
-
 #define FILE_SYSTEM   FILE_SYSTEM_LITTLEFS  // LittleFS uses the least of memory, which may be needed for all the functionalities to run
 
 
@@ -55,6 +62,7 @@
 
 // define the name Esp32 will use as its host name
 #define HOSTNAME "MyEsp32Server"  // <- replace with your information,  max 32 bytes
+
 // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
 #if CONFIG_IDF_TARGET_ESP32
     #define MACHINETYPE "ESP32"
@@ -85,8 +93,8 @@
 #ifdef FILE_SYSTEM
     #include "./servers/fileSystem.hpp"   // most functionalities can run even without a file system if everything is stored in RAM (smaller web pages, ...)
 #endif
-#include "./servers/time_functions.h"     // fileSystem.hpp is needed prior to #including time_functions.h if you want to store the default parameters
 #include "./servers/netwk.h"              // fileSystem.hpp is needed prior to #including network.h if you want to store the default parameters
+#include "./servers/time_functions.h"     // fileSystem.hpp is needed prior to #including time_functions.h if you want to store the default parameters
 #include "./servers/httpClient.h"         // support to access web pages from other servers and curl telnet command
 #ifdef FILE_SYSTEM
     #include "./servers/ftpClient.h"      // fileSystem.hpp is needed prior to #including ftpClient.h if you want to store the default parameters
@@ -106,7 +114,3 @@
     #include "./servers/oscilloscope.h"   // web based oscilloscope: you must #include httpServer.hpp as well to use it
 #endif
 #include "./servers/httpServer.hpp"       // fileSystem.hpp is needed prior to #including httpServer.h if you want server also to serve .html and other files from built-in flash disk
-
-
-// uncomment the following line to get additional compile-time information about how the project gets compiled
-// #define SHOW_COMPILE_TIME_INFORMATION
