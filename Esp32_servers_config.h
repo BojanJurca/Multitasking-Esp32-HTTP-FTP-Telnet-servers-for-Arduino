@@ -63,6 +63,11 @@ bool psramused = psramInit ();
 // define the name Esp32 will use as its host name
 #define HOSTNAME "MyEsp32Server"  // <- replace with your information,  max 32 bytes
 
+
+// power saving
+#define POVER_SAVING_MODE   WIFI_PS_NONE // WIFI_PS_NONE or WIFI_PD_MIN_MODEM or WIFI_PS_MAX_MODEM // please check: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
+
+
 // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
 #if CONFIG_IDF_TARGET_ESP32
     #define MACHINETYPE "ESP32"

@@ -367,8 +367,7 @@ void cronHandlerCallback (const char *cronCommand) {
                                                                                                 cout << "[cronHandlerCallback] STAtion disconnected, reconnecting to WiFi\n";
                                                                                                 WiFi.reconnect (); 
                                                                                             } else { // check if it really works anyway 
-                                                                                                esp32_ping routerPing;
-                                                                                                routerPing.ping (WiFi.gatewayIP ());
+                                                                                                esp32_ping routerPing (WiFi.gatewayIP ());
                                                                                                 for (int i = 0; i < 4; i++) {
                                                                                                     routerPing.ping (1);
                                                                                                     if (routerPing.received ())
