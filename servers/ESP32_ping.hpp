@@ -13,7 +13,7 @@
     This is the reason for creating ESP32_ping.hpp
 
 
-    May 22, 2024, Bojan Jurca
+    Aug 1, 2024, Bojan Jurca
     
 */
 
@@ -71,6 +71,7 @@
             }
             esp32_ping (IPAddress pingTarget) : esp32_ping (pingTarget.toString ().c_str ()) {}
 
+
             err_t ping (const char *pingTarget, int count = PING_DEFAULT_COUNT, int interval = PING_DEFAULT_INTERVAL, int size = PING_DEFAULT_SIZE, int timeout = PING_DEFAULT_TIMEOUT) {
                 __errno__ = 0; // Clear error code
 
@@ -87,11 +88,10 @@
             }
 
             err_t ping (IPAddress target, int count = PING_DEFAULT_COUNT, int interval = PING_DEFAULT_INTERVAL, int size = PING_DEFAULT_SIZE, int timeout = PING_DEFAULT_TIMEOUT) {
-                return ping (target.toString ().c_str(), count, interval, size, timeout);
+                return ping (target.toString ().c_str (), count, interval, size, timeout);
             }
 
             err_t ping (int count = PING_DEFAULT_COUNT, int interval = PING_DEFAULT_INTERVAL, int size = PING_DEFAULT_SIZE, int timeout = PING_DEFAULT_TIMEOUT) {
-
                 // Check argument values
                 if (count < 0) return ERR_VAL; // note that count = 0 is valid argument value, meaning infinite pinging
                 if (interval < 1 || interval > 3600) return ERR_VAL; 
@@ -134,7 +134,7 @@
                         int bytesReceived;
                         __ping_recv__ (s, &bytesReceived, 1000000 * timeout);
                         if (pingReplies [s - LWIP_SOCKET_OFFSET].__elapsed_time__) { // > 0, meaning that echo reply packet has been received
-                            __received__++;
+                            __received__ ++;
 
                             // Update statistics
                             __elapsed_time__ = (float) pingReplies [s - LWIP_SOCKET_OFFSET].__elapsed_time__ / (float) 1000;
