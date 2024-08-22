@@ -16,10 +16,10 @@
 // #define TEST_DMESG
 // #define TEST_FS
 // #define TEST_FTP
-#define TEST_TELNET
+// #define TEST_TELNET
 // #define TEST_SMTP_CLIENT
 // #define TEST_USER_MANAGEMENT
-// #define TEST_TIME_FUNCTIONS
+#define TEST_TIME_FUNCTIONS
 // #define TEST_HTTP_SERVER_AND_CLIENT
 
 
@@ -219,6 +219,7 @@ void loop () {
 
   telnetServer *myTelnetServer; 
 
+
   void setup () {
     cinit ();
 
@@ -229,7 +230,7 @@ void loop () {
 
     // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA-tic credentials
     startWiFi ();
- 
+
     startCronDaemon (NULL);
 
     myTelnetServer = new telnetServer (telnetCommandHandlerCallback, "0.0.0.0", 23, firewall);
@@ -330,8 +331,8 @@ void loop () {
 
         if (cronCommandIs ("gotTime")) { // triggers only once - when ESP32 reads time from NTP servers for the first time
 
-            char buf [26]; // 26 bytes are needed
-            ascTime (localTime (time ()), buf);
+            char buf [27]; // 26 bytes are needed
+            ascTime (localTime (time ()), buf, sizeof (buf));
 
             Serial.printf ("%s (%s) Got time at %s (local time), ESP32 has been running %lu seconds. Do whatever needs to be done the first time the time is known.\r\n", __func__, cronCommand, buf, getUptime ());
 
@@ -381,14 +382,14 @@ void loop () {
             // setTimeOfDay (1708387200); // 2024/20/02 00:00:00 - GMT
                   ntpDate (  "1.si.pool.ntp.org"  );
 
-            char buf [26]; 
+            char buf [27]; 
             Serial.println ("--- GMT");
               Serial.println (time ());
-              ascTime (gmTime (time ()), buf); 
+              ascTime (gmTime (time ()), buf, sizeof (buf)); 
               Serial.println (buf);
             Serial.println ("--- Local");
             struct tm slt = localTime (time ());
-            ascTime (slt, buf); 
+            ascTime (slt, buf, sizeof (buf)); 
             Serial.println (buf);
 
         // startCronDaemon (cronHandler);

@@ -8,7 +8,7 @@
     telnetCommandHandlerCallback function to handle some commands itself. A simple telnet client is also implemented as one of the built-in
     telnet commands but it doesn't expose an applicaton program interface.
   
-    Jul 18, 2024, Bojan Jurca
+    August 12, 2024, Bojan Jurca
 
     Nomenclature used here for easier understaning of the code:
 
@@ -1199,7 +1199,7 @@
 
         cstring __ntpdate__ () {
             unsigned long l = __timeHasBeenSet__; // NTP update counter
-            sntp_restart ();
+            ntpDate ();
             unsigned long startMillis = millis ();
             while (millis () - startMillis < 10000 && l == __timeHasBeenSet__)
                 delay (1);

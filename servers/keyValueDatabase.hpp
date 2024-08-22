@@ -50,7 +50,7 @@
  *            - data file offset (uint16_t) of a free block
  *            - size of a free block (int16_t)
  * 
- * Jun 25, 2024, Bojan Jurca
+ * August 12, 2024, Bojan Jurca
  *  
  */
 
@@ -499,7 +499,7 @@
                         Unlock ();  
                         return e;
                     } else {
-                        __errorFlags__ |= err_not_found;
+                        // __errorFlags__ |= err_not_found; // do not flag this error, just return err_not_found
                         Unlock ();  
                         return err_not_found;                      
                     }
@@ -546,7 +546,7 @@
                             Unlock ();  
                             return e;
                         } else {
-                            __errorFlags__ |= err_not_found;
+                            // __errorFlags__ |= err_not_found; // do not flag tis error, just return err_not_found
                             Unlock ();
                             return err_not_found;
                         }

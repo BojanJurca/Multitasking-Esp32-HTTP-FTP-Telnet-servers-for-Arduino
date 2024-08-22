@@ -4,7 +4,7 @@
  
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
-    May 22, 2024, Bojan Jurca
+    August 12, 2024, Bojan Jurca
 
 */
 
@@ -366,9 +366,9 @@
 
     if (!*to || !*from || !*password || !*userName || !smtpPort || !*smtpServer) {
         #ifdef __DMESG__
-            dmesgQueue << "[smtpClient] not all the arguments are set, if you want to use the default values, write them to /etc/mail/sendmail.cf";
+            dmesgQueue << "[smtpClient] not all the arguments are set in /etc/mail/sendmail.cf";
         #endif
-        return "Not all the arguments are set, if you want to use sendMail default values, write them to /etc/mail/sendmail.cf";
+        return "Not all the arguments are set in /etc/mail/sendmail.cf";
     } else {
       return __sendMail__ (message, subject, to, from, password, userName, smtpPort, smtpServer);    
     }
