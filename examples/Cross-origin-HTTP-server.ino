@@ -1,8 +1,8 @@
 
 // #include "servers/fileSystem.hpp"    // all file name and file info related functions are there, by default FILE_SYSTEM is #defined as FILE_SYSTEM_LITTLEFS, other options are: FILE_SYSTEM_FAT, FILE_SYSTEM_SD_CARD and (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
 
-#define DEFAULT_STA_SSID                "NaLazih22a" // "YOUR_STA_SSID"
-#define DEFAULT_STA_PASSWORD            "werner196" // "YOUR_STA_PASSWORD"
+#define DEFAULT_STA_SSID                "*****" // "YOUR_STA_SSID"
+#define DEFAULT_STA_PASSWORD            "*****" // "YOUR_STA_PASSWORD"
 #include "servers/netwk.h"              // sendAll and recvAll functions are declared there, if #included after fileSystem.hpp these files will be created: /network/interfaces, /etc/wpa_supplicant/wpa_supplicant.conf, /etc/dhcpcd.conf, /etc/hostapd/hostapd.conf
 
 #include "servers/httpServer.hpp"       // if #included after fileSystem.hpp httpServer will also serve files stored in /var/www/html directory
