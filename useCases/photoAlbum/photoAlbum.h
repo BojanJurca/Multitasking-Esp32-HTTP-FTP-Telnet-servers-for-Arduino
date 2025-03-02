@@ -266,6 +266,8 @@
     "      });\n" \
     "    });\n" \
     "\n" \
+    "    sessionStorage.clear ();\n" \
+    "\n" \
     "  </script>\n" \
     "\n" \
     "</head>\n" \
