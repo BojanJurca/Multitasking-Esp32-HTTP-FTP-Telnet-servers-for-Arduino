@@ -1,15 +1,14 @@
 # ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
 
+This template is a multitasking, dual stack (IPv4 and IPv6) ESP32 server (HTTP, Telnet, FTP) with built-in tools that are needed to manage, monitor and program the IoT server (like ping, ifconfig, crontab, dmesg, web-based oscilloscope, ...). It is just a template so you can modify it to your needs and delete everything you don't need if you want to preserve some memory, ...
 
-## This template is a quick and easy way to build a nice user interface for an ESP32 project, without having to take care of all the switches, LED diodes, displays, etc.
+With this template you can quickly and easily build a nice web based or telnet command line user interface for your project or prototype without having to take care of all the switches, LED diodes, displays, etc.
 
    - You only have to modify the telnetCommandHandlerCallback function to build the Telnet user interface for your project.
 
-   - You only have to modify the httpRequestHandler function to build the WEB user interface for your project. If you want a nice stylish look and feel there is also a FTP server built into the template so you can upload larger HTML files.
+   - You only have to modify the httpRequestHandler function to build the web user interface for your project. If you want a nice stylish look and feel there is also a FTP server built into the template so you can upload larger HTML files.
 
-   - Dmesg message logging is built-in which can help you see what is going on at run-time and debug your project (accessible through Telnet server).
-
-   - A Web-based Oscilloscope is already built-in which can help you see the signals on your Esp32 pins at run-time (accessible through Http server).
+   - You can monitor run-time debug messages (when Esp32 is not connected to serial monitor) by using dmesg telnet command.
 
 Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.si)
 
@@ -17,10 +16,15 @@ Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.s
 
 ## The latest changes
 
+**February 6, 2025**: 
+   - dual stack (IPv4 and IPv6),
+   - mDNS service added (server can be accessed in local network by its hostname),
+   - optimized memory usage,
+   - energy saving modes,
+   - support for locale (locales themselves are not implemented (if needed you must do it on your own)),
+   - discontinuation of some less used functionalities.
+Since a lot of the original code has been refactored some data types and functions have changed a bit. If your old code does not compile immediately with the new version of the library please take a look at the examples provided here.
 
-The latest changes are about making libraries less dependent on one another and on other libraries as well, making them easier to embed into other projects.
-
-Examples are renewed and simplified.
 
 
 ![Screenshot](presentation.gif)
@@ -30,7 +34,7 @@ Examples are renewed and simplified.
 ## Fully multitasking HTTP server
 
 
-HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to certain extent. Demo HTTP server is available at 193.77.159.208.
+HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to certain extent. Since HTTP server is fully multitasking, multiple WebSockets are really easy to implement.
 
 **HTTP server performance** 
 
@@ -52,7 +56,7 @@ FTP server is needed for uploading configuration files, .html files, ... to ESP3
 ## Time zones
 
 
-All the time zones form https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
+All the time zones from https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
 
 
 ## Simple key-value database
@@ -75,7 +79,6 @@ A simple key-value database is included for the purpose of managing (keeping) we
 /etc/ntp.conf                             - contains NTP time servers names
 /etc/crontab                              - contains scheduled tasks
 /etc/mail/sendmail.cf                     - contains sendMail default settings
-/etc/ftp/ftpclient.cf                     - contains ftpPut and ftpGet default settings
 ```
 
 
@@ -87,10 +90,23 @@ A simple key-value database is included for the purpose of managing (keeping) we
 3. modify (some or all) the default #definitions in Esp32_servers_config.h file (that will be later written to configuration files) **before** the sketch is run for the first time:
 
 ```C++
-// include version_of_servers.h to include version information
-#include "./servers/version_of_servers.h"
-// include dmesg_functions.h which is useful for run-time debugging - for dmesg telnet command
-#include "./servers/dmesg_functions.h"
+// Esp32_web_ftp_telnet_server_template configuration
+// you can skip some files #included if you don't need the whole functionality
+
+
+        // Lightweight STL memory settings
+        // #define LIST_MEMORY_TYPE          PSRAM_MEM
+        // #define VECTOR_QUEUE_MEMORY_TYPE  PSRAM_MEM
+        // #define MAP_MEMORY_TYPE           PSRAM_MEM
+        // bool psramInitialized = psramInit ();
+
+        // locale settings for Cstrings
+        // #include "servers/std/locale.hpp"
+        // bool localeSet = setlocale (lc_all, "sl_SI.UTF-8");
+
+
+// uncomment the following line to get additional compile-time information about how the project gets compiled
+// #define SHOW_COMPILE_TIME_INFORMATION
 
 
 // 1. TIME:    #define which time settings, wil be used with time_functions.h - will be included later
@@ -100,12 +116,14 @@ A simple key-value database is included for the purpose of managing (keeping) we
     #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"   // <- replace with your information
     #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"   // <- replace with your information
     // define time zone to calculate local time from GMT
-    #define TZ                                        "CET-1CEST,M3.5.0,M10.5.0/3" // or select another (POSIX) time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+    #define TZ                                        "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana, or select another (POSIX) time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
 
 // 2. FILE SYSTEM:     #define which file system you want to use 
-    // the file system must correspond to Tools | Partition scheme setting: FAT for FAT partition scheme, LittleFS for SPIFFS partition scheme)
-    #define FILE_SYSTEM    FILE_SYSTEM_LITTLEFS // or FILE_SYSTEM_FAT
+    // the file system must correspond to Tools | Partition scheme setting: FILE_SYSTEM_FAT (for FAT partition scheme), FILE_SYSTEM_LITTLEFS (for SPIFFS partition scheme) or FILE_SYSTEM_SD_CARD (if SD card is attached)
+    // FAT file system can be bitwise combined with FILE_SYSTEM_SD_CARD, like #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD), LITTLEFS uses less memory
+
+    #define FILE_SYSTEM   FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_LITTLEFS or FILE_SYSTEM_FAT or FILE_SYSTEM_SD_CARD or FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD
 
 
 // 3. NETWORK:     #define how ESP32 will use the network
@@ -132,30 +150,61 @@ A simple key-value database is included for the purpose of managing (keeping) we
     // #define DEFAULT_AP_IP                             "192.168.0.1"      // <- replace with your information
     // #define DEFAULT_AP_SUBNET_MASK                    "255.255.255.0"    // <- replace with your information
 
-    // define the name Esp32 will use as its host name 
-    #define HOSTNAME                                   "MyEsp32Server"      // <- replace with your information,  max 32 bytes
-    #define MACHINETYPE                                "ESP32 Dev Module"   // <- replace with your information, machine type, it is only used in uname telnet command
+    // power saving
+    #define POVER_SAVING_MODE   WIFI_PS_NONE // WIFI_PS_NONE or WIFI_PD_MIN_MODEM or WIFI_PS_MAX_MODEM // please check: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
+
+    // use mDNS so the servers can be accessed in local network by HOSTNAME, but uses some additional memory
+    #define USE_mDNS // comment this line out to save some memory and code space
+
+    // define the name Esp32 will use as its host name, if USE_mDNS is #dfined this is also the name by wich you can address your ESP32 on your local network
+    #define HOSTNAME                                   "MyESP32Server"      // <- replace with your information,  max 32 bytes (ESP_NETIF_HOSTNAME_MAX_SIZE) - if you are using mDNS make sure host name complies also with mDNS requirements
+    // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
+    #if CONFIG_IDF_TARGET_ESP32
+        #define MACHINETYPE "ESP32"
+    #elif CONFIG_IDF_TARGET_ESP32S2
+        #define MACHINETYPE "ESP32-S2"
+    #elif CONFIG_IDF_TARGET_ESP32S3
+        #define MACHINETYPE "ESP32-S3"
+    #elif CONFIG_IDF_TARGET_ESP32C3
+        #define MACHINETYPE "ESP32-C3"
+    #elif CONFIG_IDF_TARGET_ESP32C6
+        #define MACHINETYPE "ESP32-C6"
+    #elif CONFIG_IDF_TARGET_ESP32H2
+        #define MACHINETYPE "ESP32-H2"
+    #else
+        #define MACHINETYPE "ESP32 (other)"
+    #endif
 
 
 // 4. USERS:     #define what kind of user management you want before #including user_management.h
-    #define USER_MANAGEMENT                           UNIX_LIKE_USER_MANAGEMENT // or HARDCODED_USER_MANAGEMENT or NO_USER_MANAGEMENT
+    #define USER_MANAGEMENT                           UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT or UNIX_LIKE_USER_MANAGEMENT
     // if UNIX_LIKE_USER_MANAGEMENT is selected you must also include file_system.h to be able to use /etc/passwd and /etc/shadow files
     #define DEFAULT_ROOT_PASSWORD                     "rootpassword"        // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT are used
     #define DEFAULT_WEBADMIN_PASSWORD                 "webadminpassword"    // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
     #define DEFAULT_USER_PASSWORD                     "changeimmediatelly"  // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
 
 
-// #include (or comment-out) the functionalities you want (or don't want) to use
-#include "./servers/fileSystem.hpp"
-#include "./servers/time_functions.h"               // file_system.h is needed prior to #including time_functions.h if you want to store the default parameters
-#include "./servers/network.h"                      // file_system.h is needed prior to #including network.h if you want to store the default parameters
-#include "./servers/httpClient.h"
-#include "./servers/ftpClient.h"                    // file_system.h is needed prior to #including ftpClient.h if you want to store the default parameters
-#include "./servers/smtpClient.h"                   // file_system.h is needed prior to #including smtpClient.h if you want to store the default parameters
-#include "./servers/userManagement.hpp"             // file_system.h is needed prior to #including userManagement.hpp in case of UNIX_LIKE_USER_MANAGEMENT
-#include "./servers/telnetServer.hpp"               // needs almost all the above files for whole functionality, but can also work without them
-#include "./servers/ftpServer.hpp"                  // file_system.h is also necessary to use ftpServer.h
-#include "./servers/httpServer.hpp"                 // file_system.h is needed prior to #including httpServer.h if you want server also to serve .html and other files
+// 5. #include (or comment-out) the functionalities you want (or don't want) to use
+    #include "./servers/dmesg.hpp"                      // include dmesg_functions.h which is useful for run-time debugging - for dmesg telnet command
+    #include "./servers/fileSystem.hpp"                 // most functionalities can run even without a file system if everything is stored in RAM (smaller web pages, ...)   
+    #include "./servers/time_functions.h"               // fileSystem.hpp is needed prior to #including time_functions.h if you want to store the default parameters
+    #include "./servers/netwk.h"                        // fileSystem.hpp is needed prior to #including network.h if you want to store the default parameters
+    #include "./servers/httpClient.h"                   // support to access web pages from other servers and curl telnet command
+    #include "./servers/smtpClient.h"                   // fileSystem.hpp is needed prior to #including smtpClient.h if you want to store the default parameters
+    #include "./servers/userManagement.hpp"             // fileSystem.hpp is needed prior to #including userManagement.hpp in case of UNIX_LIKE_USER_MANAGEMENT
+    #include "./servers/esp32_ping.hpp"                 // include esp32_ping.hpp to occasioanly ping the router to check if ESP32 is still connected to WiFi
+    #include "./servers/version_of_servers.h"           // include version_of_servers.h to include version information
+    #include "./servers/telnetServer.hpp"               // needs almost all the above files for whole functionality, but can also work without them
+    #include "./servers/ftpServer.hpp"                  // fileSystem.hpp is also necessary to use ftpServer.h
+    #ifdef FILE_SYSTEM
+        #define USE_WEB_SESSIONS // comment this line out to save some memory if you won't use web sessions
+    #endif
+    #ifdef FILE_SYSTEM
+        #define USE_I2S_INTERFACE             // I2S interface improves web based oscilloscope analog sampling (of a single signal) if ESP32 board has one
+        // check INVERT_ADC1_GET_RAW and INVERT_I2S_READ #definitions in oscilloscope.h if the signals are inverted
+        #include "./servers/oscilloscope.h"   // web based oscilloscope: you must #include httpServer.hpp as well to use it
+    #endif
+    #include "./servers/httpServer.hpp"       // fileSystem.hpp is needed prior to #including httpServer.h if you want server also to serve .html and other files from built-in flash disk
 ```
 
 4. Select one of SPIFFS partition schemas (Tool | Partition Scheme).
