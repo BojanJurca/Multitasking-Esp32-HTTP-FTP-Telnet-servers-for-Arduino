@@ -1,5 +1,4 @@
-
-// #include "servers/fileSystem.hpp"    // all file name and file info related functions are there, by default FILE_SYSTEM is #defined as FILE_SYSTEM_LITTLEFS, other options are: FILE_SYSTEM_FAT, FILE_SYSTEM_SD_CARD and (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+// #include "./servers/fileSystem.hpp"  // all file name and file info related functions are there, by default FILE_SYSTEM is #defined as FILE_SYSTEM_LITTLEFS, other options are: FILE_SYSTEM_FAT, FILE_SYSTEM_SD_CARD and (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
 
 
 // define local time settings by changing the following defaults
@@ -7,7 +6,7 @@
 #define DEFAULT_NTP_SERVER_2 "2.si.pool.ntp.org"
 #define DEFAULT_NTP_SERVER_3 "3.si.pool.ntp.org"
 #define TZ "CET-1CEST,M3.5.0,M10.5.0/3" // select POSIX time zone: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
-#include "servers/time_functions.h"     // if #included after fileSystem.hpp time functions will use configuration files  /usr/share/zoneinfo, /etc/ntp.conf and /etc/crontab
+#include "./servers/time_functions.h"   // if #included after fileSystem.hpp time functions will use configuration files  /usr/share/zoneinfo, /etc/ntp.conf and /etc/crontab
 
 
 #define DEFAULT_STA_SSID                "YOUR_STA_SSID"
@@ -58,11 +57,10 @@ void setup () {
     //           |___ second (0 - 59 or *)
 
 
-    while (WiFi.localIP ().toString () == "0.0.0.0") { // wait until we get IP from the router
+    while (WiFi.localIP ().toString () == "0.0.0.0") { // wait until we get IP address from the router
         delay (1000);
         Serial.printf ("   .\n");
     } 
-
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
 }
 
