@@ -3,10 +3,51 @@
     ftpServer.hpp 
  
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
-  
-    FTP server reads and executes FTP commands. The transfer of files in active in passive mode is supported but some of the commands may 
+    
+    February 6, 2025, Bojan Jurca
 
-    Jul 18, 2024, Bojan Jurca
+
+    Classes implemented/used in this module:
+
+        ftpServer_t
+        ftpServer_t::ftpControlConnection_t
+        tcpClient_t for active data connection
+        tcpServer_t, tcpConnection_t for pasive data connection
+
+    Inheritance diagram:    
+
+             ┌─────────────┐
+             │ tcpServer_t ┼┐
+             └─────────────┘│
+                            │
+      ┌─────────────────┐   │
+      │ tcpConnection_t ┼┐  │
+      └─────────────────┘│  │
+                         │  │
+                         │  │  ┌─────────────────────────┐
+                         │  ├──┼─ httpServer_t           │
+                         ├─────┼──── webSocket_t         │
+                         │  │  │     └── httpConection_t │
+                         │  │  └─────────────────────────┘
+                         │  │  logicly webSocket_t would inherit from httpConnection_t but it is easier to implement it the other way around
+                         │  │
+                         │  │
+                         │  │  ┌────────────────────────┐
+                         │  ├──┼─ telnetServer_t        │
+                         ├─────┼──── telnetConnection_t │
+                         │  │  └────────────────────────┘
+                         │  │
+                         │  │
+                         │  │  ┌────────────────────────────┐
+                         │  └──┼─ ftpServer_t               │
+                         ├─────┼──── ftpControlConnection_t │
+                         │     └────────────────────────────┘
+                         │  
+                         │  
+                         │     ┌──────────────┐
+                         └─────┼─ tcpClient_t │
+                               └──────────────┘
+
 
     Nomenclature used here for easier understaning of the code:
 
@@ -19,7 +60,7 @@
 
                   The first thing that the user does when a TCP connection is established is logging in and the last thing is logging out. It TCP
                   connection drops for some reason the user is automatically logged out.
-                  
+
       - "buffer size" is the number of bytes that can be placed in a buffer. 
       
                   In case of C 0-terminated strings the terminating 0 character should be included in "buffer size".
@@ -35,10 +76,10 @@
 */
 
 
-    // ----- includes, definitions and supporting functions -----
-
-    #include <WiFi.h>
-    #include "std/Cstring.hpp"
+#include "tcpServer.hpp"
+#include "tcpConnection.hpp"
+#include "tcpClient.hpp"
+#include "std/Cstring.hpp"
 
 
 #ifndef __FTP_SERVER__
@@ -49,22 +90,15 @@
     #endif
 
 
-    #ifdef FTP_SERVER_CORE
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "ftpServer will run only on #defined core"
-        #endif
-    #endif
-
-
     // TUNNING PARAMETERS
 
-    #define FTP_SESSION_STACK_SIZE 8 * 1024                     // TCP connection
-    // #define FTP_SERVER_CORE 1 // 1 or 0                      // #define FTP_SERVER_CORE if you want ftpServer to run on specific core
+    #define FTP_CONTROL_CONNECTION_STACK_SIZE (6 * 1024)        // TCP connection
     #define FTP_CMDLINE_BUFFER_SIZE 300                         // reading and temporary keeping FTP command lines
-    #define FTP_CONTROL_CONNECTION_TIME_OUT 300000              // 300000 ms = 5 min, 0 for infinite
-    #define FTP_DATA_CONNECTION_TIME_OUT 3000                   // 3000 ms = 3 sec, 0 for infinite 
+    #define FTP_SESSION_MAX_ARGC 5                              // max number of arguments in command line    
+    #define FTP_CONTROL_CONNECTION_TIME_OUT 300                 // 300 s = 5 min, 0 for infinite
+    #define FTP_DATA_CONNECTION_TIME_OUT 3                      // 3 s, 0 for infinite 
 
-    #define ftpServiceUnavailable (char *) "421 FTP service is currently unavailable\r\n"
+    #define ftpServiceUnavailableReply (char *) "421 FTP service is currently unavailable\r\n"
 
     #ifndef HOSTNAME
         #define "MyESP32Server"                                 // use default if not defined previously
@@ -80,13 +114,6 @@
         #include "fileSystem.hpp" // all file name and file info related functions are there
     #endif
 
-    #ifndef __NETWK__
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "Implicitly including netwk.h"
-        #endif
-        #include "netwk.h"  // sendAll and recvAll functions are declared there
-    #endif
-
     #ifndef __USER_MANAGEMENT__
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Implicitly including userManagement.hpp" // checkUserNameAndPassword and getHomeDirectory functions are declared there
@@ -94,864 +121,745 @@
         #include "userManagement.hpp"
     #endif
 
-    // control ftpServer critical sections
-    static SemaphoreHandle_t __ftpServerSemaphore__ = xSemaphoreCreateMutex (); 
 
-    // log what is going on within ftpServer
-    byte ftpServerConcurentTasks = 0;
-    byte ftpServerConcurentTasksHighWatermark = 0;
+    class ftpServer_t : public tcpServer_t {
 
+        public:
 
-    // cycle through set of port numbers when FTP server is working in pasive mode
-    int __pasiveDataPort__ () {
-        static int lastPasiveDataPort = 1024;                                                 // change pasive data port range if needed
-        xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-            int pasiveDataPort = lastPasiveDataPort = (((lastPasiveDataPort + 1) % 16) + 1024); // change pasive data port range if needed
-        xSemaphoreGive (__ftpServerSemaphore__);
-        return pasiveDataPort;
-    }
+            class ftpControlConnection_t : public tcpConnection_t {
 
+                friend class ftpServer_t;
 
-    // ----- ftpControlConnection class -----
+                private:
 
-    class ftpControlConnection {
+                    // FTP session related variables
+                    char __cmdLine__ [FTP_CMDLINE_BUFFER_SIZE];
+                    char __userName__ [USER_PASSWORD_MAX_LENGTH + 1] = "";
+                    #ifdef __FILE_SYSTEM__
+                        char __homeDir__ [FILE_PATH_MAX_LENGTH + 1] = "";
+                        char __workingDir__ [FILE_PATH_MAX_LENGTH + 1] = "";
+                    #endif
 
-      public:
+                    static UBaseType_t __lastHighWaterMark__;
 
-        // ftpControlConnection state
-        enum STATE_TYPE {
-            NOT_RUNNING = 0, 
-            RUNNING = 2        
-        };
 
-        STATE_TYPE state () { return __state__; }
+                public:
 
-        ftpControlConnection ( // the following parameters will be handeled by ftpControlConnection instance
-                         int connectionSocket,
-                         char *clientIP, char *serverIP
-                       )  {
-                            // create a local copy of parameters for later use
-                            __controlConnectionSocket__ = connectionSocket;
-                            strncpy (__clientIP__, clientIP, sizeof (__clientIP__)); __clientIP__ [sizeof (__clientIP__) - 1] = 0; // copy client's IP since connection may live longer than the server that created it
-                            strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
-                            // handle connection in its own thread (task)       
-                            #define tskNORMAL_PRIORITY 1
-                            #ifdef FTP_SERVER_CORE
-                                BaseType_t taskCreated = xTaskCreatePinnedToCore (__controlConnectionTask__, "ftpControlConnection", FTP_SESSION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
-                            #else
-                                BaseType_t taskCreated = xTaskCreate (__controlConnectionTask__, "ftpControlConnection", FTP_SESSION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
-                            #endif
-                            if (pdPASS != taskCreated) {
-                                #ifdef __DMESG__
-                                    dmesgQueue << "[ftpControlConnection] xTaskCreate error";
-                                #endif
-                            } else {
-                                __state__ = RUNNING;
-
-                                xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                                    ftpServerConcurentTasks++;
-                                    if (ftpServerConcurentTasks > ftpServerConcurentTasksHighWatermark)
-                                        ftpServerConcurentTasksHighWatermark = ftpServerConcurentTasks;
-                                xSemaphoreGive (__ftpServerSemaphore__);
-
-                                return; // success                              
-                            }
-                            #ifdef __DMESG__
-                                dmesgQueue << "[ftpConnection] xTaskCreate error";
-                            #endif
-                          }
-
-        ~ftpControlConnection ()  {
-                                xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                                    ftpServerConcurentTasks--;
-                                xSemaphoreGive (__ftpServerSemaphore__);
-
-                                closeControlConnection ();
-                                closeDataConnection ();
-                            }
-
-        bool controlConnectionTimeOut () { return millis () - __lastActive__ >= FTP_CONTROL_CONNECTION_TIME_OUT && FTP_CONTROL_CONNECTION_TIME_OUT > 0; }
-        
-        void closeControlConnection () { // both, control and data connection
-                                  int connectionSocket;
-                                  xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                                    connectionSocket = __controlConnectionSocket__;
-                                    __controlConnectionSocket__ = -1;
-                                  xSemaphoreGive (__ftpServerSemaphore__);
-                                  if (connectionSocket > -1) close (connectionSocket);
-                                }
-                                
-        void closeDataConnection () {
-                                  int connectionSocket;
-                                  xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                                    connectionSocket = __dataConnectionSocket__;
-                                    __dataConnectionSocket__ = -1;
-                                  xSemaphoreGive (__ftpServerSemaphore__);
-                                  if (connectionSocket > -1) close (connectionSocket);                                  
-                                }
-                                        
-      private:
-
-        STATE_TYPE __state__ = NOT_RUNNING;
-
-        unsigned long __lastActive__ = millis (); // time-out detection        
-      
-        int __controlConnectionSocket__ = -1;
-        int __dataConnectionSocket__ = -1;
-        char __clientIP__ [46] = "";
-        char __serverIP__ [46] = "";
-
-        char __cmdLine__ [FTP_CMDLINE_BUFFER_SIZE];
-
-        // FTP session related variables
-        char __userName__ [USER_PASSWORD_MAX_LENGTH + 1] = "";
-        char __homeDir__ [FILE_PATH_MAX_LENGTH + 1] = "";
-        char __workingDir__ [FILE_PATH_MAX_LENGTH + 1] = "";
-
-        // writing output to FTP control connection with error logging (dmesg)
-        int sendFtp (char *buf) { 
-            int i = sendAll (__controlConnectionSocket__, buf, FTP_CONTROL_CONNECTION_TIME_OUT);
-            #ifdef __DMESG__
-                if (i <= 0) dmesgQueue << "[ftpControlConnection] send error: " << errno << " " << strerror (errno);
-            #endif
-            return i;
-        }
-
-        // reading input from FTP control connection with error logging (dmesg)
-        int recvFtp (char *buf, size_t len, const char *endingString) {
-            int i = recvAll (__controlConnectionSocket__, buf, len, endingString, FTP_CONTROL_CONNECTION_TIME_OUT);
-            #ifdef __DMESG__
-                if (i <= 0) dmesgQueue << "[ftpControlConnection] recv error: " << errno << strerror (errno);
-            #endif
-            return i;
-        }
-
-
-        static void __controlConnectionTask__ (void *pvParameters) {
-          // get "this" pointer
-          ftpControlConnection *ths = (ftpControlConnection *) pvParameters;           
-          { // code block
-
-            // send welcome message to the client
-            #if USER_MANAGEMENT == NO_USER_MANAGEMENT
-              {
-                if (ths->sendFtp ((char *) "220-" HOSTNAME " FTP server - everyone is allowed to login\r\n220 \r\n") <= 0) goto endOfConnection;
-              }
-            #else
-              {
-                if (ths->sendFtp ((char *) "220-" HOSTNAME " FTP server - please login\r\n220 \r\n") <= 0) goto endOfConnection;
-              }
-            #endif  
-
-            // read and process FTP commands in an endless loop
-            int receivedTotal = 0;
-            do {
-              receivedTotal = ths->recvFtp (ths->__cmdLine__ + receivedTotal, FTP_CMDLINE_BUFFER_SIZE - 1 - receivedTotal, "\n");
-              if (receivedTotal <= 0) goto endOfConnection;
-
-              // parse command line
-              char *ftpCommand = ths->__cmdLine__;
-              char *ftpArgument = (char *) "";
-              while (*ftpCommand > ' ') ftpCommand ++;
-              if (*ftpCommand) { 
-                *ftpCommand = 0; 
-                ftpArgument = ftpCommand + 1; 
-                while (*ftpArgument >= ' ') ftpArgument ++; // long file names may have spaces
-                *ftpArgument = 0;
-                ftpArgument = ftpCommand + 1;
-              }
-              ftpCommand = ths->__cmdLine__;
-              
-              // process command line
-              if (*ftpCommand) {
-
-                cstring s = ths->internalFtpCommandHandler (ftpCommand, ftpArgument);
-                if (ths->__controlConnectionSocket__ == -1) goto endOfConnection; // in case of quit
-                // write the reply
-                if (s != "" && ths->sendFtp (s) <= 0) goto endOfConnection;
-              }
-        // nextFtpCommand:
-              receivedTotal = 0; // FTP client does not send another FTP command until it gets a reply from current one, meaning that cmdLine is empty now
-              
-            } while (ths->__controlConnectionSocket__ > -1); // while the connection is still opened
-
-          } // code block
-        endOfConnection:  
-          #ifdef __DMESG__
-              if (*ths->__homeDir__) dmesgQueue << "[ftpControlConnection] user logged out: " << ths->__userName__;
-          #endif
-          // all variables are freed now, unload the instance and stop the task (in this order)
-          delete ths;
-          vTaskDelete (NULL);                
-        }
-
-        cstring internalFtpCommandHandler (char *ftpCommand, char *ftpArgument) {
-
-            #define ftpCommandIs(X) (!strcmp (ftpCommand, X))
-
-                 if (ftpCommandIs ("QUIT"))                                                   return __QUIT__ ();
-            else if (ftpCommandIs ("OPTS"))                                                   return __OPTS__ (ftpArgument);
-            else if (ftpCommandIs ("USER"))                                                   return __USER__ (ftpArgument); // not entering user name may be OK for anonymous login  
-            else if (ftpCommandIs ("PASS"))                                                   return __PASS__ (ftpArgument); // not entering password may be OK for anonymous login  
-            else if (ftpCommandIs ("CWD"))                                                    return __CWD__  (ftpArgument);
-            else if (ftpCommandIs ("PWD") || ftpCommandIs ("XPWD"))                           return __XPWD__ ();
-            else if (ftpCommandIs ("TYPE"))                                                   return __TYPE__ (ftpArgument);
-            else if (ftpCommandIs ("NOOP"))                                                   return __NOOP__ ();
-            else if (ftpCommandIs ("SYST"))                                                   return __SYST__ ();
-            else if (ftpCommandIs ("SIZE"))                                                   return __SIZE__ (ftpArgument);
-            else if (ftpCommandIs ("PORT"))                                                   return __PORT__ (ftpArgument);
-            else if (ftpCommandIs ("PASV"))                                                   return __PASV__ ();
-            else if (ftpCommandIs ("LIST") || ftpCommandIs ("NLST"))                          return __NLST__ (*ftpArgument ? ftpArgument : __workingDir__);
-            else if (ftpCommandIs ("XMKD") || ftpCommandIs ("MKD"))                           return __XMKD__ (ftpArgument);
-            else if (ftpCommandIs ("XRMD") || ftpCommandIs ("RMD") || ftpCommandIs ("DELE"))  return __XRMD__ (ftpArgument);
-            else if (ftpCommandIs ("RETR"))                                                   return __RETR__ (ftpArgument);
-            else if (ftpCommandIs ("STOR"))                                                   return __STOR__ (ftpArgument);
-            else if (ftpCommandIs ("RNFR"))                                                   return __RNFR__ (ftpArgument);
-            else if (ftpCommandIs ("RNTO"))                                                   return __RNTO__ (ftpArgument);
-
-            else return cstring ("502 command ") + ftpCommand + " not implemented\r\n";
-        }
-
-        cstring __QUIT__ ()  {
-            // report client we are closing connection(s)
-            sendFtp ((char *) "221 closing connection\r\n");
-            closeControlConnection ();
-            closeDataConnection ();
-            return "";
-        }
-
-        cstring __OPTS__ (char *opts) { // enable UTF8
-            if (!strcmp (opts, "UTF8 ON"))  return "200 UTF8 enabled\r\n"; // by default, we don't have to do anything, just report to the client that it is ok to use UTF-8
-                                            return "502 OPTS arguments not supported\r\n";
-        }
-
-        cstring __USER__ (char *userName) { // save user name and require password
-            if (strlen (userName) < sizeof (__userName__)) strcpy (__userName__, userName);
-            return "331 enter password\r\n";
-        }
-
-        cstring __PASS__ (char *password) { // login
-          if (!userManagement.checkUserNameAndPassword (__userName__, password)) { 
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpControlConnection] user failed login attempt: " << __userName__;
-              #endif
-              delay (100);
-              return "530 user name or password incorrect\r\n"; 
-          }
-          // prepare session defaults
-          userManagement.getHomeDirectory (__homeDir__, sizeof (__homeDir__), __userName__);
-          if (*__homeDir__) { // if logged in
-              strcpy (__workingDir__, __homeDir__);
-
-              // remove extra /
-              cstring s (__homeDir__);
-              if (s [s.length () - 1] == '/') s [s.length () - 1] = 0; 
-              if (!s [0]) s = "/"; 
-
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpControlConnection] user logged in: " << __userName__;
-              #endif
-              return cstring ("230 logged on, your home directory is \"") + s + "\"\r\n";
-          } else { 
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpControlConnection] user does not have a home directory: " << __userName__;
-              #endif
-              return "530 user does not have a home directory\r\n"; 
-          }
-        }
-
-        bool ftpUserHasRightToAccessFile (char *fullPath) { return strstr (fullPath, __homeDir__) == fullPath; }
-        bool ftpUserHasRightToAccessDirectory (char *fullPath) { return ftpUserHasRightToAccessFile (cstring (fullPath) + "/"); }
-
-        cstring __CWD__ (char *directoryName) { 
-            if (!*__homeDir__)                                                              return "530 not logged in\r\n";
-            if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
-            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
-            if (fp == "" || !fileSystem.isDirectory (fp))                                   return "501 invalid directory name\r\n";
-            if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n";
-
-            // shoud be OK but check anyway:
-            if (fp.length () < sizeof (__workingDir__)) strcpy (__workingDir__, fp);        return cstring ("250 your working directory is ") + fp + "\r\n";
-        }
-
-        cstring __XPWD__ () { 
-            if (!*__homeDir__)                                                              return "530 not logged in\r\n";
-            if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
-
-            // remove extra /
-            cstring s (__workingDir__);
-            if (s [s.length () - 1] == '/') s [s.length () - 1] = 0; 
-            if (!s [0]) s = "/"; 
-                                                                                            return cstring ("257 \"") + s + "\"\r\n";
-        }
-  
-        const char *__TYPE__ (char *ftpType) {                                              return "200 ok\r\n"; } // just say OK to whatever type it is
-  
-        const char *__NOOP__ () {                                                           return "200 ok\r\n"; }
-
-        const char *__SYST__ () {                                                           return "215 UNIX Type: L8\r\n"; } // just say this is UNIX OS
-
-        cstring __SIZE__ (char *fileName) { 
-            if (!*__homeDir__)                                                              return "530 not logged in\r\n";
-            if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
-            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
-            if (fp == "" || !fileSystem.isFile (fp))                                        return "501 invalid file name\r\n";
-            if (!ftpUserHasRightToAccessFile (fp))                                          return "550 access denyed\r\n";
-
-            unsigned long fSize = 0;
-            File f = fileSystem.open (fp, "r");
-            if (f) { fSize = f.size (); f.close (); }
-                                                                                            return cstring ("213 ") + cstring (fSize) + "\r\n";
-        }
-
-        const char *__PORT__ (char *dataConnectionInfo) { 
-          if (!*__homeDir__)                                                                return "530 not logged in\r\n";
-          
-          int ip1, ip2, ip3, ip4, p1, p2; // get IP and port that client used to set up data connection server
-          if (6 == sscanf (dataConnectionInfo, "%i,%i,%i,%i,%i,%i", &ip1, &ip2, &ip3, &ip4, &p1, &p2)) {
-            char activeDataIP [46];
-            int activeDataPort;
-            sprintf (activeDataIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4); 
-            activeDataPort = p1 << 8 | p2;
-
-            // connect to the FTP client that act as a data server now
-
-            /* // we already heve client's IP so we don't have to reslove its name first
-            struct hostent *he = gethostbyname (activeDataIP);
-            if (!he) {
-              dmesg ("[httpClient] gethostbyname() error: ", h_errno);
-              return F ("425 can't open active data connection\r\n");
-            }
-            */
-            // create socket
-            __dataConnectionSocket__ = socket (PF_INET, SOCK_STREAM, 0);
-            if (__dataConnectionSocket__ == -1) {
-                #ifdef __DMESG__
-                    dmesgQueue << "[ftpActiveDataConnection] socket error: " << errno << " " << strerror (errno);
-                #endif
-                                                                                            return ftpServiceUnavailable;
-            }
-
-            // remember some information that netstat telnet command would use
-            additionalSocketInformation [__dataConnectionSocket__ - LWIP_SOCKET_OFFSET] = { __FTP_DATA_SOCKET__, 0, 0, millis (), millis () };
-
-            // make the socket not-blocking so that time-out can be detected
-            if (fcntl (__dataConnectionSocket__, F_SETFL, O_NONBLOCK) == -1) {
-                #ifdef __DMESG__
-                    dmesgQueue << "[ftpActiveDataConnection] fcntl() error: " << errno << strerror (errno);
-                #endif
-                closeDataConnection ();              
-                                                                                            return "425 can't open active data connection\r\n";
-            }
-            // connect to client that acts as a data server 
-            struct sockaddr_in serverAddress;
-            serverAddress.sin_family = AF_INET;
-            serverAddress.sin_port = htons (activeDataPort);
-            serverAddress.sin_addr.s_addr = inet_addr (activeDataIP); // serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
-            if (connect (__dataConnectionSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-              if (errno != EINPROGRESS) {
-                  #ifdef __DMESG__
-                      dmesgQueue << "[ftpActiveDataConnection] connect() error: " << errno << " " << strerror (errno); 
-                  #endif
-                  closeDataConnection ();
-                                                                                            return "425 can't open active data connection\r\n";
-              }
-            } // it is likely that socket is not connected yet at this point (the socket is non-blocking)
-                                                                                            return "200 port ok\r\n";
-          } 
-                                                                                            return "425 can't open active data connection\r\n";
-        }
-  
-        const char *__PASV__ () { 
-          if (!*__homeDir__)                                                                return "530 not logged in\r\n";
-
-          int ip1, ip2, ip3, ip4, p1, p2; // get (this) server IP and next free port
-          if (4 != sscanf (__serverIP__, "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) { // shoul always succeed
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] can't parse server IP: " << __serverIP__;
-              #endif
-              closeDataConnection ();
-                                                                                            return "425 can't open pasive data connection\r\n";
-          }
-          // get next free port
-          int pasiveDataPort = __pasiveDataPort__ ();
-          p2 = pasiveDataPort % 256;
-          p1 = pasiveDataPort / 256;           
-
-          // set up a new server for data connection and send connection information to the FTP client so it can connect to it
-        
-          __dataConnectionSocket__ = socket (PF_INET, SOCK_STREAM, 0);
-          if (__dataConnectionSocket__ == -1) {
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] socket() error: " << errno << " " << strerror (errno);
-              #endif
-                                                                                            return ftpServiceUnavailable;
-          }
-
-          // remember some information that netstat telnet command would use
-          additionalSocketInformation [__dataConnectionSocket__ - LWIP_SOCKET_OFFSET] = { __FTP_DATA_SOCKET__, 0, 0, millis (), millis () };
-
-          // make address reusable - so we won't have to wait a few minutes in case server will be restarted
-          int flag = 1;
-          setsockopt (__dataConnectionSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag));
-          // bind listening socket to IP address and port
-          struct sockaddr_in serverAddress;
-          memset (&serverAddress, 0, sizeof (struct sockaddr_in));
-          serverAddress.sin_family = AF_INET;
-          serverAddress.sin_addr.s_addr = inet_addr (__serverIP__);
-          serverAddress.sin_port = htons (pasiveDataPort);
-          if (bind (__dataConnectionSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] bind() error: " << errno << " " << strerror (errno);
-              #endif
-              closeDataConnection ();
-                                                                                            return "425 can't open pasive data connection\r\n";            
-          }
-          // mark socket as listening socket
-          if (listen (__dataConnectionSocket__, 1) == -1) {
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] listen() error: " << errno << " " << strerror (errno);
-              #endif
-              closeDataConnection ();
-                                                                                            return "425 can't open pasive data connection\r\n"; 
-          }
-          // make socket not-blocking so that time-out can be detected
-          if (fcntl (__dataConnectionSocket__, F_SETFL, O_NONBLOCK) == -1) {
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] fcntl() error: " << errno << " " << strerror (errno);
-              #endif
-              closeDataConnection ();
-                                                                                            return "425 can't open pasive data connection\r\n";
-          }
-
-          // everything is ready now to accept a connection from FTP client, we have to tell it how to connect
-              
-          cstring s;
-          s +="227 entering passive mode (";
-          s += ip1;
-          s += ",";
-          s += ip2;
-          s += ",";
-          s += ip3;
-          s += ",";
-          s += ip4;
-          s += ",";
-          s += p1;
-          s += ",";
-          s += p2;
-          s += ")\r\n";
-          if (sendFtp (s) <= 0) { closeDataConnection ();                                   return ""; }
-
-          // wait for a connection from the client
-
-          unsigned long lastActive = millis ();
-          int connectingSocket = -1;
-          struct sockaddr_in connectingAddress;
-          socklen_t connectingAddressSize = sizeof (connectingAddress);
-          while (connectingSocket == -1 && millis () - lastActive < FTP_DATA_CONNECTION_TIME_OUT || !FTP_DATA_CONNECTION_TIME_OUT) {
-            delay (1);
-            connectingSocket = accept (__dataConnectionSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
-          }
-          if (connectingSocket == -1) {
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] accept() time-out";
-              #endif
-              closeDataConnection ();
-                                                                                            return ""; 
-          }
-
-          // close the listener and get connectingSocket ready
-
-          int listeningSocket;
-          xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-              listeningSocket = __dataConnectionSocket__;
-              __dataConnectionSocket__ = connectingSocket;
-          xSemaphoreGive (__ftpServerSemaphore__);
-          if (listeningSocket > -1) close (listeningSocket);   
-          // make the socket not-blocking so that time-out can be detected
-          if (fcntl (__dataConnectionSocket__, F_SETFL, O_NONBLOCK) == -1) {
-              #ifdef __DMESG__
-                  dmesgQueue << "[ftpPasiveDataConnection] fcntl error: " << errno << " " << strerror (errno);
-              #endif
-              closeDataConnection ();              
-                                                                                            return "";
-          }
-           
-                                                                                            return "";
-        }
-
-        // NLST is preceeded by PORT or PASV so data connection should already be opened
-        const char *__NLST__ (char *directoryName) { 
-            if (!*__homeDir__)                            { closeDataConnection ();         return "530 not logged in\r\n"; }
-            if (!fileSystem.mounted ())                   { closeDataConnection ();         return "421 file system not mounted\r\n"; }
-            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
-            if (fp == "" || !fileSystem.isDirectory (fp)) { closeDataConnection ();         return "501 invalid directory name\r\n"; }
-            if (!ftpUserHasRightToAccessDirectory (fp))   { closeDataConnection ();         return "550 access denyed\r\n"; }
-
-            if (__dataConnectionSocket__ == -1)                                             return "425 can't open data connection\r\n";    
-
-            if (sendFtp ((char *) "150 starting data transfer\r\n") <= 0) { closeDataConnection ();  return ""; } // if control connection is closed
-
-                int bytesWritten = 0;
-                File d = fileSystem.open (fp); 
-                if (d) {
-                    for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
-                        cstring fullFileName = fp;
-                        if (fullFileName [fullFileName.length () - 1] != '/') fullFileName += '/'; fullFileName += f.name ();
-                        int i = sendAll (__dataConnectionSocket__, fileSystem.fileInformation (fullFileName) + "\r\n", FTP_DATA_CONNECTION_TIME_OUT);
-                        if (i <= 0) { bytesWritten = -1; break; } // remember the error
-                        bytesWritten += i;
+                    ftpControlConnection_t (int connectionSocket,                                                                     // socket number
+                                            char *clientIP,                                                                           // client's IP
+                                            char *serverIP                                                                            // server's IP (the address to which the connection arrived)
+                                           ) : tcpConnection_t (connectionSocket, clientIP, serverIP) {
                     }
-                    d.close ();
-                } // else "Out of resources"
 
-            closeDataConnection ();
-            if (bytesWritten >= 0)                                                          return "226 data transfer complete\r\n";
-                                                                                            return "425 data transfer error\r\n";
-        }
-  
-        const char * __RETR__ (char *fileName) { 
-            if (!*__homeDir__)                          { closeDataConnection ();           return "530 not logged in\r\n"; }
-            if (!fileSystem.mounted ())                 { closeDataConnection ();           return "421 file system not mounted\r\n"; }
-            cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
-            if (fp == "" || !fileSystem.isFile (fp))    { closeDataConnection ();           return "501 invalid file name\r\n"; }
-            if (!ftpUserHasRightToAccessFile (fp))      { closeDataConnection ();           return "550 access denyed\r\n"; }
+                    ~ftpControlConnection_t () {
+                        __closeDataConnection__ ();
+                    }
 
-            if (__dataConnectionSocket__ == -1)                                             return "425 can't open data connection\r\n";    
 
-            if (sendFtp ((char *) "150 starting data transfer\r\n") <= 0) { closeDataConnection ();  return ""; } // if control connection is closed
+                    // FTP session related variables
 
-                int bytesReadTotal = 0; int bytesSentTotal = 0;
-                File f = fileSystem.open (fp, "r");
-                if (f) {
-                    // read data from file and transfer it through data connection
-                    char buff [1024]; // MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1024 seems a good trade-off
-                    do {
-                      int bytesReadThisTime = f.read ((uint8_t *) buff, sizeof (buff));
-                      if (bytesReadThisTime == 0) { break; } // finished, success
-                      bytesReadTotal += bytesReadThisTime;
-                      int bytesSentThisTime = sendAll (__dataConnectionSocket__, buff, bytesReadThisTime, FTP_DATA_CONNECTION_TIME_OUT);
-                      if (bytesSentThisTime != bytesReadThisTime) { bytesSentTotal = -1; break; } // remember the error
-                      bytesSentTotal += bytesSentThisTime;
-                    } while (true);
-                    f.close ();
-              } else {
-                  bytesSentTotal = -1; // remember the error
-              }
-    
-              closeDataConnection ();
-    
-              diskTrafficInformation.bytesRead += bytesReadTotal; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-              
-            if (bytesSentTotal == bytesReadTotal)                                           return "226 data transfer complete\r\n";
-                                                                                            return "550 data transfer error\r\n";  
-        }
+                    inline char *getUserName () __attribute__((always_inline)) { return __userName__; }
+                    #ifdef __FILE_SYSTEM__
+                        inline char *getHomeDir () __attribute__((always_inline)) { return __homeDir__; }
+                        inline char *getWorkingDir () __attribute__((always_inline)) { return __workingDir__; }
+                    #endif
 
-        const char *__STOR__ (char *fileName) { 
-          if (!*__homeDir__)                           { closeDataConnection ();            return "530 not logged in\r\n"; }
-          if (!fileSystem.mounted ())                  { closeDataConnection ();            return "421 file system not mounted\r\n"; }
-          cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
-          if (fp == "" || fileSystem.isDirectory (fp)) { closeDataConnection ();            return "501 invalid file name\r\n"; }
-          if (!ftpUserHasRightToAccessFile (fp))       { closeDataConnection ();            return "550 access denyed\r\n"; }
+                    char recvLine (char *buf, size_t len, bool trim = true) { // reads incoming stream, returns last character read or 0-error, 3-Ctrl-C, 4-EOF, 10-Enter, ...
+                        return 0;
+                    }
 
-          if (__dataConnectionSocket__ == -1)                                               return "425 can't open data connection\r\n";    
 
-          if (sendFtp ((char *) "150 starting data transfer\r\n") <= 0) { closeDataConnection ();    return ""; } // if control connection is closed
+                private:
 
-            int bytesRecvTotal = 0; int bytesWrittenTotal = 0;
-            File f = fileSystem.open (fp, "w");
-            if (f) {
-              // read data from data connection and store it to the file
-              char buff [1024]; // MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1024 seems a good trade-off
-              do {
-                int bytesRecvThisTime = recvAll (__dataConnectionSocket__, buff, sizeof (buff), NULL, FTP_DATA_CONNECTION_TIME_OUT);
-                if (bytesRecvThisTime < 0)  { bytesRecvTotal = -1; break; } // to detect error later
-                if (bytesRecvThisTime == 0) { break; } // finished, success
-                bytesRecvTotal += bytesRecvThisTime;
-                int bytesWrittenThisTime = f.write ((uint8_t *) buff, bytesRecvThisTime);
-                bytesWrittenTotal += bytesWrittenThisTime;
-                if (bytesWrittenThisTime != bytesRecvThisTime) { bytesRecvTotal = -1; break; } // remember the error
-              } while (true);
-              f.close ();
-            } else {
-              bytesRecvTotal = -1; // remember the error
-            }
+                    void __runConnectionTask__ () {
 
-            closeDataConnection ();
-  
-            diskTrafficInformation.bytesWritten += bytesWrittenTotal; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                        // ----- this is where FTP control connection starts, the socket is already opened -----
             
-            if (bytesWrittenTotal == bytesRecvTotal)                                        return "226 data transfer complete\r\n";
-                                                                                            return "550 data transfer error\r\n";    
-        }
+                            // send welcome message to the client
+                            #if USER_MANAGEMENT == NO_USER_MANAGEMENT
 
-        const char *__XMKD__ (char *directoryName) { 
-            if (!*__homeDir__)                                                              return "530 not logged in\r\n";
-            if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
-            cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
-            if (fp == "")                                                                   return "501 invalid directory name\r\n"; 
-            if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n"; 
-    
-            if (fileSystem.makeDirectory (fp))                                              return "257 directory created\r\n";
-                                                                                            return "550 could not create directory\r\n"; 
-        }
+                                if (sendString ((char *) "220-" HOSTNAME " FTP server - everyone is allowed to login\r\n220 \r\n") <= 0)
+                                    return;
 
-        const char *__XRMD__ (char *fileOrDirName) { 
-            if (!*__homeDir__)                                                              return "530 not logged in\r\n";
-            if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
-            cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
-            if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
-            if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n"; 
+                            #else
 
-            if (fileSystem.isFile (fp)) {
-                if (fileSystem.deleteFile (fp))                                             return "250 file deleted\r\n";
-                                                                                            return "452 could not delete file\r\n";
-            } else {
-                if (fp == __homeDir__)                                                      return "550 you can't remove your home directory\r\n";
-                if (fp == __workingDir__)                                                   return "550 you can't remove your working directory\r\n";
-                if (fileSystem.removeDirectory (fp))                                        return "250 directory removed\r\n";
-                                                                                            return "452 could not remove directory\r\n";
-            }
-        }
+                                if (sendString ((char *) "220-" HOSTNAME " FTP server - please login\r\n220 \r\n") <= 0)
+                                    return;
 
-        // private to ftpControlConnection
-        char __rnfrPath__ [FILE_PATH_MAX_LENGTH + 1];
-        char __rnfrIs__;
-
-        const char *__RNFR__ (char *fileOrDirName) { 
-            __rnfrIs__ = ' ';
-            if (!*__homeDir__)                                                              return "530 not logged in\r\n";
-            if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
-            cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
-            if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
-            if (fileSystem.isDirectory (fp)) {
-                if (!ftpUserHasRightToAccessDirectory (fp))                                 return "550 access denyed\r\n"; 
-                __rnfrIs__ = 'd';
-            } else if (fileSystem.isFile (fp)) {
-                if (!ftpUserHasRightToAccessFile (fp))                                      return "550 access denyed\r\n"; 
-                __rnfrIs__ = 'f';
-            } else {
-                                                                                            return "501 invalid file or directory name\r\n"; 
-            }
-
-            // save temporal result
-            strncpy (__rnfrPath__, fp, FILE_PATH_MAX_LENGTH);
-            __rnfrPath__ [FILE_PATH_MAX_LENGTH] = 0;
-
-                                                                                            return "350 need more information\r\n"; // RNTO command will follow
-        }
-        
-        const char *__RNTO__ (char *fileOrDirName) { 
-          if (!*__homeDir__)                                                                return "530 not logged in\r\n";
-          if (!fileSystem.mounted ())                                                       return "421 file system not mounted\r\n"; 
-          cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
-          if (fp == "")                                                                     return "501 invalid file or directory name\r\n"; 
-          if (__rnfrIs__ == 'd') {
-            if (!ftpUserHasRightToAccessDirectory (fp))                                     return "550 access denyed\r\n"; 
-          } else if (__rnfrIs__ == 'f') {
-            if (!ftpUserHasRightToAccessFile (fp))                                          return "550 access denyed\r\n"; 
-          } else {
-                                                                                            return "501 invalid file or directory name\r\n"; 
-          }
-
-          // rename file from temporal result
-          if (fileSystem.rename (__rnfrPath__, fp))                                         return "250 renamed\r\n";
-                                                                                            return "553 unable to rename\r\n";  
-        }
-          
-    };
-
-
-    // ----- ftpServer class -----
-
-    class ftpServer {                                             
-    
-      public:
-
-        // ftpServer state
-        enum STATE_TYPE {
-          NOT_RUNNING = 0, 
-          STARTING = 1, 
-          RUNNING = 2        
-        };
-        
-        STATE_TYPE state () { return __state__; }
-    
-        ftpServer (  // the following parameters will be handeled by ftpServer instance
-                     const char *serverIP = "0.0.0.0",                                                    // FTP server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort = 21,                                                                 // FTP server port
-                     bool (*firewallCallback) (char *connectingIP) = NULL                                 // a reference to callback function that will be celled when new connection arrives 
-                   )  { 
-                        // create a local copy of parameters for later use
-                        strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0;
-                        __serverPort__ = serverPort;
-                        __firewallCallback__ = firewallCallback;
-
-                        // start listener in its own thread (task)
-                        __state__ = STARTING;                        
-                        #define tskNORMAL_PRIORITY 1
-                        #ifdef FTP_SERVER_CORE
-                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "ftpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL, FTP_SERVER_CORE);
-                        #else
-                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "ftpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
-                        #endif
-                        if (pdPASS != taskCreated) {
-                            #ifdef __DMESG__
-                                dmesgQueue << "[ftpServer] xTaskCreate error";
                             #endif
-                        } else {
-                          // wait until listener starts accepting connections
-                          while (__state__ == STARTING) delay (1); 
-                          // when constructor returns __state__ could be eighter RUNNING (in case of success) or NOT_RUNNING (in case of error)
-                        }
-                      }
-        
-        ~ftpServer () {
-                          // close listening socket
-                          int listeningSocket;
-                          xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                            listeningSocket = __listeningSocket__;
-                            __listeningSocket__ = -1;
-                          xSemaphoreGive (__ftpServerSemaphore__);
-                          if (listeningSocket > -1) close (listeningSocket);
 
-                          // wait until listener finishes before unloading so that memory variables are still there while the listener is running
-                          while (__state__ != NOT_RUNNING) delay (1);
-                      }
- 
-      private:
+                            while (true) { // endless loop of reading and executing commands
 
-        STATE_TYPE __state__ = NOT_RUNNING;
-
-        char __serverIP__ [46] = "0.0.0.0";
-        int __serverPort__ = 21;
-        bool (* __firewallCallback__) (char *connectingIP) = NULL;
-
-        int __listeningSocket__ = -1;
-
-        static void __listenerTask__ (void *pvParameters) {
-          {
-            // get "this" pointer
-            ftpServer *ths = (ftpServer *) pvParameters;  
-    
-            // start listener
-            ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
-            if (ths->__listeningSocket__ == -1) {
-                #ifdef __DMESG__
-                    dmesgQueue << "[ftpServer] socket error: " << errno << " " << strerror (errno);
-                #endif
-            } else {
-              // make address reusable - so we won't have to wait a few minutes in case server will be restarted
-              int flag = 1;
-              if (setsockopt (ths->__listeningSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag)) == -1) {
-                  #ifdef __DMESG__
-                      dmesgQueue << "[ftpServer] setsockopt error: " << errno << " " << strerror (errno);
-                  #endif
-              } else {
-
-                // remember some information that netstat telnet command would use
-                additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET] = { __LISTENING_SOCKET__, 0, 0, millis (), millis () };
-
-                // bind listening socket to IP address and port     
-                struct sockaddr_in serverAddress; 
-                memset (&serverAddress, 0, sizeof (struct sockaddr_in));
-                serverAddress.sin_family = AF_INET;
-                serverAddress.sin_addr.s_addr = inet_addr (ths->__serverIP__);
-                serverAddress.sin_port = htons (ths->__serverPort__);
-                if (bind (ths->__listeningSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                    #ifdef __DMESG__
-                        dmesgQueue << "[ftpServer] bind error: " << errno << strerror (errno);
-                    #endif
-               } else {
-                 // mark socket as listening socket
-                 if (listen (ths->__listeningSocket__, 4) == -1) {
-                    #ifdef __DMESG__
-                        dmesgQueue << "[ftpServer] listen error: " << errno << strerror (errno);
-                    #endif
-                 } else {
-
-                  // remember some information that netstat telnet command would use
-                  additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET] = { __LISTENING_SOCKET__, 0, 0, millis (), millis () };
-          
-                  // listener is ready for accepting connections
-                  ths->__state__ = RUNNING;
-                  #ifdef __DMESG__
-                      dmesgQueue << "[ftpServer] listener is running on core " << xPortGetCoreID ();
-                  #endif
-                  while (ths->__listeningSocket__ > -1) { // while listening socket is opened
-          
-                      int connectingSocket;
-                      struct sockaddr_in connectingAddress;
-                      socklen_t connectingAddressSize = sizeof (connectingAddress);
-                      // DEBUG: Serial.printf ("[ftpServer] listener taks: stack high-water mark: %lu\n", uxTaskGetStackHighWaterMark (NULL));
-                      connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
-                      if (connectingSocket == -1) {
-                          #ifdef __DMESG__
-                              if (ths->__listeningSocket__ > -1) dmesgQueue << "[ftpServer] accept error: " << errno << " " << strerror (errno);
-                          #endif
-                      } else {
-
-                        // remember some information that netstat telnet command would use
-                        additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-                        additionalSocketInformation [connectingSocket - LWIP_SOCKET_OFFSET] = { __FTP_SERVER_SOCKET__, 0, 0, millis (), millis () };
-                        
-                        // get client's IP address
-                        char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
-                        // get server's IP address
-                        char serverIP [46]; struct sockaddr_in thisAddress = {}; socklen_t len = sizeof (thisAddress);
-                        if (getsockname (connectingSocket, (struct sockaddr *) &thisAddress, &len) != -1) inet_ntoa_r (thisAddress.sin_addr, serverIP, sizeof (serverIP));
-                        // port number could also be obtained if needed: ntohs (thisAddress.sin_port);
-                        if (ths->__firewallCallback__ && !ths->__firewallCallback__ (clientIP)) {
-                            #ifdef __DMESG__
-                                dmesgQueue << "[ftpServer] firewall rejected connection from " << clientIP;
-                            #endif
-                            close (connectingSocket);
-                        } else {
-                          // make the socket non-blocking so that we can detect time-out
-                          if (fcntl (connectingSocket, F_SETFL, O_NONBLOCK) == -1) {
-                              #ifdef __DMESG__
-                                  dmesgQueue << "[ftpServer] fcntl error: " << errno << " " << strerror (errno);
-                              #endif
-                              close (connectingSocket);
-                          } else {
-                                // create ftpControlConnection instence that will handle the connection, then we can lose reference to it - ftpControlConnection will handle the rest
-                                ftpControlConnection *fcn = new (std::nothrow) ftpControlConnection (connectingSocket, clientIP, serverIP);
-                                if (!fcn) {
-                                  // dmesg ("[ftpServer] new ftpControlConnection error");
-                                  sendAll (connectingSocket, ftpServiceUnavailable, strlen (ftpServiceUnavailable), FTP_CONTROL_CONNECTION_TIME_OUT);
-                                  close (connectingSocket); // normally ftpControlConnection would do this but if it is not created we have to do it here
-                                } else {
-                                  if (fcn->state () != ftpControlConnection::RUNNING) {
-                                    sendAll (connectingSocket, ftpServiceUnavailable, FTP_CONTROL_CONNECTION_TIME_OUT);
-                                    delete (fcn); // normally ftpControlConnection would do this but if it is not running we have to do it here
-                                  }
+                                // 1. read the request
+                                switch (recvString (__cmdLine__, FTP_CMDLINE_BUFFER_SIZE, "\n")) {
+                                    case -1:                      // error
+                                    case 0:                       // connection closed by peer
+                                                                  return;
+                                    case FTP_CMDLINE_BUFFER_SIZE: // buffer full but end of request did not arrive           
+                                                                  #ifdef __DMESG__
+                                                                      dmesgQueue << (const char *) "[ftpCtrlConn] buffer too small";
+                                                                  #endif
+                                                                  Serial.println ((const char *) "[ftpCtrlConn] buffer too small");
+                                                                  return;
+                                    default:                      
+                                    break; // continue
                                 }
-                                                               
-                          } // fcntl
-                        } // firewall
-                      } // accept
-                      
-                  } // while accepting connections
-                  #ifdef __DMESG__
-                      dmesgQueue << "[ftpServer] stopped";
-                  #endif
-          
-                 } // listen
-               } // bind
-              } // setsockopt
-              int listeningSocket;
-              xSemaphoreTake (__ftpServerSemaphore__, portMAX_DELAY);
-                listeningSocket = ths->__listeningSocket__;
-                ths->__listeningSocket__ = -1;
-              xSemaphoreGive (__ftpServerSemaphore__);
-              if (listeningSocket > -1) close (listeningSocket);
-            } // socket
-            ths->__state__ = NOT_RUNNING;
-          }
-          // stop the listening thread (task)
-          vTaskDelete (NULL); // it is listener's responsibility to close itself          
-        }
-          
-    };
+
+                                // 2. parse command line
+                                int argc = 0;
+                                char *argv [FTP_SESSION_MAX_ARGC];
     
+                                char *q = __cmdLine__ - 1;
+                                while (true) {
+                                    char *p = q + 1; 
+                                    while (*p && *p <= ' ') 
+                                        p++;
+                                    if (*p) { // p points to the beginning of an argument
+                                        bool quotation = false;
+                                        if (*p == '\"') { 
+                                            quotation = true; 
+                                            p++; 
+                                        }
+                                        argv [argc++] = p;
+                                        q = p; 
+                                        while (*q && (*q > ' ' || quotation)) 
+                                            if (*q == '\"') 
+                                                break; 
+                                            else 
+                                                q++; // q points after the end of an argument 
+                                        if (*q) 
+                                            *q = 0; 
+                                        else 
+                                            break;
+                                    } else { 
+                                        break;
+                                    }
+                                    if (argc == FTP_SESSION_MAX_ARGC) 
+                                        break;
+                                }
+
+                                // 3. process commandLine
+                                if (argc) {
+                                    cstring s = __internalCommandHandler__ (argc, argv);
+                                    // 4. send the reply back to the client
+                                    if (s != "") {
+                                        // DEBUG: cout << s;
+                                        if (sendString (s) <= 0)
+                                            return;
+                                    }
+
+                                    if (strstr ((char *) s, "221") == (char *) s) // 221 closing control connection
+                                        return;
+                                }
+
+
+                                // check how much stack did we use
+                                UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark (NULL);
+                                if (__lastHighWaterMark__ > highWaterMark) {
+                                    #ifdef __DMESG__
+                                        dmesgQueue << (const char *) "[ftpCtrlConn] new FTP connection stack high water mark reached: " << highWaterMark << (const char *) " not used bytes";
+                                    #endif
+                                    // DEBUG: 
+                                    Serial.print ((const char *) "[ftpCtrlConn] new FTP connection stack high water mark reached: "); Serial.print (highWaterMark); Serial.println ((const char *) " not used bytes");
+                                    __lastHighWaterMark__ = highWaterMark;
+                                }
+
+                            } // endless loop of reading and executing commands
+                    endConnection:
+                            ;
+                            #ifdef __DMESG__
+                                dmesgQueue << "[ftpCtrlConn] user logged out: " << __userName__;
+                            #endif
+
+                        // ----- this is where FTP connection ends, the socket will be closed upon return -----
+
+                    }
+
+                    cstring __internalCommandHandler__ (int argc, char *argv []) {
+                        // DEBUG: for (int i = 0; i < argc; i++) Serial.printf ("   argv [%i] = '%s'\n", i, argv [i]);
+
+                        #define ftpArgv0Is(X) (argc > 0 && !stricmp (argv [0], X))
+                        #define ftpArgv1Is(X) (argc > 1 && !stricmp (argv [1], X))
+                        #define ftpArgv2Is(X) (argc > 2 && !stricmp (argv [2], X))
+
+                             if (ftpArgv0Is ("QUIT"))                                                    return "221 closing connection\r\n";
+
+                        else if (ftpArgv0Is ("OPTS"))                                                    if (argc == 3 && ftpArgv1Is ("UTF8") && ftpArgv2Is ("ON")) return "200 UTF8 enabled\r\n"; // by default, we don't have to do anything, just report to the client that it is ok to use UTF-8
+                                                                                                         else                                                       return "502 OPTS arguments not supported\r\n";
+
+                        else if (ftpArgv0Is ("USER"))                                                    return __USER__ (argv [1]); // not entering user name may be OK for anonymous login
+                        else if (ftpArgv0Is ("PASS"))                                                    return __PASS__ (argv [1]); // not entering password may be OK for anonymous login
+                        else if (ftpArgv0Is ("PWD") || ftpArgv0Is ("XPWD"))                              return __XPWD__ ();
+
+                        else if (ftpArgv0Is ("TYPE"))                                                    return "200 ok\r\n"; // just say OK to whatever type it is
+
+                        else if (ftpArgv0Is ("NOOP"))                                                    return "200 ok\r\n"; // just say OK to whatever type it is
+
+                        else if (ftpArgv0Is ("SYST"))                                                    return "215 UNIX Type: L8\r\n"; // just say this is UNIX OS
+
+                        else if (ftpArgv0Is ("FEAT"))                                                    return "211-Extensions supported:\r\n UTF8\r\n211 end\r\n";
+
+                        else if (ftpArgv0Is ("PORT"))                                                    return __PORT__ (argv [1]); // IPv4
+                        else if (ftpArgv0Is ("EPRT"))                                                    return __EPRT__ (argv [1]); // extended for IPv6 (and IPv4)
+                        else if (ftpArgv0Is ("PASV"))                                                    return __PASV__ ();         // IPv4
+                        else if (ftpArgv0Is ("EPSV"))                                                    return __EPSV__ ();         // extended for IPv6 (and IPv4)
+
+                        // all the following commands take exactly 1 argument which is a file name that can also include spaces - reconstruct the spaces that have been parsed before
+                        if (argc > 1) {
+                            for (char *p = argv [1]; p < argv [argc - 1]; p++)
+                                if (!*p)
+                                    *p = ' ';
+                        } else {
+                            argv [1] = (char *) ""; 
+                        }
+
+                             if (ftpArgv0Is ("LIST") || ftpArgv0Is ("NLST"))                             return __NLST__ (argc > 1 ? argv [1] : __workingDir__);
+                        else if (ftpArgv0Is ("SIZE"))                                                    return __SIZE__ (argv [1]);
+                        else if (ftpArgv0Is ("XMKD") || ftpArgv0Is ("MKD"))                              return __XMKD__ (argv [1]);
+                        else if (ftpArgv0Is ("XRMD") || ftpArgv0Is ("RMD") || ftpArgv0Is ("DELE"))       return __XRMD__ (argv [1]);
+                        else if (ftpArgv0Is ("CWD"))                                                     return __CWD__  (argv [1]);
+                        else if (ftpArgv0Is ("RNFR"))                                                    return __RNFR__ (argv [1]);
+                        else if (ftpArgv0Is ("RNTO"))                                                    return __RNTO__ (argv [1]);
+                        else if (ftpArgv0Is ("RETR"))                                                    return __RETR__ (argv [1]);
+                        else if (ftpArgv0Is ("STOR"))                                                    return __STOR__ (argv [1]);
+
+                        return cstring ("502 command ") + argv [0] + " not implemented\r\n";
+                    }
+
+
+                    bool __userHasRightToAccessFile__ (char *fullPath) { return strstr (fullPath, __homeDir__) == fullPath; }
+                    bool __userHasRightToAccessDirectory__ (char *fullPath) { return __userHasRightToAccessFile__ (cstring (fullPath) + "/"); }
+
+
+                    cstring __USER__ (char *userName) { // save user name and require password
+                        #if USER_MANAGEMENT == NO_USER_MANAGEMENT
+                            strcpy (__userName__, "root");
+                            return "331 enter password\r\n";
+                        #else
+                            if (strlen (userName) < sizeof (__userName__)) strcpy (__userName__, userName);
+                            return "331 enter password\r\n";
+                        #endif
+                    }
+
+                    cstring __PASS__ (char *password) { // login
+                        if (!userManagement.checkUserNameAndPassword (__userName__, password)) { 
+                            #ifdef __DMESG__
+                                dmesgQueue << "[ftpCtrlConn] user failed login attempt: " << __userName__;
+                            #endif
+                            delay (100);
+                            return "530 user name or password incorrect\r\n"; 
+                        }
+                        // prepare session defaults
+                        userManagement.getHomeDirectory (__homeDir__, sizeof (__homeDir__), __userName__);
+                        if (*__homeDir__) { // if logged in
+                            strcpy (__workingDir__, __homeDir__);
+
+                            // remove extra /
+                            cstring s (__homeDir__);
+                            if (s [s.length () - 1] == '/') s [s.length () - 1] = 0; 
+                            if (!s [0]) s = "/"; 
+
+                            #ifdef __DMESG__
+                                dmesgQueue << "[ftpCtrlConn] user logged in: " << __userName__;
+                            #endif
+                            return cstring ("230 logged on, your home directory is \"") + s + "\"\r\n";
+                        } else { 
+                            #ifdef __DMESG__
+                                dmesgQueue << "[ftpCtrlConn] user does not have a home directory: " << __userName__;
+                            #endif
+                            return "530 user does not have a home directory\r\n"; 
+                        }
+                    }
+
+                    cstring __CWD__ (char *directoryName) { 
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
+                        cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+                        if (fp == "" || !fileSystem.isDirectory (fp))                                   return "501 invalid directory name\r\n";
+                        if (!__userHasRightToAccessDirectory__ (fp))                                    return "550 access denyed\r\n";
+
+                        // shoud be OK but check anyway:
+                        if (fp.length () < sizeof (__workingDir__)) strcpy (__workingDir__, fp);        return cstring ("250 your working directory is ") + fp + "\r\n";
+                    }
+
+                    cstring __XPWD__ () { 
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
+
+                        // remove extra /
+                        cstring s (__workingDir__);
+                        if (s [s.length () - 1] == '/') s [s.length () - 1] = 0; 
+                        if (!s [0]) s = "/"; 
+                                                                                                        return cstring ("257 \"") + s + "\"\r\n";
+                    }
+
+                    const char *__XMKD__ (char *directoryName) { 
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
+                        cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+                        if (fp == "")                                                                   return "501 invalid directory name\r\n"; 
+                        if (!__userHasRightToAccessDirectory__ (fp))                                    return "550 access denyed\r\n"; 
+                
+                        if (fileSystem.makeDirectory (fp))                                              return "257 directory created\r\n";
+                                                                                                        return "550 could not create directory\r\n"; 
+                    }
+
+                    const char *__XRMD__ (char *fileOrDirName) { 
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
+                        cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
+                        if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
+                        if (!__userHasRightToAccessDirectory__ (fp))                                    return "550 access denyed\r\n"; 
+
+                        if (fileSystem.isFile (fp)) {
+                            if (fileSystem.deleteFile (fp))                                             return "250 file deleted\r\n";
+                                                                                                        return "452 could not delete file\r\n";
+                        } else {
+                            if (fp == __homeDir__)                                                      return "550 you can't remove your home directory\r\n";
+                            if (fp == __workingDir__)                                                   return "550 you can't remove your working directory\r\n";
+                            if (fileSystem.removeDirectory (fp))                                        return "250 directory removed\r\n";
+                                                                                                        return "452 could not remove directory\r\n";
+                        }
+                    }
+
+                    cstring __SIZE__ (char *fileName) { 
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n";
+                        cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
+                        if (fp == "" || !fileSystem.isFile (fp))                                        return "501 invalid file name\r\n";
+                        if (!__userHasRightToAccessFile__ (fp))                                         return "550 access denyed\r\n";
+
+                        unsigned long fSize = 0;
+                        File f = fileSystem.open (fp, "r");
+                        if (f) { fSize = f.size (); f.close (); }
+                                                                                                        return cstring ("213 ") + cstring (fSize) + "\r\n";
+                    }
+
+
+                    tcpClient_t *__activeDataClient__ = NULL;
+                    tcpServer_t *__passiveDataServer__ = NULL;
+                    tcpConnection_t *__dataConnection__ = NULL;
+
+                    void __closeDataConnection__ () {
+                        if (__activeDataClient__) {
+                            delete __activeDataClient__;
+                            __dataConnection__ = __activeDataClient__ = NULL;
+                        } else {
+                            if (__dataConnection__) {
+                                delete __dataConnection__;
+                                __dataConnection__= NULL;
+                            }
+                            if (__passiveDataServer__) {
+                                delete __passiveDataServer__;
+                                __passiveDataServer__ = NULL;
+                            }
+                        }
+                    }
+
+
+                    // cycle through set of port numbers when FTP server is working in pasive mode
+                    int __pasiveDataPort__ () {
+                        static int __lastPasiveDataPort__ = 1024;                                                   // change pasive data port range if needed
+                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                            int pasiveDataPort = __lastPasiveDataPort__ = (((__lastPasiveDataPort__ + 1) % 16) + 1024); // change pasive data port range if needed
+                        xSemaphoreGive (__tcpServerSemaphore__);
+                        return pasiveDataPort;
+                    }
+
+
+                    const char *__PORT__ (char *dataConnectionInfo) { // IPv4 PORT command like PORT 10,18,1,26,239,17
+                        if (!*__homeDir__)
+                            return "530 not logged in\r\n";
+                      
+                        int ip1, ip2, ip3, ip4, p1, p2; // get IP and port that client used to set up data connection server
+                        char activeServerIP [INET6_ADDRSTRLEN] = ""; // FTP client's IP, INET_ADDRSTRLEN should do for IPv4
+                        int activeServerPort; // FTP client's port
+                        if (6 == sscanf (dataConnectionInfo, "%i,%i,%i,%i,%i,%i", &ip1, &ip2, &ip3, &ip4, &p1, &p2)) {
+                            sprintf (activeServerIP, "%i.%i.%i.%i", ip1, ip2, ip3, ip4); 
+                            activeServerPort = p1 << 8 | p2;
+
+                            // connect to the FTP client that acts as server now
+                            __activeDataClient__ = new (std::nothrow) tcpClient_t (activeServerIP, activeServerPort, FTP_DATA_CONNECTION_TIME_OUT);
+                            if (__activeDataClient__ && !(__activeDataClient__->errText ())) {
+                                __dataConnection__ = __activeDataClient__;
+                                return "200 port ok\r\n";
+                            }
+                        }
+                        return "425 can't open active data connection\r\n";
+                    }
+
+                    const char *__EPRT__ (char *dataConnectionInfo) { // extended IPv6 (and IPv4) EPRT command like EPRT |2|fe80::3d98:8793:4cf0:f618|61166|
+                        if (!*__homeDir__)
+                            return "530 not logged in\r\n";
+                      
+                        char activeServerIP [INET6_ADDRSTRLEN]; // FTP client's IP
+                        int activeServerPort; // FTP client's port
+
+                        if (2 == sscanf (dataConnectionInfo, "|%*d|%39[^|]|%d|", activeServerIP, &activeServerPort)) {
+
+                            // connect to the FTP client that act as server now
+                            __activeDataClient__ = new (std::nothrow) tcpClient_t (activeServerIP, activeServerPort, FTP_DATA_CONNECTION_TIME_OUT);
+                            if (__activeDataClient__ && !(__activeDataClient__->errText ())) {
+
+                                __dataConnection__ = __activeDataClient__;
+
+                                return "200 port ok\r\n";
+                            }
+                        }
+                        return "425 can't open active data connection\r\n";
+                    }
+
+                    const char *__PASV__ () { // IPv4 PASV command
+                        __closeDataConnection__ (); // just in case it is still opened
+
+                        if (!*__homeDir__)                                                                
+                            return "530 not logged in\r\n";
+
+                        int ip1, ip2, ip3, ip4, p1, p2; // get FTP server IP and next free port
+                        if (4 != sscanf (getServerIP (), "%i.%i.%i.%i", &ip1, &ip2, &ip3, &ip4)) { // should always succeed
+                            #ifdef __DMESG__
+                                dmesgQueue << "[ftpCtrlConn] can't parse server IP: " << getServerIP ();
+                            #endif
+                            return "425 can't open passive data connection\r\n";
+                        }
+
+                        // get next free port
+                        int pasiveDataPort = __pasiveDataPort__ ();
+                        p2 = pasiveDataPort % 256;
+                        p1 = pasiveDataPort / 256;
+
+                        // set up a new server for data connection and send connection information to the FTP client so it can connect to it
+                        __passiveDataServer__ = new tcpServer_t (pasiveDataPort, NULL, FTP_DATA_CONNECTION_TIME_OUT); // run tcpServer in singl-task mode
+                        if (__passiveDataServer__ && *__passiveDataServer__) {
+                            // notify FTP client about data connection IP and port
+                            cstring s;
+                            sprintf  (s, "227 entering passive mode (%i,%i,%i,%i,%i,%i)\r\n", ip1, ip2, ip3, ip4, p1, p2);
+                            if (sendString ((char *) s) <= 0)
+                                return "";  // if control connection is closed
+                            // DEBUG: cout << s;
+                            __dataConnection__ = __passiveDataServer__->accept ();
+                            if (__dataConnection__->setTimeout (FTP_DATA_CONNECTION_TIME_OUT) == -1) {
+                                delete __dataConnection__;
+                                delete __passiveDataServer__;
+                                __dataConnection__ = NULL;
+                                __passiveDataServer__ = NULL;
+                                return "425 can't set passive data connection timeout\r\n";
+                            }
+                            return "";
+                        }
+                        return "425 can't open passive data connection\r\n";
+                    }
+
+                    const char *__EPSV__ () { // extended IPv6 (and IPv4) EPSV command
+                        __closeDataConnection__ (); // just in case it is still opened
+
+                        if (!*__homeDir__)                                     
+                            return "530 not logged in\r\n";
+
+
+                        // get next free port
+                        int pasiveDataPort = __pasiveDataPort__ ();
+
+                        // set up a new server for data connection and send connection information to the FTP client so it can connect to it
+                        __passiveDataServer__ = new tcpServer_t (pasiveDataPort, NULL, FTP_DATA_CONNECTION_TIME_OUT); // run tcpServer in singl-task mode
+                        if (__passiveDataServer__ && *__passiveDataServer__) {
+                            // notify FTP client about data connection IP and port
+                            cstring s;
+                            sprintf  (s, "229 entering passive mode (|||%i|)\r\n", pasiveDataPort);
+                            if (sendString ((char *) s) <= 0)
+                                return "";  // if control connection is closed
+                            // DEBUG: cout << s;
+                            __dataConnection__ = __passiveDataServer__->accept ();
+                            if (__dataConnection__->setTimeout (FTP_DATA_CONNECTION_TIME_OUT) == -1) {
+                                delete __dataConnection__;
+                                delete __passiveDataServer__;
+                                __dataConnection__ = NULL;
+                                __passiveDataServer__ = NULL;
+                                return "425 can't set passive data connection timeout\r\n";
+                            }
+                            return "";
+                        }
+                        return "425 can't open passive data connection\r\n";
+                    }
+
+                    // NLST is preceeded by PORT or PASV so data connection should already be opened
+                    const char *__NLST__ (char *directoryName) {         
+                        const char *retVal = "";
+                        if (!*__homeDir__) {
+                            retVal = "530 not logged in\r\n";
+                        } else {
+                            if (!fileSystem.mounted ()) { 
+                                retVal = "421 file system not mounted\r\n"; 
+                            } else {
+                                cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
+                                if (fp == "" || !fileSystem.isDirectory (fp)) { 
+                                    retVal = "501 invalid directory name\r\n";                                   
+                                } else {
+                                    if (!__userHasRightToAccessDirectory__ (fp)) {
+                                        retVal = "550 access denyed\r\n";
+                                    } else {
+                                        // notify FTP client about data transfer
+                                        if (sendString ((char *) "150 starting data transfer\r\n") > 0) { 
+                                            xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                                                File d = fileSystem.open (fp); 
+                                                if (d) {
+                                                    for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
+                                                        cstring fullFileName = fp;
+                                                        if (fullFileName [fullFileName.length () - 1] != '/') fullFileName += '/'; fullFileName += f.name ();
+                                                        if (__dataConnection__->sendString (fileSystem.fileInformation (fullFileName) + "\r\n") <= 0) {
+                                                            retVal = "426 data transfer error\r\n";
+                                                            break;
+                                                        }
+                                                    }
+                                                    d.close ();
+                                                }
+                                            xSemaphoreGive (__tcpServerSemaphore__);
+
+                                            if (!*retVal)
+                                                sendString ((char *) "226 data transfer complete\r\n");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        __closeDataConnection__ ();
+                        return retVal;
+                    }
+
+
+                    char __rnfrPath__ [FILE_PATH_MAX_LENGTH + 1];
+                    char __rnfrIs__;
+
+                    const char *__RNFR__ (char *fileOrDirName) { 
+                        __rnfrIs__ = ' ';
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
+                        cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
+                        if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
+                        if (fileSystem.isDirectory (fp)) {
+                            if (!__userHasRightToAccessDirectory__ (fp))                                return "550 access denyed\r\n"; 
+                            __rnfrIs__ = 'd';
+                        } else if (fileSystem.isFile (fp)) {
+                            if (!__userHasRightToAccessFile__ (fp))                                     return "550 access denyed\r\n"; 
+                            __rnfrIs__ = 'f';
+                        } else {
+                                                                                                        return "501 invalid file or directory name\r\n"; 
+                        }
+
+                        // save temporal result
+                        strncpy (__rnfrPath__, fp, FILE_PATH_MAX_LENGTH);
+                        __rnfrPath__ [FILE_PATH_MAX_LENGTH] = 0;
+                                                                                                        return "350 need more information\r\n"; // RNTO command will follow
+                    }
+
+                    const char *__RNTO__ (char *fileOrDirName) { 
+                        if (!*__homeDir__)                                                              return "530 not logged in\r\n";
+                        if (!fileSystem.mounted ())                                                     return "421 file system not mounted\r\n"; 
+                        cstring fp = fileSystem.makeFullPath (fileOrDirName, __workingDir__);
+                        if (fp == "")                                                                   return "501 invalid file or directory name\r\n"; 
+                        if (__rnfrIs__ == 'd') {
+                            if (!__userHasRightToAccessDirectory__ (fp))                                return "550 access denyed\r\n"; 
+                        } else if (__rnfrIs__ == 'f') {
+                            if (!__userHasRightToAccessFile__ (fp))                                     return "550 access denyed\r\n"; 
+                        } else {
+                                                                                                        return "501 invalid file or directory name\r\n"; 
+                        }
+
+                        // rename file from temporal result
+                        if (fileSystem.rename (__rnfrPath__, fp))                                       return "250 renamed\r\n";
+                                                                                                        return "553 unable to rename\r\n";  
+                    }
+
+                    const char * __RETR__ (char *fileName) { 
+                        const char *retVal = "";
+                        if (!*__homeDir__) {
+                            retVal = "530 not logged in\r\n";
+                        } else {
+                            if (!fileSystem.mounted ()) {
+                                retVal = "421 file system not mounted\r\n";
+                            } else {
+                                cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
+                                if (fp == "" || fileSystem.isDirectory (fp)) { 
+                                    retVal = "501 invalid file name\r\n";                                   
+                                } else {
+                                    if (!__userHasRightToAccessDirectory__ (fp)) {
+                                        retVal = "550 access denyed\r\n";
+                                    } else {
+
+                                        // notify FTP client about data transfer
+                                        if (sendString ((char *) "150 starting data transfer\r\n") > 0) { 
+
+                                            xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                                                int bytesReadTotal = 0; int bytesSentTotal = 0;
+                                                File f = fileSystem.open (fp, "r");
+                                                if (f) {
+                                                    // read data from file and transfer it through data connection
+                                                    char buff [1024]; // MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1024 seems a good trade-off
+                                                    do {
+                                                        int bytesReadThisTime = f.read ((uint8_t *) buff, sizeof (buff));
+                                                        if (bytesReadThisTime == 0)
+                                                            break; // finished, success
+
+                                                        __diskTraffic__.bytesRead += bytesReadThisTime;
+
+                                                        bytesReadTotal += bytesReadThisTime;
+                                                        int bytesSentThisTime = __dataConnection__->sendBlock (buff, bytesReadThisTime);
+                                                        if (bytesSentThisTime != bytesReadThisTime) {
+                                                            retVal = "426 data transfer error\r\n";
+                                                            break;
+                                                        }
+                                                        bytesSentTotal += bytesSentThisTime;
+                                                    } while (true);
+                                                    f.close ();
+                                                } else {
+                                                    retVal = "450 can not open the file\r\n";
+                                                }
+                                            xSemaphoreGive (__tcpServerSemaphore__);
+
+                                            if (!*retVal)
+                                                sendString ((char *) "226 data transfer complete\r\n");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        __closeDataConnection__ ();
+                        return retVal;                      
+                    }
+
+                    const char *__STOR__ (char *fileName) { 
+                        const char *retVal = "";
+                        if (!*__homeDir__) {
+                            retVal = "530 not logged in\r\n";
+                        } else {
+                            if (!fileSystem.mounted ()) {
+                                retVal = "421 file system not mounted\r\n";
+                            } else {
+                                cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
+                                if (fp == "" || fileSystem.isDirectory (fp)) { 
+                                    retVal = "501 invalid file name\r\n";                                   
+                                } else {
+                                    if (!__userHasRightToAccessDirectory__ (fp)) {
+                                        retVal = "550 access denyed\r\n";
+                                    } else {
+
+                                        // notify FTP client about data transfer
+                                        if (sendString ((char *) "150 starting data transfer\r\n") > 0) { 
+
+                                            xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                                                int bytesRecvTotal = 0; int bytesWrittenTotal = 0;
+                                                File f = fileSystem.open (fp, "w");
+                                                if (f) {
+                                                    // read data from data connection and store it to the file
+                                                    char buff [1024]; // MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1024 seems a good trade-off
+                                                    do {
+                                                        int bytesRecvThisTime = __dataConnection__->recv (buff, sizeof (buff));
+                                                        if (bytesRecvThisTime < 0)  { 
+                                                            retVal = "426 data transfer error\r\n";
+                                                            break;
+                                                        }
+                                                        if (bytesRecvThisTime == 0)
+                                                            break; // finished, success
+                                                        bytesRecvTotal += bytesRecvThisTime;
+                                                        int bytesWrittenThisTime = f.write ((uint8_t *) buff, bytesRecvThisTime);
+                                                        bytesWrittenTotal += bytesWrittenThisTime;
+                                                        if (bytesWrittenThisTime != bytesRecvThisTime) {
+                                                            retVal = "450 can not write the file\r\n";
+                                                            break;
+                                                        } 
+
+                                                        __diskTraffic__.bytesWritten += bytesWrittenThisTime;
+
+                                                    } while (true);
+                                                    f.close ();
+                                                } else {
+                                                    retVal = "450 can not open the file\r\n";
+                                                }
+                                            xSemaphoreGive (__tcpServerSemaphore__);
+
+                                            if (!*retVal)
+                                                sendString ((char *) "226 data transfer complete\r\n");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        __closeDataConnection__ ();
+                        return retVal;
+                    }
+
+            };
+
+
+        public:
+
+            ftpServer_t (int serverPort = 21,                                                                              // FTP server port
+                         bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL                                  // a reference to callback function that will be celled when new connection arrives 
+                        ) : tcpServer_t (serverPort, firewallCallback) {
+
+                #ifdef USE_mDNS
+                    // register mDNS servise
+                    MDNS.addService ("ftp", "tcp", serverPort);
+                    __ftpPort__ = serverPort; // remember FTP port so __NETWK__ onEvent handler would call MDNS.addService again when connected
+                #endif
+            }
+
+            tcpConnection_t *__createConnectionInstance__ (int connectionSocket, char *clientIP, char *serverIP) override {
+
+                ftpControlConnection_t *connection = new (std::nothrow) ftpControlConnection_t (connectionSocket, clientIP, serverIP);
+
+                if (!connection) {
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[ftpServer] can't create connection instance, out of memory?";
+                    #endif
+                    send (connectionSocket, ftpServiceUnavailableReply, strlen (ftpServiceUnavailableReply), 0);
+                    close (connectionSocket); // normally tcpConnection would do this but if it is not created we have to do it here since the connection was not created
+                    return NULL;
+                } 
+
+                if (connection->setTimeout (FTP_CONTROL_CONNECTION_TIME_OUT) == -1) {                 
+                    #ifdef __DMESG__
+                        dmesgQueue << "[ftpCtrlConn] setsockopt error: " << errno << strerror (errno);
+                    #endif
+                    connection->sendString (ftpServiceUnavailableReply);
+                    delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
+                    return NULL;
+                } 
+
+                if (pdPASS != xTaskCreate ([] (void *thisInstance) {
+                                                                        ftpControlConnection_t* ths = (ftpControlConnection_t *) thisInstance; // get "this" pointer
+
+                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                            __runningTcpConnections__ ++;
+                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+
+                                                                        ths->__runConnectionTask__ ();
+
+                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                            __runningTcpConnections__ --;
+                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+
+                                                                        delete ths;
+                                                                        vTaskDelete (NULL); // it is connection's responsibility to close itself
+                                                                    }
+                                            , "ftpCtrlConn", FTP_CONTROL_CONNECTION_STACK_SIZE, connection, tskNORMAL_PRIORITY, NULL)) {
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[ftpServer] can't create connection task, out of memory?";
+                    #endif
+                    connection->sendString (ftpServiceUnavailableReply);
+                    delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
+                    return NULL;
+                }
+
+                return NULL; // success, but don't return connection, since it may already been closed and destructed by now
+            }
+
+    };
+
+    // declare static member outside of class definition
+    UBaseType_t ftpServer_t::ftpControlConnection_t::__lastHighWaterMark__ = FTP_CONTROL_CONNECTION_STACK_SIZE;
+
 #endif

@@ -15,7 +15,7 @@
             - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
             - https://www.cyberciti.biz/faq/understanding-etcshadow-file/          
 
-    Jul 18, 2024, Bojan Jurca
+    February 6, 2025, Bojan Jurca
 
    Nomenclature used in userManagement.hpp - for easier understaning of the code:
 
@@ -56,9 +56,9 @@
         #define USER_MANAGEMENT NO_USER_MANAGEMENT // by default
     #endif
 
-    #define USER_PASSWORD_MAX_LENGTH 64   // the number of characters of longest user name or password 
-    #define MAX_ETC_PASSWD_SIZE 2 * 1024  // 2 KB will usually do - some functions read the whole /etc/passwd file in the memory 
-    #define MAX_ETC_SHADOW_SIZE 2 * 1024  // 2 KB will usually do - some functions read the whole /etc/shadow file in the memory
+    #define USER_PASSWORD_MAX_LENGTH 64         // the number of characters of longest user name or password 
+    #define MAX_ETC_PASSWD_SIZE 1 * 1024 + 256  // 1 KB will usually do - some functions read the whole /etc/passwd file into the memory 
+    #define MAX_ETC_SHADOW_SIZE 1 * 1024 + 256  // 1 KB will usually do - some functions read the whole /etc/shadow file into the memory
 
     #ifndef DEFAULT_ROOT_PASSWORD
         #ifdef SHOW_COMPILE_TIME_INFORMATION
@@ -75,7 +75,7 @@
     #ifndef DEFAULT_USER_PASSWORD
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "DEFAULT_USER_PASSWORD was not defined previously, #defining the default changeimmediatelly in userManagement.hpp"
-        #endif    
+        #endif
         #define DEFAULT_USER_PASSWORD "changeimmediatelly"
     #endif
 
@@ -100,8 +100,8 @@
                                                                                             return false;
                                                                                         }
                 bool passwd (char *userName, char *newPassword, bool __ignoreIfUserDoesntExist__, bool __dontWriteNewPassword__) { return false; }                                                                                        
-                char *userAdd (char *userName, char *userId, char *userHomeDirectory, bool __ignoreIfUserExists__, bool __dontWriteNewUser__) { return (char *) "Not possible."; } 
-                char *userDel (char *userName) { return (char *) "Not possible."; }
+                const char *userAdd (char *userName, char *userId, char *userHomeDirectory, bool __ignoreIfUserExists__, bool __dontWriteNewUser__) { return (const char *) "Not possible"; } 
+                const char *userDel (char *userName) { return (const char *) "Not possible"; }
 
         };                                                                                    
 
@@ -125,8 +125,8 @@
                                                                                             return false;
                                                                                         }
                 bool passwd (char *userName, char *newPassword, bool __ignoreIfUserDoesntExist__, bool __dontWriteNewPassword__) { return false; }
-                char *userAdd (char *userName, char *userId, char *userHomeDirectory, bool __ignoreIfUserExists__, bool __dontWriteNewUser__) { return (char *) "Not possible."; } 
-                char *userDel (char *userName) { return (char *) "Not possible."; } 
+                const char *userAdd (char *userName, char *userId, char *userHomeDirectory, bool __ignoreIfUserExists__, bool __dontWriteNewUser__) { return (const char *) "Not possible"; } 
+                const char *userDel (char *userName) { return (const char *) "Not possible"; } 
                 
         };                                                                                    
 
@@ -167,7 +167,7 @@
                                 created = (f.printf (defaultContent) == strlen (defaultContent));                                
                                 f.close ();
 
-                                diskTrafficInformation.bytesWritten += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                __diskTraffic__.bytesWritten += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
                             cout << (created ? "created\n" : "error\n");
@@ -187,7 +187,7 @@
                                 created = f.printf (defaultPasswords) == strlen (defaultPasswords);
                                 f.close ();
 
-                                diskTrafficInformation.bytesWritten += strlen (defaultPasswords); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                __diskTraffic__.bytesWritten += strlen (defaultPasswords); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
                             cout << (created ? "created\n" : "error\n");
@@ -210,7 +210,7 @@
                         while (f.available ()) {
                             char c = f.read ();
 
-                            diskTrafficInformation.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            __diskTraffic__.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             if (c >= ' ' && i < sizeof (line) - 1) line [i++] = c; // append line 
                             else {
@@ -240,7 +240,7 @@
                         while (f.available ()) {
                             char c = f.read ();
 
-                            diskTrafficInformation.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            __diskTraffic__.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             if (c >= ' ' && i < sizeof (line) - 1) line [i++] = c; 
                             else {
@@ -278,7 +278,6 @@
                     // initial checking
                     if (strlen (newPassword) > USER_PASSWORD_MAX_LENGTH) return false;   
                     
-
                     // read /etc/shadow
                     char buffer [MAX_ETC_SHADOW_SIZE + 3]; buffer [0] = '\n'; 
                     int i = 1;
@@ -287,7 +286,10 @@
                         while (f.available () && i <= MAX_ETC_SHADOW_SIZE) if ((buffer [i] = f.read ()) != '\r') i++; buffer [i++] = '\n'; buffer [i] = 0; // read the whole file in C string ignoring \r
                         if (f.available ()) { f.close (); return false; } // /etc/shadow too large
                         f.close ();
-                    } else return false; // can't read /etc/shadow
+                    } else { 
+                        return false; // can't read /etc/shadow
+                    }
+
                     // find user's record in the buffer
                     char srchStr [USER_PASSWORD_MAX_LENGTH + 6];
                     sprintf (srchStr, "\n%s:$5$", userName); // we get something like \nroot:$5$
@@ -300,122 +302,152 @@
                         char *lineBeginning = buffer + 1;
                         char *lineEnd;
                         while ((lineEnd = strstr (lineBeginning, "\n"))) {
-                          *lineEnd = 0;
-                          if (lineBeginning != u + 1 && lineEnd - lineBeginning > 13) { // skip user's record and empty (<= 13) records
-                              if (f.printf ("%s\r\n", lineBeginning) < strlen (lineBeginning) + 2) { 
-                                  close (f); 
-                                  return false; // can't write /etc/shadow - this is bad because we have already corrupted it :/
-                              } 
+                            *lineEnd = 0;
+                            if (lineBeginning != u + 1 && lineEnd - lineBeginning > 13) { // skip user's record and empty (<= 13) records
+                                if (f.printf ("%s\r\n", lineBeginning) < strlen (lineBeginning) + 2) { 
+                                    close (f); 
+                                    return false; // can't write /etc/shadow - this is bad because we have already corrupted it :/
+                                } 
 
-                              diskTrafficInformation.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                __diskTraffic__.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
-                          }
-                          lineBeginning = lineEnd + 1;
-                      }
-                      if (!__dontWriteNewPassword__) {
-                          // add user's record
-                          strcpy (buffer, srchStr + 1);
-                          __sha256__ (buffer + strlen (buffer), sizeof (buffer) - strlen (buffer), newPassword);
-                          if (f.printf ("%s:::::::\r\n", buffer) < strlen ("%s:::::::\r\n")) { 
-                              close (f); 
-                              return false; // can't write /etc/shadow - this is bad because we have already corrupted it :/
-                          }    
-                      }     
-                      f.close (); 
-                    } else return false; // can't write /etc/shadow
+                            }
+                            lineBeginning = lineEnd + 1;
+                        }
+                        if (!__dontWriteNewPassword__) {
+                            // add user's record
+                            strcpy (buffer, srchStr + 1);
+                            __sha256__ (buffer + strlen (buffer), sizeof (buffer) - strlen (buffer), newPassword);
+                            if (f.printf ("%s:::::::\r\n", buffer) < strlen ("%s:::::::\r\n")) { 
+                                close (f); 
+                                return false; // can't write /etc/shadow - this is bad because we have already corrupted it :/
+                            }
+
+                            __diskTraffic__.bytesWritten += strlen (buffer) + 9; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
+                        }     
+                        f.close (); 
+                    } else {
+                        return false; // can't write /etc/shadow
+                    }
                     return true; // success      
                 }
 
                 // char *userAdd (userName, userId, userHomeDirectory) adds userName, userId, userHomeDirectory to /etc/passwd and /etc/shadow, creates home directory and returns success or error message
                 // __ignoreIfUserExists__ and __dontWriteNewUser__ arguments are only used internaly by userDel function
-                char *userAdd (char *userName, char *userId, char *userHomeDirectory, bool __ignoreIfUserExists__ = false, bool __dontWriteNewUser__ = false) {
-                    if (!fileSystem.mounted ()) return (char *) "File system not mounted.";
+                const char *userAdd (char *userName, char *userId, char *userHomeDirectory, bool __ignoreIfUserExists__ = false, bool __dontWriteNewUser__ = false) {
+                    if (!fileSystem.mounted ()) return (const char *) "File system not mounted";
                     
                     // initial checking
-                    if (strlen (userName) < 1)                             return (char *) "Missing user name.";
-                    if (strlen (userName) > USER_PASSWORD_MAX_LENGTH)      return (char *) "User name too long.";   
-                    if (strstr (userName, ":"))                            return (char *) "User name may not contain ':' character.";
-                    if (atoi (userId) <= 0)                                return (char *) "User id should be > 0."; // this information is not really used, 0 is reserverd for root in case of further development
-                    if (strlen (userHomeDirectory) < 1)                    return (char *) "Missing user's home directory.";
-                    if (strlen (userHomeDirectory) > FILE_PATH_MAX_LENGTH) return (char *) "User's home directory name too long.";    
-                    char homeDirectory [FILE_PATH_MAX_LENGTH + 2]; strcpy (homeDirectory, userHomeDirectory); if (homeDirectory [(strlen (homeDirectory) - 1)] != '/') strcat (homeDirectory, "/");
-                    if (strlen (homeDirectory) > FILE_PATH_MAX_LENGTH)     return (char *) "User's home directory name too long.";    
+                    if (strlen (userName) < 1)                             return (const char *) "Missing user name";
+                    if (strlen (userName) > USER_PASSWORD_MAX_LENGTH)      return (const char *) "User name too long";
+                    if (strstr (userName, ":"))                            return (const char *) "User name may not contain ':' character";
+                    if (atoi (userId) <= 0)                                return (const char *) "User id should be > 0"; // this information is not really used, 0 is reserverd for root in case of further development
+                    if (strlen (userHomeDirectory) < 1)                    return (const char *) "Missing user's home directory";
+                    if (strlen (userHomeDirectory) > FILE_PATH_MAX_LENGTH) return (const char *) "User's home directory name too long";
+                    char homeDirectory [FILE_PATH_MAX_LENGTH + 2];
+                    strcpy (homeDirectory, userHomeDirectory);
+                    if (homeDirectory [(strlen (homeDirectory) - 1)] != '/') strcat (homeDirectory, "/");
+                    if (strlen (homeDirectory) > FILE_PATH_MAX_LENGTH)     return (const char *) "User's home directory name too long";
 
                     // read /etc/passwd
-                    char buffer [MAX_ETC_PASSWD_SIZE + 3]; buffer [0] = '\n'; 
-                    int i = 1;
-                    File f = fileSystem.open ("/etc/passwd", "r"); 
-                    if (f) { 
-                        while (f.available () && i <= MAX_ETC_PASSWD_SIZE) if ((buffer [i] = f.read ()) != '\r') i++; buffer [i++] = '\n'; buffer [i] = 0; // read the whole file in C string ignoring \r
-                        if (f.available ()) { f.close (); return (char *) "/etc/shadow is too large."; } 
-                        f.close ();
-                    } else return (char *) "can't read /etc/passwd."; 
-                    // find user's record in the buffer
-                    char srchStr [USER_PASSWORD_MAX_LENGTH + 3];
-                    sprintf (srchStr, "\n%s:", userName); // we get something like \nroot:
-                    char *u = strstr (buffer, srchStr);
-                    if (u && !__ignoreIfUserExists__) return (char *) "User with this name already exists.";
-                    if (!__dontWriteNewUser__ && strlen (buffer) + strlen (userName) + strlen (userId) + strlen (homeDirectory) + 10 > MAX_ETC_PASSWD_SIZE) return (char *) "Can't add a user because /etc/passwd file is already too long.";
-
-                    // write all the buffer back to /etc/passwd and then add a new record for the new user
-                    f = fileSystem.open ("/etc/passwd", "w");
-                    if (f) {
-                        char *lineBeginning = buffer + 1;
-                        char *lineEnd;
-                        while ((lineEnd = strstr (lineBeginning, "\n"))) {
-                            *lineEnd = 0;
-                            if (lineBeginning != u + 1 && lineEnd - lineBeginning > 2) { // skip skip user's record and empty (<= 2) records
-                                if (f.printf ("%s\r\n", lineBeginning) < strlen (lineBeginning) + 2) { 
-                                    close (f); 
-                                    return (char *) "Can't write /etc/passwd."; // this is bad because we have already corrupted it :/
-                                } 
-
-                                diskTrafficInformation.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-
-                            }
-                            lineBeginning = lineEnd + 1;
+                    {
+                        char buffer [MAX_ETC_PASSWD_SIZE + 3];
+                        buffer [0] = '\n';
+                        int i = 1;
+                        File f = fileSystem.open ("/etc/passwd", "r");
+                        if (f) { 
+                            while (f.available () && i <= MAX_ETC_PASSWD_SIZE) 
+                                if ((buffer [i] = f.read ()) != '\r') 
+                                    i++; 
+                            buffer [i++] = '\n'; 
+                            buffer [i] = 0; // read the whole file in C string ignoring \r
+                            if (f.available ()) { 
+                                f.close (); 
+                                return (const char *) "/etc/shadow is too large"; 
+                            } 
+                            f.close ();
+                        } else {
+                            return (const char *) "can't read /etc/passwd"; 
                         }
-                        if (!__dontWriteNewUser__) {
-                            // add user's record
-                            strcpy (buffer, srchStr + 1);
-                            if (f.printf ("%s:x:%s:::%s:\r\n", buffer, userId, homeDirectory) < strlen ("%s:x:%s:::%s:\r\n")) { 
-                                close (f); 
-                                return (char *) "Can't write /etc/passwd."; // this is bad because we have already corrupted it :/
-                            }
-                        }         
-                        f.close (); 
-                    } else return (char *) "Can't write /etc/passwd."; 
+                        // find user's record in the buffer
+                        char srchStr [USER_PASSWORD_MAX_LENGTH + 3];
+                        sprintf (srchStr, "\n%s:", userName); // we get something like \nroot:
+                        char *u = strstr (buffer, srchStr);
+                        if (u && !__ignoreIfUserExists__) 
+                            return (const char *) "User with this name already exists";
+                        if (!__dontWriteNewUser__ && strlen (buffer) + strlen (userName) + strlen (userId) + strlen (homeDirectory) + 10 > MAX_ETC_PASSWD_SIZE) 
+                            return (const char *) "Can't add a user because /etc/passwd file is already too long";
+    
+                        // write all the buffer back to /etc/passwd and then add a new record for the new user
+                        f = fileSystem.open ("/etc/passwd", "w");
+                        if (f) {
+                            char *lineBeginning = buffer + 1;
+                            char *lineEnd;
+                            while ((lineEnd = strstr (lineBeginning, "\n"))) {
+                                *lineEnd = 0;
+                                if (lineBeginning != u + 1 && lineEnd - lineBeginning > 2) { // skip skip user's record and empty (<= 2) records
+                                    if (f.printf ("%s\r\n", lineBeginning) < strlen (lineBeginning) + 2) { 
+                                        close (f); 
+                                        return (const char *) "Can't write /etc/passwd"; // this is bad because we have already corrupted it :/
+                                    } 
 
-                    if (__dontWriteNewUser__) return (char *) "User deleted.";
-                    
+                                    __diskTraffic__.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
+                                }
+                                lineBeginning = lineEnd + 1;
+                            }
+                            if (!__dontWriteNewUser__) {
+                                // add user's record
+                                strcpy (buffer, srchStr + 1);
+                                if (f.printf ("%s:x:%s:::%s:\r\n", buffer, userId, homeDirectory) < strlen ("%s:x:%s:::%s:\r\n")) { 
+                                    close (f); 
+                                    return (const char *) "Can't write /etc/passwd"; // this is bad because we have already corrupted it :/
+                                }
+
+                                __diskTraffic__.bytesWritten += strlen (buffer) + 9; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
+                            }         
+                            f.close (); 
+                        } else { 
+                            return (const char *) "Can't write /etc/passwd";
+                        }
+                    }
+
+                    if (__dontWriteNewUser__) 
+                        return (const char *) "User deleted";
                     // write password in /etc/shadow file
                     if (!passwd (userName, (char *) DEFAULT_USER_PASSWORD, true)) {
                         userDel (userName); // try to roll-back the changes we made so far 
-                        return (char *) "Can't write /etc/shadow.";
+                        return (const char *) "Can't write /etc/shadow";
                     } 
-
                     // crate user's home directory
                     bool b = false;
-                    for (int i = 0; homeDirectory [i] && homeDirectory [i]; i++) if (i && homeDirectory [i] == '/') { 
-                        homeDirectory [i] = 0; b = fileSystem.makeDirectory (homeDirectory); homeDirectory [i] = '/'; 
-                    }
-                    if (!b) return (char *) "User created with default password '" DEFAULT_USER_PASSWORD "' but couldn't create user's home directory.";
-
-                    return (char *) "User created with default password '" DEFAULT_USER_PASSWORD "'.";
+                    for (int i = 0; homeDirectory [i] && homeDirectory [i]; i++) 
+                        if (i && homeDirectory [i] == '/') {
+                            homeDirectory [i] = 0; 
+                            b = fileSystem.makeDirectory (homeDirectory); 
+                            homeDirectory [i] = '/';
+                        }
+                    if (!b) 
+                        return (const char *) "User created with default password '" DEFAULT_USER_PASSWORD "' but couldn't create user's home directory";
+                        
+                    return (const char *) "User created with default password '" DEFAULT_USER_PASSWORD "'";
                 }
 
                 // char *userDel (userName) deletes userName from /etc/passwd and /etc/shadow, deletes home directory and returns success or error message
-                char *userDel (char *userName) {
-                    if (!fileSystem.mounted ()) return (char *) "File system not mounted.";
+                const char *userDel (char *userName) {
+                    if (!fileSystem.mounted ()) return (const char *) "File system not mounted";
                   
                     // delete user's password from /etc/shadow file
-                    if (!passwd (userName, (char *) "", true, true)) return (char *) "Can't write /etc/shadow.";
+                    if (!passwd (userName, (char *) "", true, true)) return (const char *) "Can't write /etc/shadow";
 
                     // get use's home directory from /etc/passwd
                     char homeDirectory [FILE_PATH_MAX_LENGTH + 1];
                     bool gotHomeDirectory = getHomeDirectory (homeDirectory, sizeof (homeDirectory), userName);
                     // delete user from /etc/passwd
-                    if (strcmp (userAdd (userName, (char *) "32767", (char *) "$", true, true), "User deleted.")) return (char *) "Can't write /etc/passwd.";
+                    if (strcmp (userAdd (userName, (char *) "32767", (char *) "$", true, true), "User deleted")) 
+                        return (const char *) "Can't write /etc/passwd";
 
                     // remove user's home directory
                     bool homeDirectoryRemoved = false; 
@@ -428,11 +460,11 @@
                             firstDirectory = false;
                         }
                         // if we've got home directory we can assume that the user existed prior to calling userDel
-                        if (homeDirectoryRemoved) return (char *) "User deleted.";
-                        else                      return (char *) "User deleted but couldn't remove user's home directory.";
+                        if (homeDirectoryRemoved) return (const char *) "User deleted";
+                        else                      return (const char *) "User deleted but couldn't remove user's home directory";
                     } else {
                         // if we haven't got home directory we can assume that the user did not exist prior to calling userDel, at least not regurally, but we have corrected /etc/passwd and /etc/shadow now
-                        return (char *) "User does not exist.";
+                        return (const char *) "User does not exist";
                     }
                 }
 

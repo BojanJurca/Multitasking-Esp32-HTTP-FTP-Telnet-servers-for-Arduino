@@ -3,7 +3,7 @@
  * 
  * This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
  * 
- *  May 22, 2024, Bojan Jurca
+ *  October 10, 2024, Bojan Jurca
  * 
  */
 
@@ -15,9 +15,11 @@
     #define __THREAD_SAFE_CIRCULAR_QUEUE_HPP__
 
 
-    template<class queueType, size_t maxSize> class threadSafeCircularQueue : public queue<queueType, maxSize> {
+    template<class queueType, size_t maxSize> class threadSafeCircularQueue : public queue<queueType> {
 
         public:
+
+            threadSafeCircularQueue () { queue<queueType>::reserve (maxSize); }
 
             void Lock () { xSemaphoreTakeRecursive (__semaphore__, portMAX_DELAY); } 
 
@@ -25,25 +27,31 @@
 
             void push_back (queueType element) {
                 Lock ();
-                queue<queueType, maxSize>::push_back (element);
+                if (queue<queueType>::size () >= maxSize) {
+                    popped_front (queue<queueType>::front ());
+                    queue<queueType>::pop_front ();
+                }
+                pushed_back (element);
+                queue<queueType>::push_back (element);
                 Unlock ();
             }
 
             void pop_front () {
                 Lock ();
-                queue<queueType, maxSize>::pop_front ();
+                queue<queueType>::pop_front ();
                 Unlock ();
             }
 
-            class Iterator : public queue<queueType, maxSize>::Iterator {
+            virtual void pushed_back (queueType& element) {}
+            virtual void popped_front (queueType& element) {}
+
+            class iterator : public queue<queueType>::iterator {
               
                 public:
 
-                    Iterator (threadSafeCircularQueue* cq, size_t position) : queue<queueType, maxSize>::Iterator (cq, position) { __cq__ = cq; }
+                    iterator (threadSafeCircularQueue* cq, size_t position) : queue<queueType>::iterator (cq, position) { __cq__ = cq; }
 
-                    Iterator (queueType *qPtr, threadSafeCircularQueue* cq) : queue<queueType, maxSize>::Iterator (cq, qPtr) { __cq__ = cq; }
-
-                    ~Iterator () { __cq__->Unlock (); }
+                    ~iterator () { __cq__->Unlock (); }
 
                 private:
 
@@ -51,19 +59,14 @@
 
             };
 
-            Iterator begin () { 
+            iterator begin () { 
                 Lock (); 
-                return Iterator (this, 0); 
+                return iterator (this, 0); 
             } 
-
-            Iterator begin (queueType *qPtr) { 
-                Lock (); 
-                return Iterator (qPtr, this); 
-            }
             
-            Iterator end () { 
+            iterator end () { 
                 Lock (); 
-                return Iterator (this, this->size () - 1); 
+                return iterator (this, queue<queueType>::size ()); 
             } 
 
 

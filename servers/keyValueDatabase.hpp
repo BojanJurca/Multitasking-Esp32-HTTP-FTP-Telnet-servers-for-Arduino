@@ -50,7 +50,7 @@
  *            - data file offset (uint16_t) of a free block
  *            - size of a free block (int16_t)
  * 
- * August 12, 2024, Bojan Jurca
+ * October 10, 2024, Bojan Jurca
  *  
  */
 
@@ -76,12 +76,21 @@
     #define err_data_changed    ((signed char) 0b10010000) // -112 - unexpected data value found
     #define err_file_io         ((signed char) 0b10100000) //  -96 - file operation error
     #define err_cant_do_it_now  ((signed char) 0b11000000) //  -64 - for example changing the data while iterating or loading the data if already loaded
+    // the other error codes #defined in Map.hpp and vector.hpp
+    // #define err_ok              ((signed char) 0b00000000)  //    0 - no error
+    // #define err_not_unique      ((signed char) 0b10001000)  // -120 - key is not unique
+    // #define err_not_found       ((signed char) 0b10000100)  // -124 - key is not found
+    // #define err_out_of_range    ((signed char) 0b10000010)  // -126 - invalid index      
+    // #define err_bad_alloc       ((signed char) 0b10000001)  // -127 - out of memory
+
 
     #ifdef SEMAPHORE_H // RTOS is running beneath Arduino sketch, multitasking (and semaphores) is supported
         static SemaphoreHandle_t __keyValueDatabaseSemaphore__ = xSemaphoreCreateMutex (); 
     #endif
 
     template <class keyType, class valueType> class keyValueDatabase : private Map<keyType, uint32_t> {
+        
+        friend class Proxy;
   
         private:
 
@@ -93,45 +102,8 @@
             signed char errorFlags () { return __errorFlags__ & 0b01111111; }
             void clearErrorFlags () { __errorFlags__ = 0; }
 
-
-           /*
-            *  Constructor of keyValueDatabase that does not load the data. Subsequential call to loadData function is needed:
-            *  
-            *     keyValueDatabase<int, String> pkvpA;
-            *
-            *     void setup () {
-            *         Serial.begin (115200);
-            *
-            *         fileSystem.mountFAT (true);    
-            *
-            *         kvp.loadData ("/keyValueDatabase/A.kvp");
-            *
-            *          ...
-            */
-
-            keyValueDatabase () {
-                // log_i ("keyValueDatabase ()");
-            }
-
-           /*
-            *  Constructor of keyValueDatabase that also loads the data from data file: 
-            *  
-            *     keyValueDatabase<int, String> pkvpA ("/keyValueDatabase/A.kvp");
-            *     if (pkvpA.lastErrorCode != pkvpA.OK) 
-            *         Serial.printf ("pkvpA constructor failed: %s, all the data may not be indexed\n", pkvpA.errorCodeText (pkvpA.lastErrorCode));
-            *
-            */
-            
-            keyValueDatabase (const char *dataFileName) { 
-                // log_i ("keyValueDatabase (dataFileName)");
-                loadData (dataFileName);
-            }
-
             ~keyValueDatabase () { 
-                // log_i ("~keyValueDatabase");
-                if (__dataFile__) {
-                    __dataFile__.close ();
-                }
+                Close ();
             } 
 
 
@@ -139,8 +111,11 @@
             *  Loads the data from data file.
             *  
             */
+            
+            signed char Open (const char *dataFileName) {
 
-            signed char loadData (const char *dataFileName) {
+size_t shb = ESP.getFreeHeap ();
+
                 // log_i ("(dataFileName)");
                 Lock ();
                 if (__dataFile__) {
@@ -226,7 +201,19 @@
 
                 Unlock (); 
                 // log_i ("OK");
+
                 return err_ok;
+            }
+
+            [[deprecated("Use Open (const char *) instead.")]]  
+            signed char loadData (const char *dataFileName) {
+                return Open (dataFileName);
+            }
+
+            void Close () {
+                if (__dataFile__) {
+                    __dataFile__.close ();
+                }
             }
 
 
@@ -270,7 +257,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -280,7 +267,7 @@
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &value) {                                                                                 // ... check if parameter construction is valid
+                    if (!*(String *) &value) {                                                                                 // ... check if parameter construction is valid
                         // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -297,6 +284,7 @@
                     #endif
                     __errorFlags__ |= err_cant_do_it_now;
                     Unlock (); 
+                    // DEBUG: Serial.print ("   Insert ("); Serial.print (key); Serial.print (", "); Serial.print (value); Serial.println (" can't Insert while iterating");
                     return err_cant_do_it_now;
                 }
 
@@ -423,6 +411,7 @@
                     if (__dataFile__.seek (blockOffset, SeekSet)) {
                         blockSize = (int16_t) -blockSize;
                         if (__dataFile__.write ((byte *) &blockSize, sizeof (blockSize)) != sizeof (blockSize)) { // can't roll-back
+
                             // log_e ("write error, can't roll-back, critical error, closing data file");
                             __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         }
@@ -459,7 +448,7 @@
                 if (freeBlockIndex == -1) { // data appended to the end of __dataFile__
                     __dataFileSize__ += blockSize;       
                 } else { // data written to free block in __dataFile__
-                    __freeBlocksList__.erase (freeBlockIndex); // doesn't fail
+                    __freeBlocksList__.erase (__freeBlocksList__.begin () + freeBlockIndex); // doesn't fail
                 }
                 
                 // log_i ("OK");
@@ -475,7 +464,7 @@
             signed char FindBlockOffset (keyType key, uint32_t& blockOffset) {
                 // log_i ("(key, block offset)");
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -486,9 +475,9 @@
 
                 Lock ();
                 Map<keyType, uint32_t>::clearErrorFlags ();
-                uint32_t *p = Map<keyType, uint32_t>::find (key);
-                if (p) { // if found
-                    blockOffset = *p;
+                auto p = Map<keyType, uint32_t>::find (key);
+                if (p != Map<keyType, uint32_t>::end ()) { // if found
+                    blockOffset = p->second;
                     Unlock ();  
                     // log_i ("OK");
                     return err_ok;
@@ -523,7 +512,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -538,8 +527,8 @@
 
                 if (blockOffset == 0xFFFFFFFF) { // if block offset was not specified find it from Map
                     Map<keyType, uint32_t>::clearErrorFlags ();
-                    uint32_t *pBlockOffset = Map<keyType, uint32_t>::find (key);
-                    if (!pBlockOffset) { // if not found or error
+                    auto p = Map<keyType, uint32_t>::find (key); 
+                    if (p == Map<keyType, uint32_t>::end ()) { // if not found or error
                         signed char e = Map<keyType, uint32_t>::errorFlags ();
                         if (e) { // error
                             __errorFlags__ |= e;
@@ -551,7 +540,7 @@
                             return err_not_found;
                         }
                     }
-                    blockOffset = *pBlockOffset;
+                    blockOffset = p->second;
                 }
 
                 int16_t blockSize;
@@ -597,7 +586,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -607,7 +596,7 @@
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &newValue) {                                                                              // ... check if parameter construction is valid
+                    if (!*(String *) &newValue) {                                                                              // ... check if parameter construction is valid
                         // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -623,8 +612,8 @@
       
                     // log_i ("step 1: looking for block offset in Map");
                     Map<keyType, uint32_t>::clearErrorFlags ();
-                    pBlockOffset = Map<keyType, uint32_t>::find (key);
-                    if (!pBlockOffset) { // if not found
+                    auto p = Map<keyType, uint32_t>::find (key);
+                    if (p == Map<keyType, uint32_t>::end ()) { // if not found
                         signed char e = Map<keyType, uint32_t>::errorFlags ();
                         if (e) { // error
                             __errorFlags__ |= e;
@@ -636,6 +625,7 @@
                             return err_not_found;
                         }
                     }
+                    pBlockOffset = &(p->second);
                 } else {
                     // log_i ("step 1: block offset already profided by the calling program");
                 }
@@ -686,7 +676,7 @@
                         throw err_bad_alloc;
                     #endif
                     __errorFlags__ |= err_bad_alloc;
-                    Unlock (); 
+                    Unlock ();
                     return err_bad_alloc;
                 }
 
@@ -731,6 +721,7 @@
                         Unlock ();  
                         return err_file_io;
                     }
+
                     // success
                     __dataFile__.flush ();
                     Unlock ();  
@@ -811,7 +802,7 @@
                         // log_i ("step 10: try to roll-back");
                         if (__dataFile__.seek (newBlockOffset, SeekSet)) {
                             newBlockSize = (int16_t) -newBlockSize;
-                            if (__dataFile__.write ((byte *) &newBlockSize, sizeof (newBlockSize)) != sizeof (newBlockSize)) { // can't roll-back
+                            if (__dataFile__.write ((byte *) &newBlockSize, sizeof (newBlockSize)) != sizeof (newBlockSize)) { // can't roll-back         
                                 __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                             }
                         } else { // can't roll-back 
@@ -834,7 +825,7 @@
                     if (freeBlockIndex == -1) { // data appended to the end of __dataFile__
                         __dataFileSize__ += newBlockSize;
                     } else { // data written to free block in __dataFile__
-                        __freeBlocksList__.erase (freeBlockIndex); // doesn't fail
+                        __freeBlocksList__.erase (__freeBlocksList__.begin () + freeBlockIndex); // doesn't fail
                     }
                     // mark old block as free
                     if (!__dataFile__.seek (*pBlockOffset, SeekSet)) {
@@ -892,7 +883,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -943,7 +934,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -953,7 +944,7 @@
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &newValue) {                                                                              // ... check if parameter construction is valid
+                    if (!*(String *) &newValue) {                                                                              // ... check if parameter construction is valid
                         // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -965,10 +956,13 @@
                 Lock ();
                 signed char e;
                 e = Insert (key, newValue);
-                if (e) // != OK
-                    e = Update (key, newValue);
+                if (e == err_not_unique) {
+                    // DEBUG: Serial.print ("   Upsert ("); Serial.print (key); Serial.print (", "); Serial.print (newValue); Serial.print (" Insert error "); Serial.println (e);
+                    e = Update (key, newValue, NULL);
+                }
                 if (e) { // != OK
                     // log_e ("Update or Insert error");
+                    // DEBUG: Serial.print ("   Upsert ("); Serial.print (key); Serial.print (", "); Serial.print (newValue); Serial.print (" Update error "); Serial.println (e);
                     __errorFlags__ |= e;
                 } else {
                     // log_i ("OK");
@@ -993,7 +987,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -1003,7 +997,7 @@
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &defaultValue) {                                                                          // ... check if parameter construction is valid
+                    if (!*(String *) &defaultValue) {                                                                          // ... check if parameter construction is valid
                         // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -1027,6 +1021,61 @@
                 return e; 
             }
 
+           /*
+            *  Updates or inserts the value associated with the key throught callback function (usefull for counting, etc, when all the calculation should be done while locking is in place)
+            */
+
+            signed char Upsert (keyType key, void (*upsertCallback) (valueType &value), uint32_t *pBlockOffset = NULL) {
+                // log_i ("(key, value)");
+                if (!__dataFile__) { 
+                    // log_e ("error, data file not opened: err_file_io");
+                    #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
+                        throw err_file_io;
+                    #endif
+                    __errorFlags__ |= err_file_io;
+                    return err_file_io; 
+                }
+
+                if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
+                    if (!*(String *) &key) {                                                                                  // ... check if parameter construction is valid
+                        // log_e ("String key construction error: err_bad_alloc");
+                        #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
+                            throw err_bad_alloc;
+                        #endif
+                        __errorFlags__ |= err_bad_alloc;
+                        return err_bad_alloc;
+                    }
+
+                Lock (); 
+
+                valueType value = {};
+                signed char e = FindValue (key, &value); 
+                switch (e) {
+                    case err_ok:        // found
+                                        upsertCallback (value);
+                                        e = Update (key, value, pBlockOffset);
+                                        break;
+                    case err_not_found: // not found
+                                        upsertCallback (value);
+                                        e = Insert (key, value);
+                                        break;
+                    default:            // errror
+                                        __errorFlags__ |= e;
+                                        Unlock ();  
+                                        return e;
+                }
+                
+                if (e) {
+                    // log_e ("Update error");
+                    __errorFlags__ |= e;
+                    Unlock ();  
+                    return e;
+                }                
+                // log_i ("OK");
+                Unlock ();
+                return err_ok;
+            }
+
 
            /*
             *  Deletes key-value pair, returns OK or one of the error codes.
@@ -1044,7 +1093,7 @@
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                                                                                   // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
                         // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -1116,7 +1165,7 @@
                     return e;
                 }
 
-                // 4. write back negative block size designatin a free block
+                // 4. write back negative block size designating a free block
                 // log_i ("step 4: mark bloc as free");
                 blockSize = (int16_t) -blockSize;
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
@@ -1164,6 +1213,169 @@
                 // log_i ("OK");
                 Unlock ();  
                 return err_ok;
+            }
+
+
+           /*
+            *  [] operator enables key-valu database elements to be conveniently addressed by their keys like:
+            *
+            *    value = kvp [key];
+            *       or
+            *    kvp [key] = value;
+            */
+
+            // Proxy class declaration
+            class Proxy {
+
+                private:
+                    keyValueDatabase *__parent__;
+                    keyType __key__;
+
+                public:
+                    Proxy (keyValueDatabase *parent, keyType *key) {
+                        __parent__ = parent;
+                        __key__ = *key;
+
+                        if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
+                            if (!*(String *) &__key__) {                                                                               // ... check if parameter construction is valid
+                                // log_e ("String key construction error: err_bad_alloc");
+                                #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
+                                    throw err_bad_alloc;
+                                #endif
+                                __parent__->__errorFlags__ |= err_bad_alloc;
+                            }
+
+                        __parent__->Lock ();
+                    }
+
+                    ~Proxy () {
+                        __parent__->Unlock ();
+                    }
+
+                    // conversion operator to support reading
+                    operator valueType () const {                
+                        valueType value = {};
+                        signed char e = __parent__->FindValue (__key__, &value);
+                        if (e == err_not_found) // flag err_not_found
+                            __parent__->__errorFlags__ |= err_not_found;
+                        // DEBUG: Serial.print ("   find ["); Serial.print (__key__); Serial.print ("] = "); Serial.println (value);
+
+                        return value;
+                    }
+
+                    // assignment operator to support writing
+                    Proxy& operator = (valueType value) {
+
+                        if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
+                            if (!*(String *) &value) {                                                                                 // ... check if parameter construction is valid
+                                // log_e ("String value construction error: err_bad_alloc");
+                                #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
+                                    throw err_bad_alloc;
+                                #endif
+                                __parent__->__errorFlags__ |= err_bad_alloc;
+                                return *this;
+                            }
+                            // DEBUG: Serial.print ("   assign ["); Serial.print (__key__); Serial.print ("] = "); Serial.println (value);
+
+                        __parent__->Upsert (__key__, value);
+                        return *this;
+                    }
+
+                    // prefix ++ operator
+                    Proxy& operator ++ () {
+                        valueType value = {};
+                        __parent__->FindValue (__key__, &value); // if error or not found we start with 0
+                        ++ value;
+
+                        return operator = (value);
+                    }
+
+                    // postfix ++ operator
+                    valueType operator ++ (int n) {
+                        static int result = *this;
+                        operator ++ ();
+                        return (valueType) result;
+                    }
+
+                    // prefix -- operator
+                    Proxy& operator -- () {
+                        valueType value = {};
+                        __parent__->FindValue (__key__, &value); // if error or not found we start with 0
+                        -- value;
+
+                        return operator = (value);
+                    }
+
+                    // postfix -- operator
+                    valueType operator -- (int n) {
+                        static int result = *this;
+                        operator -- ();
+                        return (valueType) result;
+                    }
+
+                    template<typename T>
+                    Proxy& operator += (T other) {
+                        valueType value = {};
+                        if (__parent__->FindValue (__key__, &value)) // error or not found
+                            return *this;
+
+                        if (is_same<valueType, String>::value) {                                                                      // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
+                            if (!*(String *) &other) {                                                                                 // ... check if parameter construction is valid
+                                #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
+                                    throw err_bad_alloc;
+                                #endif
+                                __parent__->__errorFlags__ |= err_bad_alloc;
+                                return *this;
+                            }
+                            if (!(*(String *) &value).concat (*(String *) &other)) {
+                                __parent__->__errorFlags__ |= err_bad_alloc;
+                                return *this;
+                            }
+                        } else {
+                            value += other;
+                        }
+
+                        return operator = (value);
+                    }
+
+
+                    template<typename T>
+                    Proxy& operator -= (T other) {
+                        valueType value = {};
+                        if (__parent__->FindValue (__key__, &value)) // error or not found
+                            return *this;
+
+                        value -= other;
+
+                        return operator = (value);
+                    }                    
+
+                    template<typename T>
+                    Proxy& operator *= (T other) {
+                        valueType value = {};
+                        if (__parent__->FindValue (__key__, &value)) // error or not found
+                            return *this;
+
+                        value *= other;
+
+                        return operator = (value);
+                    }
+
+                    template<typename T>
+                    Proxy& operator /= (T other) {
+                        valueType value = {};
+                        if (__parent__->FindValue (__key__, &value)) // error or not found
+                            return *this;
+
+                        value /= other;
+
+                        return operator = (value);
+                    }                    
+            };
+
+            // Implementation of operator []
+            Proxy operator [] (keyType key) {
+                return Proxy (this, &key);
             }
 
 
@@ -1241,32 +1453,27 @@
             */
 
             struct keyBlockOffsetPair {
-                keyType key;          // node key
-                uint32_t blockOffset; // __dataFile__ offset of block containing a key-value pair
+                keyType key;          // key
+                uint32_t blockOffset; // __dataFile__ offset of block containing both: key-value pair
             };        
 
-            class Iterator : public Map<keyType, uint32_t>::Iterator {
+            class iterator : public Map<keyType, uint32_t>::iterator {
                 public:
             
-                    // called form begin () and first_element () - since only the begin () instance is used for iterating we'll do the locking here ...
-                    Iterator (keyValueDatabase* pkvp, int8_t stackSize) : Map<keyType, uint32_t>::Iterator (pkvp, stackSize) {
+                    // there are 2 cases when constructor gets called: begin (pointToFirstPair = true) and end (pointToFirstPair = false) 
+                    iterator (keyValueDatabase* pkvp, bool pointToFirstPair) : Map<keyType, uint32_t>::iterator (pkvp, pointToFirstPair) {
                         __pkvp__ = pkvp;
                     }
 
-                    // caled form end () andl last_element () 
-                    Iterator (int8_t stackSize, keyValueDatabase* pkvp) : Map<keyType, uint32_t>::Iterator (stackSize, pkvp) {
-                        __pkvp__ = pkvp;
-                    }
-
-                    ~Iterator () {
+                    ~iterator () {
                         if (__pkvp__) {
                             __pkvp__->__inIteration__ --;
+                            // DEBUG: Serial.print ("   stopped itetating, count = "); Serial.println (__pkvp__->__inIteration__);
                             __pkvp__->Unlock (); 
                         }
                     }
 
-                    // keyBlockOffsetPair& operator * () const { return (keyBlockOffsetPair&) Map<keyType, uint32_t>::Iterator::operator *(); }
-                    keyBlockOffsetPair * operator * () const { return (keyBlockOffsetPair *) Map<keyType, uint32_t>::Iterator::operator *(); }
+                    keyBlockOffsetPair& operator * () { return (keyBlockOffsetPair&) Map<keyType, uint32_t>::iterator::operator *(); }
 
                     // this will tell if iterator is valid (if there are not elements the iterator can not be valid)
                     operator bool () const { return __pkvp__->size () > 0; }
@@ -1278,14 +1485,18 @@
 
             };
 
-            Iterator begin () { // since only the begin () instance is neede for iteration we'll do the locking here
+            iterator begin () { // since only the begin () instance is neede for iteration we'll do the locking here
                 Lock (); // Unlock () will be called in instance destructor
                 __inIteration__ ++; // -- will be called in instance destructor
-                return Iterator (this, this->height ()); 
+                // DEBUG: Serial.print ("   startted itetating (begin), count = "); Serial.println (__inIteration__);
+                return iterator (this, true); 
             } 
 
-            Iterator end () { 
-                return Iterator ((int8_t) 0, (keyValueDatabase *) NULL); 
+            iterator end () { 
+                Lock (); // Unlock () will be called in instance destructor
+                __inIteration__ ++; // -- will be called in instance destructor
+                // DEBUG: Serial.print ("   startted itetating (end), count = "); Serial.println (__inIteration__);
+                return iterator (this, false); 
             } 
 
 
@@ -1299,16 +1510,16 @@
             *        Serial.printf ("first element (min key) of pkvpA = %i\n", (*firstElement)->key);
             */
 
-          Iterator first_element () { 
+          iterator first_element () { 
               Lock (); // Unlock () will be called in instance destructor
               __inIteration__ ++; // -- will be called in instance destructor
-              return Iterator (this, this->height ());  // call the 'begin' constructor
+              return iterator (this, this->height ());  // call the 'begin' constructor
           }
 
-          Iterator last_element () {
+          iterator last_element () {
               Lock (); // Unlock () will be called in instance destructor
               __inIteration__ ++; // -- will be called in instance destructor
-              return Iterator (this->height (), this);  // call the 'end' constructor
+              return iterator (this->height (), this);  // call the 'end' constructor
           }
 
 
@@ -1452,10 +1663,10 @@
         #define __FIRST_LAST_ELEMENT__
 
         template <typename T>
-        typename T::Iterator first_element (T& obj) { return obj.first_element (); }
+        typename T::iterator first_element (T& obj) { return obj.first_element (); }
 
         template <typename T>
-        typename T::Iterator last_element (T& obj) { return obj.last_element (); }
+        typename T::iterator last_element (T& obj) { return obj.last_element (); }
 
     #endif
 

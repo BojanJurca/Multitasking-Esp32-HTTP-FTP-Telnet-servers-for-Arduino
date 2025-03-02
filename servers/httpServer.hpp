@@ -1,15 +1,52 @@
 /*
 
-    httpServer.hpp 
+    httpServer.hpp
   
-    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
+    This file is part of Multitasking Esp32 HTTP FTP http servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-http-servers-for-Arduino
   
-    HTTP server can serve some HTTP requests itself (for example content of .html and other files) but the calling program
-    can also provide its own httpRequestHandlerCallback function. Cookies and page redirection are supported. There is also
-    a small "database" to keep valid web session tokens in order to support web login. Text and binary WebSocket straming is
-    also supported.
-  
-    Jul 18, 2024, Bojan Jurca
+    February 6, 2025, Bojan Jurca
+
+
+    Classes implemented/used in this module:
+
+        httpServer_t
+        httpServer_t::httpConnection_t
+        httpServer_t::webSocket_t
+
+    Inheritance diagram:    
+
+             ┌─────────────┐
+             │ tcpServer_t ┼┐
+             └─────────────┘│
+                            │
+      ┌─────────────────┐   │
+      │ tcpConnection_t ┼┐  │
+      └─────────────────┘│  │
+                         │  │
+                         │  │  ┌─────────────────────────┐
+                         │  ├──┼─ httpServer_t           │
+                         ├─────┼──── webSocket_t         │
+                         │  │  │     └── httpConection_t │
+                         │  │  └─────────────────────────┘
+                         │  │  logicly webSocket_t would inherit from httpConnection_t but it is easier to implement it the other way around
+                         │  │
+                         │  │
+                         │  │  ┌────────────────────────┐
+                         │  ├──┼─ telnetServer_t        │
+                         ├─────┼──── telnetConnection_t │
+                         │  │  └────────────────────────┘
+                         │  │
+                         │  │
+                         │  │  ┌────────────────────────────┐
+                         │  └──┼─ ftpServer_t               │
+                         ├─────┼──── ftpControlConnection_t │
+                         │     └────────────────────────────┘
+                         │  
+                         │  
+                         │     ┌──────────────┐
+                         └─────┼─ tcpClient_t │
+                               └──────────────┘
+
 
     Nomenclature used here for easier understaning of the code:
 
@@ -33,59 +70,45 @@
 
       - "HTTP request":
 
-                   ---------------  GET / HTTP/1.1
-                  |                 Host: 10.18.1.200
-                  |                 Connection: keep-alive    field value
-                  |                 Cache-Control: max-age=0   |
-         request  |    field name - Upgrade-Insecure-Requests: 1
-                  |                 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36
-                  |                 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng;q=0.8,application/signed-exchange;v=b3;q=0.9
-                  |                 Accept-Encoding: gzip, deflate
-                  |                 Accept-Language: sl-SI,sl;q=0.9,en-GB;q=0.8,en;q=0.7
-                  |                 Cookie: refreshCounter=1
-                  |                             |          |
-                  |                        cookie name   cookie value
-                   ---------------     
-       
+                  ┌──────────────── GET / HTTP/1.1
+                  │                 Host: 10.18.1.200
+                  │                 Connection: keep-alive    field value
+                  │                 Cache-Control: max-age=0   |
+         request  │    field name - Upgrade-Insecure-Requests: 1
+                  │                 User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.45 Safari/537.36
+                  │                 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng;q=0.8,application/signed-exchange;v=b3;q=0.9
+                  │                 Accept-Encoding: gzip, deflate
+                  │                 Accept-Language: sl-SI,sl;q=0.9,en-GB;q=0.8,en;q=0.7
+                  └──────────────── Cookie: refreshCounter=1
+                                                |          |
+                                           cookie name   cookie value
+
       - "HTTP reply":
                                                     status
                                                        |         cookie name, value, path and expiration
-                   --------  ---------------  HTTP/1.1 200 OK      |     |    |         |
-                  |         |                 Set-Cookie: refreshCounter=2; Path=/; Expires=Thu, 09 Dec 2021 19:07:04 GMT
-            reply |  header |    field name - Content-Type: text/html
-                  |         |                 Content-Length: 96   |
-                  |          ---------------                      field value
-                   - content ---------------  <HTML>Web cookies<br><br>This page has been refreshed 2 times. Click refresh to see more.</HTML>
-                  
+                  ┌─────────┬──────────────── HTTP/1.1 200 OK      |     |    |         |
+                  │         │                 Set-Cookie: refreshCounter=2; Path=/; Expires=Thu, 09 Dec 2021 19:07:04 GMT
+            reply │  header │    field name - Content-Type: text/html
+                  │         │                 Content-Length: 96   |
+                  │         └────────────────                     field value
+                  └─ content ──────────────── <HTML>Web cookies<br><br>This page has been refreshed 2 times. Click refresh to see more.</HTML>
+
 */
 
 
-    // ----- includes, definitions and supporting functions -----
-
-    #include <WiFi.h>
-    // needed for web sockets
-    #if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL (4, 4, 0) // Checks if board manager version for esp32 is >= 2.0.0 - thank you Ziss (https://github.com/Ziss)
-      #include <sha/sha_parallel_engine.h>    // needed for websockets support
-    #else
-      #include <hwcrypto/sha.h>               // needed for websockets support
-    #endif
-    #include <mbedtls/base64.h>
-    #include <mbedtls/md.h>
-    #include "std/Cstring.hpp"
-                                                                
+#include <sha/sha_parallel_engine.h>
+#include <mbedtls/base64.h>
+#include <mbedtls/md.h>
+#include "tcpServer.hpp"
+#include "tcpConnection.hpp"    
+#include "std/Cstring.hpp"
+                                                            
 
 #ifndef __HTTP_SERVER__
-  #define __HTTP_SERVER__
+    #define __HTTP_SERVER__
 
     #ifdef SHOW_COMPILE_TIME_INFORMATION
         #pragma message "__HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__ __HTTP_SERVER__"
-    #endif
-
-
-    #ifdef HTTP_SERVER_CORE
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "httpServer will run only on #defined core"
-        #endif
     #endif
 
     #ifndef __FILE_SYSTEM__
@@ -97,22 +120,21 @@
 
     // ----- TUNNING PARAMETERS -----
 
-    #ifndef HTTP_CONNECTION_STACK_SIZE
-        #define HTTP_CONNECTION_STACK_SIZE 8 * 1024             // TCP connections' stack size
-    #endif
-    // #define HTTP_SERVER_CORE 1 // 1 or 0                     // #define HTTP_SERVER_CORE if you want httpServer to run on specific core
-    #define HTTP_BUFFER_SIZE 1500                               // reading and temporary keeping HTTP requests, buffer for constructing HTTP reply, MTU = 1500
-    #define HTTP_CONNECTION_TIME_OUT 3000                       // 3000 ms for HTTP requests, 0 for infinite
+    #define HTTP_SERVER_HOME_DIRECTORY "/var/www/html/"         // home directory path should always end with '/'
+    #define HTTP_CONNECTION_STACK_SIZE (8 * 1024 + 256)         // TCP connections' stack size
+    #define HTTP_BUFFER_SIZE 1440                               // reading and temporary keeping HTTP requests, buffer for constructing HTTP reply - 1440 is the largest payload that fits into one packet: MTU = 1500, 20 bytes are used for TCP header and 40 for IPv6 header (for IPv4 sligltly less, but we want a general solution)
+    #define HTTP_CONNECTION_TIME_OUT 5                          // 5 s, 0 for infinite
     #define HTTP_REPLY_STATUS_MAX_LENGTH 32                     // only first 3 characters are important
-    #define HTTP_WS_FRAME_MAX_SIZE 1500                         // WebSocket send frame size and also read frame size (there are 2 buffers), MTU = 1500
-    #define HTTP_CONNECTION_WS_TIME_OUT 300000                  // 300000 ms = 5 min for WebSocket connections, 0 for infinite
-    // #define WEB_SESSIONS                                     // comment this line out if you won't use web sessions
+    #define HTTP_WS_FRAME_MAX_SIZE 1440                         // WebSocket send frame size and also read frame size (there are 2 buffers), 1440 is the largest payload that fits into one packet: MTU = 1500, 20 bytes are used for TCP header and 40 for IPv6 header (for IPv4 sligltly less, but we want a general solution), WebSocket frame (of 6 or 8 bytes) is included in HTTP_WS_FRAME_MAX_SIZE
+    #define HTTP_CONNECTION_WS_TIME_OUT 300                     // 300 s = 5 min
+    // #define USE_WEB_SESSIONS                                     // comment this line out if you won't use web sessions
+    #define WEB_SESSION_TIME_OUT 300                            // only makes sense if WEB_SESSIONS is #defined, 300 s = 5 min, 0 for infinite 
+    #define WEB_SESSION_TOKEN_DATABASE "/var/www/webSessionTokens.db" 
 
-
-    #ifndef WEB_SESSIONS
-      #ifdef SHOW_COMPILE_TIME_INFORMATION
-          #pragma message "Compiling httpServer.hpp without web sessions, web session login/logout will not be available"
-      #endif
+    #ifndef USE_WEB_SESSIONS
+        #ifdef SHOW_COMPILE_TIME_INFORMATION
+            #pragma message "Compiling httpServer.hpp without web sessions, web session login/logout will not be available"
+        #endif
     #endif
 
 
@@ -125,19 +147,10 @@
     #define reply507 "HTTP/1.0 507 Insuficient storage\r\nConnection: close\r\nContent-Length:41\r\n\r\nThe buffers of HTTP server are too small."
 
 
-    #ifndef __NETWK__
-        #ifdef SHOW_COMPILE_TIME_INFORMATION
-            #pragma message "Implicitly including netwk.h"
-        #endif
-        #include "netwk.h"  // sendAll and recvAll functions are declared there
-    #endif
-
-    #ifdef WEB_SESSIONS
+    #ifdef USE_WEB_SESSIONS
         #ifndef __FILE_SYSTEM__
             #pragma error "fileSystem.hpp must be included in order to use WEB_SESSIONs - key-value session token database needs flash disk"
         #endif
-
-        #define WEB_SESSION_TIME_OUT 300                        // 300 s = 5 min, 0 for infinite
 
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #ifndef __KEY_VALUE_DATABASE_HPP__
@@ -178,1130 +191,863 @@
     #endif    
 
 
-    // control httpServer critical sections
-    static SemaphoreHandle_t __httpServerSemaphore__ = xSemaphoreCreateMutex (); 
+    class httpServer_t : public tcpServer_t {
 
-    // log what is going on within httpServer
-    byte httpServerConcurentTasks = 0;
-    byte httpServerConcurentTasksHighWatermark = 0;
+        public:
 
-    // ----- WebSocket class -----
-  
-    class WebSocket {  
-    
-      public:
+            /*
+                This is rather unusual class hierarhy. Normally webSocket calss would inherit from httpConnection and add some additional functions to it but here is just the other way arround.
+                The reason for this is that once the instance (say httpConnection) is already created we can not extend it to its inherited class (say webSocket), but we can always do the
+                other way arround. The implementation is easier this way.
+            */
 
-        // WebSocket state
-        enum STATE_TYPE {
-          NOT_RUNNING = 0, 
-          RUNNING = 2        
-        };
+            class httpConnection_t;
 
-        STATE_TYPE state () { return __state__; }
-    
-        WebSocket ( // the following parameters will be handeled by WebSocket instance
-                    int connectionSocket,
-                    char *wsRequest,
-                    char *clientIP, char *serverIP
-                  ) {
-                      // create a local copy of parameters for later use
-                      __connectionSocket__ = connectionSocket;
-                      __wsRequest__ = wsRequest;
-                      __clientIP__ = clientIP;
-                      __serverIP__ = serverIP;
+            class webSocket_t : public tcpConnection_t {
 
-                      // do the handshake with the browser so it would consider webSocket connection established
-                      char *i = stristr (wsRequest, (char *) "SEC-WEBSOCKET-KEY: ");
-                      if (i) {
-                        i += 19;
-                        char *j = strstr (i, "\r\n");
-                        if (j) {
-                          if (j - i <= 24) { // Sec-WebSocket-Key is not supposed to exceed 24 characters
-                            char key [25]; memcpy (key, i, j - i); key [j - i] = 0; 
-                            // calculate Sec-WebSocket-Accept
-                            char s1 [64]; strcpy (s1, key); strcat (s1, (char *) "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"); 
-                            #define SHA1_RESULT_SIZE 20
-                            unsigned char s2 [SHA1_RESULT_SIZE]; esp_sha (SHA1, (unsigned char *) s1, strlen (s1), s2);
-                            #define WS_CLIENT_KEY_LENGTH 24
-                            size_t olen = WS_CLIENT_KEY_LENGTH;
-                            char s3 [32];
-                            mbedtls_base64_encode ((unsigned char *) s3, 32, &olen, s2, SHA1_RESULT_SIZE);
-                            // compose websocket accept response and send it back to the client
-                            char buffer  [255]; // 255 will do
-                            sprintf (buffer, "HTTP/1.1 101 Switching Protocols \r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", s3);
-                            if (sendAll (connectionSocket, buffer, HTTP_CONNECTION_WS_TIME_OUT) == strlen (buffer)) {
-                              __state__ = RUNNING;
-                            }
-                          } else { // |key| > 24
-                              #ifdef __DMESG__
-                                  dmesgQueue << "[WebSocket] WsRequest key too long";
-                              #endif
-                          }
-                        } else { // j == NULL
-                            #ifdef __DMESG__
-                                dmesgQueue << "[WebSocket] WsRequest without key";
-                            #endif
-                        }
-                      } else { // i == NULL
-                          #ifdef __DMESG__
-                              dmesgQueue << "[WebSocket] WsRequest without key";
-                          #endif
-                      }
+               friend httpServer_t;
 
-                    }
-          
-        ~WebSocket () { 
-                        // send closing frame if possible
-                        __sendFrame__ (NULL, 0, WebSocket::CLOSE);
-                        closeWebSocket ();
-                      } 
+                private:
 
-        int getSocket () { return __connectionSocket__; }
+                    String (*__httpRequestHandlerCallback__) (char *httpRequest, httpConnection_t *hcn);  // will be initialized in constructor
+                    void (*__wsRequestHandlerCallback__) (char *httpRequest, webSocket_t *webSck);        // will be initialized in constructor
 
-        char *getClientIP () { return __clientIP__; }
+                    static UBaseType_t __lastHighWaterMark__;
 
-        char *getServerIP () { return __serverIP__; }
-  
-        void closeWebSocket ()  { 
-                                  // close connection socket
-                                  int connectionSocket;
-                                  xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                                    connectionSocket = __connectionSocket__;
-                                    __connectionSocket__ = -1;
-                                  xSemaphoreGive (__httpServerSemaphore__);
-                                  if (connectionSocket > -1) close (connectionSocket);                      
-                                }
 
-        char *getWsRequest () { return __wsRequest__; }
-    
-        enum WEBSOCKET_DATA_TYPE {
-          NOT_AVAILABLE = 0,          // no data is available to be read 
-          STRING = 1,                 // text data is available to be read
-          BINARY = 2,                 // binary data is available to be read
-          CLOSE = 8,                  // used internally for closing frame      
-          ERROR = 10,                 // error in TCP communication
-          TIME_OUT = 11               // time-out detected
-        };
-   
-        WEBSOCKET_DATA_TYPE available ()  { // checks if data is ready to be read, returns the type of data that has arrived.
-                                            // All the TCP connection reading is actually done within this function
-                                            // that buffers the data that can later be read by using readString () or
-                                            // readBinary () or binarySize () functions. Call it repeatedly until
-                                            // some other data type is returned.
+                    // WebSocket definitions 
+                    #define STRING_FRAME_TYPE 1
+                    #define BINARY_FRAME_TYPE 2 
+                    #define CLOSE_FRAME_TYPE 8
 
-          switch (__readFrameState__) {
-            case EMPTY:                   {
-                                            // prepare data structure for the first read operation
-                                            __bytesRead__ = 0;
-                                            __readFrameState__ = READING_SHORT_HEADER;
-                                            // continue reading immediately
-                                          }
-            case READING_SHORT_HEADER:    { 
-                                            // check socket if data is pending to be read
-                                            char c; int i = recv (__connectionSocket__, &c, sizeof (c), MSG_PEEK);
-                                            if (i == -1) {
-                                              if ((errno == EAGAIN || errno == ENAVAIL) && (millis () - __lastActive__ < HTTP_CONNECTION_WS_TIME_OUT || !HTTP_CONNECTION_WS_TIME_OUT)) {
-                                                return WebSocket::NOT_AVAILABLE; // not time-out yet
-                                              } else {
-                                                closeWebSocket ();
-                                                return WebSocket::TIME_OUT;
-                                              }
-                                            }
-                                            // else - something is available to be read
 
-                                            // read 6 bytes of short header
-                                            i = recv (__connectionSocket__, __readFrame__ + __bytesRead__, 6 - __bytesRead__, 0); 
-                                            if (i <= 0) {
-                                              closeWebSocket ();
-                                              return WebSocket::ERROR;
-                                            }
+                public:
 
-                                            additionalNetworkInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-                                                                                           
-                                            __lastActive__ = millis ();
-                                            if (6 != (__bytesRead__ += i)) return WebSocket::NOT_AVAILABLE; // if we haven't got 6 bytes continue reading short header the next time available () is called
-                                            // check if this frame type is supported
-                                            if (!(__readFrame__ [0] & 0b10000000)) { // check fin bit
-                                                #ifdef __DMESG__
-                                                    dmesgQueue << "[WebSocket] frame type not supported";
-                                                #endif
-                                                closeWebSocket ();
-                                                return WebSocket::ERROR;
-                                            }
-                                            byte b  = __readFrame__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close
-                                            if (b == WebSocket::CLOSE) {
-                                              // dmesg ("[WebSocket] closed by peer");
-                                              closeWebSocket ();
-                                              return WebSocket::CLOSE;
-                                            }
-                                            if (b != WebSocket::STRING && b != WebSocket::BINARY) { 
-                                                #ifdef __DMESG__
-                                                    dmesgQueue << "[WebSocket] only STRING and BINARY frame types are supported";
-                                                #endif
-                                                closeWebSocket ();
-                                                return WebSocket::ERROR;
-                                            } // NOTE: after this point only TEXT and BINRY frames are processed!
-                                            // check payload length that also determines frame type
-                                            __readBufferSize__ = __readFrame__ [1] & 0b01111111; // byte 1: mask bit is always 1 for packets that come from browsers, cut it off
-                                            if (__readBufferSize__ <= 125) { // short payload
-                                                  __mask__ = __readFrame__ + 2; // bytes 2, 3, 4, 5
-                                                  __readBuffer__  = __readFrame__ + 6; // skip 6 bytes of header, note that __readFrame__ is large enough
-                                                  // continue with reading payload immediatelly
-                                                  __readFrameState__ = READING_PAYLOAD;
-                                                  __bytesRead__ = 0; // reset the counter, count only payload from now on
-                                                  goto readingPayload;
-                                            } else if (__readBufferSize__ == 126) { // 126 means medium payload, read additional 2 bytes of header
-                                                  __readFrameState__ = READING_MEDIUM_HEADER;
-                                                  // continue reading immediately
-                                            } else { // 127 means large data block - not supported since ESP32 doesn't have enough memory
-                                                  closeWebSocket ();
-                                                  return WebSocket::ERROR;                         
-                                            }
-                                          }
-            case READING_MEDIUM_HEADER:   { 
-                                            // we don't have to repeat the checking already done in short header case, just read additiona 2 bytes and update the data structure
-                                            // read additional 2 bytes (8 altogether) bytes of medium header
-                                            int i = recv (__connectionSocket__, __readFrame__ + __bytesRead__, 8 - __bytesRead__, 0); 
-                                            if (i <= 0) {
-                                              closeWebSocket ();
-                                              return WebSocket::ERROR;
-                                            }
-
-                                            additionalNetworkInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-
-                                            __lastActive__ = millis ();
-                                            if (8 != (__bytesRead__ += i)) return WebSocket::NOT_AVAILABLE; // if we haven't got 8 bytes continue reading medium header the next time available () is called
-                                            // correct internal structure for reading into extended buffer and continue at FILLING_EXTENDED_BUFFER immediately
-                                            __readBufferSize__ = __readFrame__ [2] << 8 | __readFrame__ [3];
-                                            __mask__ = __readFrame__ + 4; // bytes 4, 5, 6, 7
-                                            __readBuffer__  = __readFrame__ + 8; // skip 8 bytes of header, check if __readFrame is large enough:
-                                            if (__readBufferSize__ > HTTP_WS_FRAME_MAX_SIZE - 8) {
-                                                #ifdef __DMESG__
-                                                    dmesgQueue << "[WebSocket] can only receive frames of up to " << HTTP_WS_FRAME_MAX_SIZE - 8 << " payload bytes";
-                                                #endif
-                                                closeWebSocket ();
-                                                return WebSocket::ERROR;
-                                            }
-                                            __readFrameState__ = READING_PAYLOAD;
-                                            __bytesRead__ = 0; // reset the counter, count only payload from now on
-                                            // continue with reading payload immediatelly
-                                          }
-            case READING_PAYLOAD:         
-        readingPayload:                                                    
-                                          {
-                                            // read all payload bytes
-                                            int i = recv (__connectionSocket__, __readBuffer__ + __bytesRead__, __readBufferSize__ - __bytesRead__, 0); 
-                                            if (i <= 0) {
-                                              closeWebSocket ();
-                                              __readFrameState__ = EMPTY;
-                                              return WebSocket::ERROR;
-                                            }
-
-                                            additionalNetworkInformation.bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].bytesReceived += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                                            additionalSocketInformation [__connectionSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-                                        
-                                            if (__readBufferSize__ != (__bytesRead__ += i)) return WebSocket::NOT_AVAILABLE; // if we haven't got all payload bytes continue reading the next time available () is called
-                                            __lastActive__ = millis ();
-                                            // all is read, decode (unmask) the data
-                                            for (int i = 0; i < __readBufferSize__; i++) __readBuffer__ [i] = (__readBuffer__ [i] ^ __mask__ [i % 4]);
-                                            // conclude payload with 0 in case this is going to be interpreted as text - like C string
-                                            __readBuffer__ [__readBufferSize__] = 0;
-                                            __readFrameState__ = FULL;     // stop reading until buffer is read by the calling program
-                                            return __readFrame__ [0] & 0b0000001 /* if text bit set */ ? STRING : BINARY; // notify calling program about the type of data waiting to be read, 1 = text, 2 = binary
-                                          }
-
-            case FULL:                    // return immediately, there is no space left to read additional incoming data
-                                          return __readFrame__ [0] & 0b0000001 /* if text bit set */ ? STRING : BINARY; // notify calling program about the type of data waiting to be read, 1 = text, 2 = binary 
-          }
-          // for every case that has not been handeled earlier return not available
-          return NOT_AVAILABLE;
-        }
-
-        cstring readString () { // reads string that arrived from browser (it is a calling program responsibility to check if data type is text)
-                               // returns "" in case of communication error
-          while (true) {
-            switch (available ()) {
-              case WebSocket::NOT_AVAILABLE:  delay (1);
-                                              break;
-              case WebSocket::STRING:         { 
-                                                cstring s ((char *) __readBuffer__); 
-                                                __readFrameState__ = EMPTY;
-                                                return s;
-                                              }
-              default:                        return ""; // WebSocket::BINARY, WebSocket::ERROR, WebSocket::CLOSE, WebSocket::TIME_OUT
-            }                                                    
-          }
-        }
-
-        size_t binarySize () { return __readFrameState__ == FULL ? __readBufferSize__ : 0; } // returns how many bytes has arrived from browser, 0 if data is not ready (yet) to be read
-                                                    
-        size_t readBinary (byte *buffer, size_t bufferSize) { // returns number bytes copied into buffer
-                                                              // returns 0 if there is not enough space in buffer or in case of communication error
-          while (true) {
-            switch (available ()) {
-              case WebSocket::NOT_AVAILABLE:  delay (1);
-                                              break;
-              case WebSocket::BINARY:         { 
-                                                size_t l = binarySize ();
-                                                if (bufferSize >= l) 
-                                                  memcpy (buffer, __readBuffer__, l);
-                                                else
-                                                  l = 0;
-                                                __readFrameState__ = EMPTY;
-                                                return l; 
-                                              }
-              default:                        return 0; // WebSocket::STRING WebSocket::ERROR, WebSocket::CLOSE, WebSocket::TIME_OUT
-            }                                                    
-          }
-        }
-
-        bool sendString (char *text) { return __sendFrame__ ((byte *) text, strlen (text), WebSocket::STRING); } // returns success
-
-        bool sendString (const char *text) { return __sendFrame__ ((byte *) text, strlen (text), WebSocket::STRING); } // returns success
-                                                  
-        bool sendBinary (byte *buffer, size_t bufferSize) { return __sendFrame__ (buffer, bufferSize, WebSocket::BINARY); } // returns success
-        
-      private:
-
-        STATE_TYPE __state__ = NOT_RUNNING;
-
-        unsigned long __lastActive__ = millis (); // time-out detection
-
-        int __connectionSocket__ = -1;
-        char *__wsRequest__ = NULL;
-        char *__clientIP__ = NULL;
-        char *__serverIP__ = NULL;
-
-        bool __sendFrame__ (byte *buffer, size_t bufferSize, WEBSOCKET_DATA_TYPE dataType) { // returns true if frame has been successfully sent 
-          if (bufferSize > 0xFFFF) { // this size fits in large frame size - not supported
-              #ifdef __DMESG__
-                  dmesgQueue << "[WebSocket] large frame size is not supported";
-              #endif
-              closeWebSocket ();
-              return false;                         
-          } 
-          // byte *frame = NULL;
-          if (bufferSize > HTTP_WS_FRAME_MAX_SIZE - 4) { // 4 bytes are needed for header
-              #ifdef __DMESG__
-                  dmesgQueue << "[WebSocket] frame size > " << HTTP_WS_FRAME_MAX_SIZE - 4 << "is not supported";
-              #endif
-              closeWebSocket ();
-              return false;                         
-          }           
-          byte sendFrame [HTTP_WS_FRAME_MAX_SIZE];
-          int sendFrameSize;
-          if (bufferSize > 125) { // medium frame size
-            // if (!(frame = (byte *) malloc (frameSize = 4 + bufferSize))) { // 4 bytes for header (without mask) + payload
-            //   dmesg ("[WebSocket] __sendFrame__ malloc error (out of memory)");
-            //   closeWebSocket ();
-            //   return false;
-            // }
-            // frame type
-            sendFrame [0] = 0b10000000 | dataType; // set FIN bit and frame data type
-            sendFrame [1] = 126; // medium frame size, without masking (we won't do the masking, won't set the MASK bit)
-            sendFrame [2] = bufferSize >> 8; // / 256;
-            sendFrame [3] = bufferSize; // % 256;
-            memcpy (sendFrame + 4, buffer, bufferSize);  
-            sendFrameSize = bufferSize + 4;
-          } else { // small frame size
-            // if (!(frame = (byte *) malloc (frameSize = 2 + bufferSize))) { // 2 bytes for header (without mask) + payload
-            //   dmesg ("[WebSocket] __sendFrame__ malloc error (out of memory)");
-            //   closeWebSocket ();
-            //   return false;
-            // }
-            sendFrame [0] = 0b10000000 | dataType; // set FIN bit and frame data type
-            sendFrame [1] = bufferSize; // small frame size, without masking (we won't do the masking, won't set the MASK bit)
-            if (bufferSize) memcpy (sendFrame + 2, buffer, bufferSize);  
-            sendFrameSize = bufferSize + 2;
-          }
-          if (sendAll (__connectionSocket__, (char *) sendFrame, sendFrameSize, HTTP_CONNECTION_WS_TIME_OUT) != sendFrameSize) {
-            closeWebSocket ();
-            return false;
-          }
-          __lastActive__ = millis (); 
-          return true;
-        }
-    
-        enum READ_FRAME_STATE {
-          EMPTY = 0,                                  // frame is empty
-          READING_SHORT_HEADER = 1,
-          READING_MEDIUM_HEADER = 2,
-          READING_PAYLOAD = 3,
-          FULL = 4                                    // frame is full and waiting to be read by calling program
-        }; 
-        READ_FRAME_STATE __readFrameState__ = EMPTY;
-        byte __readFrame__ [HTTP_WS_FRAME_MAX_SIZE];  // frame consists of a header (6, 8 or 12 bytes (12 only for large frames which are not supported here)) and data payload buffer
-        byte *__readBuffer__;                         // pointer to buffer for frame payload - will be directed to __readFrame__ just after the header later
-        unsigned int __readBufferSize__;              // size of payload in current frame
-        unsigned int __bytesRead__;                   // how many bytes of current buffer have been read so far
-        byte *__mask__;                               // pointer to 4 frame mask bytes
-    };
-
-    
-    // ----- httpConnection class -----
-
-    class httpConnection {
-
-      public:
-
-        // httpConnection state
-        enum STATE_TYPE {
-          NOT_RUNNING = 0, 
-          RUNNING = 2        
-        };
-
-        STATE_TYPE state () { return __state__; }
-
-        httpConnection ( // the following parameters will be handeled by httpConnection instance
-                         int connectionSocket,
-                         String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn), // httpRequestHandler callback function provided by calling program
-                         void (*wsRequestHandlerCallback) (char *wsRequest, WebSocket *webSocket),      // wsRequestHandler callback function provided by calling program      
-                         const char *clientIP, 
-                         char *serverIP,
-                         const char *httpServerHomeDirectory = (char *) "/var/www/html"
-                       )  {
-                              // create a local copy of parameters for later use
-                              __connectionSocket__ = connectionSocket;
-                              __httpRequestHandlerCallback__ = httpRequestHandlerCallback;
-                              __wsRequestHandlerCallback__ = wsRequestHandlerCallback;
-                              strncpy (__clientIP__, clientIP, sizeof (__clientIP__)); __clientIP__ [sizeof (__clientIP__) - 1] = 0; // copy client's IP since connection may live longer than the server that created it
-                              strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0; // copy server's IP since connection may live longer than the server that created it
-                              #ifdef __FILE_SYSTEM__
-                                  // we have done the checking in httpServer constructor, there is no need to repeat the checking in httpCOnnection constructor agin
-                                  // if (!httpServerHomeDirectory || !*httpServerHomeDirectory || strlen (httpServerHomeDirectory) >= sizeof (__httpServerHomeDirectory__) - 2) {
-                                  //     dmesg ("[httpConnection] invalid httpServerHomeDirectory");
-                                  //     return;
-                                  // }
-                                  // but we have to keep a local copy of httpServerHomeDirectory since the server can stop before the connection it created gets closed
-                                  strcpy (__httpServerHomeDirectory__, httpServerHomeDirectory);
-                                  if (__httpServerHomeDirectory__ [strlen (__httpServerHomeDirectory__) - 1] != '/') strcat (__httpServerHomeDirectory__, "/"); // __httpServerHomeDirectory__ always ends with /
-                              #endif
-
-                              // handle connection in its own thread (task)
-                              // if running out of memory, creation of the new task would fail, so try multiple times before reporting an error
-                              #define tskNORMAL_PRIORITY 1
-                              for (int i = 0; i < 30; i++) { // try 3 s
-                                  #ifdef HTTP_SERVER_CORE
-                                      BaseType_t taskCreated = xTaskCreatePinnedToCore (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
-                                  #else
-                                      BaseType_t taskCreated = xTaskCreate (__connectionTask__, "httpConnection", HTTP_CONNECTION_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
-                                  #endif
-                                  if (pdPASS != taskCreated) {
-                                      delay (100);
-                                  } else {
-                                      __state__ = RUNNING;
-
-                                      xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                                          httpServerConcurentTasks++;
-                                          if (httpServerConcurentTasks > httpServerConcurentTasksHighWatermark)
-                                              httpServerConcurentTasksHighWatermark = httpServerConcurentTasks;
-                                      xSemaphoreGive (__httpServerSemaphore__);
-
-                                      return; // success
-                                  }
-                              }
-                              #ifdef __DMESG__
-                                  dmesgQueue << "[httpConnection] xTaskCreate error";
-                              #endif
-                          }
-
-        ~httpConnection ()  {
-                              // close connection socket
-                              int connectionSocket;
-                              xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                                  connectionSocket = __connectionSocket__;
-                                  __connectionSocket__ = -1;
-                                
-                                  httpServerConcurentTasks--;
-                              xSemaphoreGive (__httpServerSemaphore__);
-                              if (connectionSocket > -1) close (connectionSocket);
-                            }
-
-        int getSocket () { return __connectionSocket__; }
-
-        char *getClientIP () { return __clientIP__; }
-
-        char *getServerIP () { return __serverIP__; }
-
-        char *getHttpRequest () { return __httpRequestAndReplyBuffer__; }
-
-        cstring getHttpRequestHeaderField (const char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
-            char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
-            if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
-                p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
-                cstring s; while (*p >= ' ') s += *(p ++);
-                return s;
-            }
-            return "";
-        }
-
-        cstring getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
-            char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
-            if (p) {
-                p = strstr (p, cookieName); // find cookie name in HTTP header
-                if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
-                    p += strlen (cookieName) + 1; while (*p == ' ' || *p == '=' ) p++; // p points to cookie value in HTTP request
-                    cstring s; while (*p > ' ' && *p != ';') s += *(p ++);
-                    return s;
-                }
-            }
-            return "";
-        }
-
-        void setHttpReplyStatus (const char *status) { strncpy (__httpReplyStatus__, status, HTTP_REPLY_STATUS_MAX_LENGTH); __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH - 1] = 0; }
-        
-        void setHttpReplyHeaderField (cstring fieldName, cstring fieldValue) { 
-            __httpReplyHeader__ += fieldName;
-            __httpReplyHeader__ +=  + ": ";
-            __httpReplyHeader__ += fieldValue;
-            __httpReplyHeader__ += "\r\n"; 
-        }
-
-        void setHttpReplyCookie (cstring cookieName, cstring cookieValue, time_t expires = 0, cstring path = "/") { 
-          char e [50] = "";
-          if (expires) {
-              if (expires < 1687461154) { // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
-                  #ifdef __DMESG__
-                      dmesgQueue << "[httpConnection] can't set cookie expiratin time for the time has not been set yet";
-                  #endif
-              }
-              struct tm st;
-              gmtime_r (&expires, &st);
-              strftime (e, sizeof (e), "; Expires=%a, %d %b %Y %H:%M:%S GMT", &st);
-          }
-          // save whole fieldValue into cookieName to save stack space
-          cookieName += "=";
-          cookieName += cookieValue;
-          cookieName += "; Path=";
-          cookieName += path;
-          cookieName += e;
-          setHttpReplyHeaderField ("Set-Cookie", cookieName);
-        }
-
-        // combination of clientIP and User-Agent HTTP header field - used for calculation of web session token
-        String getClientSpecificInformation () { return String (__clientIP__) + getHttpRequestHeaderField ("User-Agent"); }
-
-
-        // support for web sessions
-        #ifdef WEB_SESSIONS
-
-            // calculates new token from random number and client specific information
-            webSessionToken_t newWebSessionToken (char *userName, time_t expires) { 
-                // generate new token
-                static int tokenCounter = 0;
-                webSessionToken_t webSessionToken;
-                sha256 (webSessionToken.c_str (), 64 + 1, (char *) (String (tokenCounter ++) + String (esp_random ()) + String (__clientIP__) + getHttpRequestHeaderField ("User-Agent")).c_str ());
-                
-                // insert the new token into token database together with information associated with it
-                signed char e = webSessionTokenDatabase.Insert (webSessionToken, {expires, userName}); // if Insert fails, the token will just not work
-                if (e) { // != OK
-                    #ifdef __DMESG__
-                        dmesgQueue << "[httpConnection] webSessionTokenDatabase.Insert error: " << e; 
-                    #endif
-                }             
-                return webSessionToken;
-            }
-
-            // check validity of a token in webSessionTokenDatabase
-            Cstring<64> getUserNameFromToken (webSessionToken_t& webSessionToken) {
-                // find token in the webSessionTokenDatabase
-                webSessionTokenInformation_t webSessionTokenInformation;
-                signed char e = webSessionTokenDatabase.FindValue (webSessionToken, &webSessionTokenInformation);
-                switch (e) {
-                    case err_ok:        if ((time () && webSessionTokenInformation.expires <= time ()) || webSessionTokenInformation.expires == 0)  
-                                            return "";
-                                        else
-                                            return webSessionTokenInformation.userName;
-                    case err_not_found: return "";
-                    default:                                
-                                    #ifdef __DMESG__
-                                        dmesgQueue << "[httpConnection] webSessionTokenDatabase.FindValue error: " << e; 
-                                    #endif
-                                    return "";
-                }
-            }
-
-            // updates the token in webSessionTokenDatabase
-            bool updateWebSessionToken (webSessionToken_t& webSessionToken, Cstring<64>& userName, time_t expires) {
-                return (webSessionTokenDatabase.Update (webSessionToken, {expires, userName}) == OK);
-            }
-
-            // deletes the token from webSessionTokenDatabase
-            bool deleteWebSessionToken (webSessionToken_t& webSessionToken) {
-                return (webSessionTokenDatabase.Delete (webSessionToken) == OK);
-            }
-
-        #endif
-
-                                                                                                  
-      private:
-
-        STATE_TYPE __state__ = NOT_RUNNING;
-    
-        int __connectionSocket__ = -1;
-        String (* __httpRequestHandlerCallback__) (char *httpRequest, httpConnection *hcn) = NULL;
-        void (* __wsRequestHandlerCallback__) (char *wsRequest, WebSocket *webSocket) = NULL;        
-        char __clientIP__ [46] = "";
-        char __serverIP__ [46] = "";
-
-        #ifdef __FILE_SYSTEM__
-            char __httpServerHomeDirectory__ [FILE_PATH_MAX_LENGTH] = "/var/www/html";
-        #else
-            char *__httpServerHomeDirectory__; // not used
-        #endif
-
-        Cstring<HTTP_BUFFER_SIZE> __httpRequestAndReplyBuffer__;
-
-        char  __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH] = "200 OK"; // by default
-        cstring __httpReplyHeader__ = ""; // by default
-
-        static void __connectionTask__ (void *pvParameters) {
-          // get "this" pointer
-          httpConnection *ths = (httpConnection *) pvParameters;           
-          { // code block
-            // READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST READ HTTP REQUEST 
-            
-            int receivedTotal = 0;
-            bool keepAlive;
-            char *endOfHttpRequest = NULL;
-            do {
-                receivedTotal = recvAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__.c_str () + receivedTotal, HTTP_BUFFER_SIZE - 1 - receivedTotal, (char *) "\r\n\r\n", HTTP_CONNECTION_TIME_OUT); // BJ remark: is - 1 necessary? recvAll already considers C string ending with 0 itself.
-                if (receivedTotal <= 0) {
-                    #ifdef __DMESG__
-                        if (errno != 11 && errno != 128) dmesgQueue << "[httpConnection] recv error: " << errno << " " << strerror (errno); // don't record time-out, it often happens 
-                    #endif
-                  goto endOfConnection;
-                }
-
-                endOfHttpRequest = strstr (ths->__httpRequestAndReplyBuffer__, "\r\n\r\n"); 
-                if (!endOfHttpRequest) {
-                    #ifdef __DMESG__
-                        dmesgQueue << "[httpConnection] __httpRequestAndReplyBuffer__ too small for HTTP request";
-                    #endif
-                    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
-                    goto endOfConnection;
-                }
-
-                // connection: keep-alive?
-                keepAlive = (stristr (ths->__httpRequestAndReplyBuffer__, "CONNECTION: KEEP-ALIVE") != NULL);
-
-                // WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET WEBSOCKET 
-  
-                if (stristr (ths->__httpRequestAndReplyBuffer__, (char *) "UPGRADE: WEBSOCKET")) {
-                  WebSocket webSocket (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, ths->__clientIP__, ths->__serverIP__); 
-                  if (webSocket.state () == WebSocket::RUNNING) {
-                    if (ths->__wsRequestHandlerCallback__) ths->__wsRequestHandlerCallback__ (ths->__httpRequestAndReplyBuffer__, &webSocket);
-                    else {
-                        #ifdef __DMESG__
-                            dmesgQueue << "[httpConnection]", " wsRequestHandlerCallback was not provided to handle WebSocket";
-                        #endif
-                    }
-                  }
-                  goto endOfConnection;
-                }
-  
-                // SEND HTTP REPLY FROM CALLBACK HANDLER SEND HTTP REPLY FROM CALLBACK HANDLER SEND HTTP REPLY FROM CALLBACK HANDLER 
-            
-                String httpReplyContent ("");
-                if (ths->__httpRequestHandlerCallback__) {
-                    httpReplyContent = ths->__httpRequestHandlerCallback__ (ths->__httpRequestAndReplyBuffer__, ths);
-                    if (!httpReplyContent) { // out of memory
-                        sendAll (ths->__connectionSocket__, reply503, HTTP_CONNECTION_TIME_OUT);
-                        goto endOfConnection;
-                    }
-                }
-
-                if (httpReplyContent != "") {
-                  // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
-                  if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), "CONTENT-TYPE")) { 
-                      if (stristr ((char *) httpReplyContent.c_str (), "<HTML")) {
-                          ths->setHttpReplyHeaderField ("Content-Type", "text/html");
-                      } else if (strstr ((char *) httpReplyContent.c_str (), "{")) {
-                          ths->setHttpReplyHeaderField ("Content-Type", "application/json");
-                      // ... add more if needed
-                      } else { 
-                          ths->setHttpReplyHeaderField ("Content-Type", "text/plain");
-                      }
-                  }
-                  if (ths->__httpReplyHeader__.errorFlags ()) {
-                      #ifdef __DMESG__
-                          dmesgQueue << "[httpConnection] __httpReplyHeader__ too small for HTTP reply header";
-                      #endif
-                      sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
-                      goto endOfConnection;
-                  }
-                  // construct the whole HTTP reply from differrent pieces and send it to client (browser)
-                  // if the reply is short enough send it in one block, 
-                  // if not send header first and then the content, so we won't have to move hughe blocks of data
-                  unsigned long httpReplyContentLen = httpReplyContent.length ();
-
-                  ths->__httpRequestAndReplyBuffer__ = "";
-                  ths->__httpRequestAndReplyBuffer__ += "HTTP/1.1 ";
-                  ths->__httpRequestAndReplyBuffer__ += ths->__httpReplyStatus__;
-                  ths->__httpRequestAndReplyBuffer__ += "\r\n";
-                  ths->__httpRequestAndReplyBuffer__ += ths->__httpReplyHeader__;
-                  ths->__httpRequestAndReplyBuffer__ += "Content-Length: ";
-                  ths->__httpRequestAndReplyBuffer__ += httpReplyContentLen; 
-                  ths->__httpRequestAndReplyBuffer__ += "\r\n\r\n";
-
-                  unsigned long httpReplyHeaderLen = ths->__httpRequestAndReplyBuffer__.length ();
-
-                  // can not happen due to the difference in lengths, we can skip checking:
-                  // if (ths->__httpRequestAndReplyBuffer__.error ()) {
-                  //    dmesg ("[httpConnection] __httpRequestAndReplyBuffer__ too small");
-                  //    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
-                  //    goto endOfConnection;
-                  // }
-
-                  int bytesToCopyThisTime = min (httpReplyContentLen, (unsigned long) HTTP_BUFFER_SIZE - httpReplyHeaderLen); 
-                  strncpy (&ths->__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (char *) httpReplyContent.c_str (), bytesToCopyThisTime);
-                  ths->__httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
-                  if (sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                      #ifdef __DMESG__
-                          dmesgQueue << "[httpConnection] send error: " << errno << " " << strerror (errno);
-                      #endif
-                      goto endOfConnection;
-                  }
-                  int bytesSent = bytesToCopyThisTime; // already sent
-                  while (bytesSent < httpReplyContentLen) {
-                    bytesToCopyThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) 1500); // MTU = 1500, TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send)
-                    if (sendAll (ths->__connectionSocket__, httpReplyContent.c_str () + bytesSent, bytesToCopyThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                        #ifdef __DMESG__
-                            dmesgQueue << "[httpConnection] send error: " << errno << " " << strerror (errno);
-                        #endif
-                        goto endOfConnection;
-                    }                    
-                    bytesSent += bytesToCopyThisTime; // already sent
-                  }
-                  // HTTP reply sent
-                  goto nextHttpRequest;
-                }
-
-                // SEND HTTP REPLY FROM FILE SEND HTTP REPLY FROM FILE SEND HTTP REPLY FROM FILE SEND HTTP REPLY FROM FILE 
-  
-                #ifdef __FILE_SYSTEM__
-                  if (fileSystem.mounted ()) {
-                    if (strstr (ths->__httpRequestAndReplyBuffer__.c_str (), "GET ") == ths->__httpRequestAndReplyBuffer__.c_str ()) {
-                      char *p = strstr (ths->__httpRequestAndReplyBuffer__.c_str () + 4, " ");
-                      if (p) {
-                        *p = 0;
-                        // get file name from HTTP request
-                        cstring fileName (ths->__httpRequestAndReplyBuffer__.c_str () + 4);
-                        if (fileName == "" || fileName == "/") fileName = "/index.html";
-                        fileName = cstring (ths->__httpServerHomeDirectory__) + (fileName.c_str () + 1); // __httpServerHomeDirectory__ always ends with /
-
-                        // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
-                        if (!stristr ((char *) ths->__httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
-                               if (fileName.endsWith ((char *) ".bmp"))                                         ths->setHttpReplyHeaderField ("Content-Type", "image/bmp");
-                          else if (fileName.endsWith ((char *) ".css"))                                         ths->setHttpReplyHeaderField ("Content-Type", "text/css");
-                          else if (fileName.endsWith ((char *) ".csv"))                                         ths->setHttpReplyHeaderField ("Content-Type", "text/csv");
-                          else if (fileName.endsWith ((char *) ".gif"))                                         ths->setHttpReplyHeaderField ("Content-Type", "image/gif");
-                          else if (fileName.endsWith ((char *) ".htm") || fileName.endsWith ((char *) ".html")) ths->setHttpReplyHeaderField ("Content-Type", "text/html");
-                          else if (fileName.endsWith ((char *) ".jpg") || fileName.endsWith ((char *) ".jpeg")) ths->setHttpReplyHeaderField ("Content-Type", "image/jpeg");
-                          else if (fileName.endsWith ((char *) ".js"))                                          ths->setHttpReplyHeaderField ("Content-Type", "text/javascript");
-                          else if (fileName.endsWith ((char *) ".json"))                                        ths->setHttpReplyHeaderField ("Content-Type", "application/json");
-                          else if (fileName.endsWith ((char *) ".mpeg"))                                        ths->setHttpReplyHeaderField ("Content-Type", "video/mpeg");
-                          else if (fileName.endsWith ((char *) ".pdf"))                                         ths->setHttpReplyHeaderField ("Content-Type", "application/pdf");
-                          else if (fileName.endsWith ((char *) ".png"))                                         ths->setHttpReplyHeaderField ("Content-Type", "image/png");
-                          else if (fileName.endsWith ((char *) ".tif") || fileName.endsWith ((char *) ".tiff")) ths->setHttpReplyHeaderField ("Content-Type", "image/tiff");
-                          else if (fileName.endsWith ((char *) ".txt"))                                         ths->setHttpReplyHeaderField ("Content-Type", "text/plain");
-                          // ... add more if needed but Contet-Type can often be omitted without problems ...
-                        }
-
-                        // seving files works better if served one at a time
-                        if (HTTP_CONNECTION_TIME_OUT == 0) {
-                            xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                        } else {
-                            if (xSemaphoreTake (__httpServerSemaphore__, pdMS_TO_TICKS (HTTP_CONNECTION_TIME_OUT)) != pdTRUE) {
-                                sendAll (ths->__connectionSocket__, reply503, HTTP_CONNECTION_TIME_OUT);
-                                goto endOfConnection;
-                            }
-                        }
-                        File f = fileSystem.open (fileName, "r");           
-                        if (f) {
-                          if (!f.isDirectory ()) {
-
-                            diskTrafficInformation.bytesRead += f.size (); // asume the whole file will be read - update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-
-                            if (ths->__httpReplyHeader__.errorFlags ()) {
-                                #ifdef __DMESG__
-                                    dmesgQueue << "[httpConnection] __httpReplyHeader__ too small for HTTP reply header";
-                                #endif
-                                sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
-                                xSemaphoreGive (__httpServerSemaphore__);
-                                goto endOfConnection;
-                            }
-                            // construct the whole HTTP reply from differrent pieces and send it to client (browser)
-                            // if the reply is short enough send it in one block,   
-                            // if not send header first and then the content, so we won't have to move hughe blocks of data
-                            unsigned long httpReplyContentLen = f.size ();
-
-                            ths->__httpRequestAndReplyBuffer__ = "";
-                            ths->__httpRequestAndReplyBuffer__ += "HTTP/1.1 ";
-                            ths->__httpRequestAndReplyBuffer__ += ths->__httpReplyStatus__;
-                            ths->__httpRequestAndReplyBuffer__ += "\r\n";
-                            ths->__httpRequestAndReplyBuffer__ += ths->__httpReplyHeader__;
-                            ths->__httpRequestAndReplyBuffer__ += "Content-Length: ";
-                            ths->__httpRequestAndReplyBuffer__ += httpReplyContentLen; 
-                            ths->__httpRequestAndReplyBuffer__ += "\r\n\r\n";
-
-                            unsigned long httpReplyHeaderLen = ths->__httpRequestAndReplyBuffer__.length ();
-
-                            // can not happen due to the difference in lengths, we can skip checking:
-                            // if (ths->__httpRequestAndReplyBuffer__.error ()) {
-                            //    dmesg ("[httpConnection] __httpRequestAndReplyBuffer__ too small");
-                            //    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
-                            //    goto endOfConnection;
-                            // }
-
-                            int bytesToReadThisTime = min (httpReplyContentLen, (unsigned long) HTTP_BUFFER_SIZE - httpReplyHeaderLen); 
-                            int bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (unsigned long) bytesToReadThisTime);
-                            // delay (1); // yield ();
-                            ths->__httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
-                            if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                                #ifdef __DMESG__
-                                    dmesgQueue << "[httpConnection] read-send error (1): " << errno << " " << strerror (errno);
-                                #endif
-                                f.close ();
-                                xSemaphoreGive (__httpServerSemaphore__);
-                                goto endOfConnection;
-                            }
-                            int bytesSent = bytesReadThisTime; // already sent
-                            while (bytesSent < httpReplyContentLen) {
-                              bytesToReadThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) HTTP_BUFFER_SIZE);
-                              bytesReadThisTime = f.read ((uint8_t *) &ths->__httpRequestAndReplyBuffer__ [0], (unsigned long) bytesToReadThisTime);
-                              delay (2); // yield (); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
-                              if (!bytesToReadThisTime || sendAll (ths->__connectionSocket__, ths->__httpRequestAndReplyBuffer__, bytesReadThisTime, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                                  #ifdef __DMESG__
-                                      dmesgQueue << "[httpConnection] read-send error (2): " << errno << " " << strerror (errno);
-                                  #endif
-                                  f.close ();
-                                  xSemaphoreGive (__httpServerSemaphore__);
-                                  goto endOfConnection;
-                              }                    
-                              bytesSent += bytesReadThisTime; // already sent
-                            }
-                            // HTTP reply sent
-                            f.close ();
-                            xSemaphoreGive (__httpServerSemaphore__);
-                            goto nextHttpRequest;
-                          } // if file is a file, not a directory
-                          f.close ();
-                        } // if file is open
-                        xSemaphoreGive (__httpServerSemaphore__);
-                      }   
-                    }          
-                  }
-                #endif
-  
-                // SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY SEND 404 HTTP REPLY
-
-                #ifdef __DMESG__
-                    dmesgQueue << "[httpServer] 404: " << (char *) ths->__httpRequestAndReplyBuffer__;
-                #endif
-  
-                if (sendAll (ths->__connectionSocket__, reply404, HTTP_CONNECTION_TIME_OUT) <= 0) {
-                    #ifdef __DMESG__
-                        dmesgQueue << "[httpConnection] send error: " << errno << " " << strerror (errno);
-                    #endif
-                    // cout << "[httpServer] send error, closing connection\n";
-                    goto endOfConnection;
-                }
-  
-        nextHttpRequest:
-              // if we are running out of ESP32's resources we won't try to keep the connection alive, this would slow down the server a bit but it would let still it handle requests from different clients
-              if (ths->__connectionSocket__ >= LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 2) { // running out of sockets
-                  // cout << "[httpServer] running out of sockets, closing connection\n";
-                  goto endOfConnection; // running out of sockets
-              }
-              if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) { // there is not a memory block large enough evailable to start a new task that would handle the connection
-                  // cout << "[httpServer] running out of memory, closing connection\n";
-                  goto endOfConnection; 
-              }
-
-              // connection: keep-alive?
-              if (keepAlive) {
-                  receivedTotal = 0;
-                  ths->__httpRequestAndReplyBuffer__ [0] = 0; 
-                  // restore default values of member variables for the next HTTP request on the same TCP connection
-                  strcpy (ths->__httpReplyStatus__, "200 OK"); 
-                  ths->__httpReplyHeader__ = "";                  
-              } else {
-                  goto endOfConnection;
-              }
-
-            } while (keepAlive); // do while keep-alive   
-          } // code block
-
-        endOfConnection:  
-
-          // all variables are freed now, unload the instance and stop the task (in this order)
-          delete ths;
-          vTaskDelete (NULL); // it is connection's responsibility to close itself
-        }
-
-    };
-
-
-    // ----- httpServer class -----
-
-    class httpServer {                                             
-    
-      public:
-
-        // httpServer state
-        enum STATE_TYPE {
-          NOT_RUNNING = 0, 
-          STARTING = 1, 
-          RUNNING = 2        
-        };
-        
-        STATE_TYPE state () { return __state__; }
-    
-        httpServer ( // the following parameters will be pased to each httpConnection instance
-                     String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection *hcn) = NULL,  // httpRequestHandler callback function provided by calling program
-                     void (*wsRequestHandlerCallback) (char *wsRequest, WebSocket *webSocket) = NULL,       // wsRequestHandler callback function provided by calling program      
-                     // the following parameters will be handeled by httpServer instance
-                     const char *serverIP = "0.0.0.0",                                                      // HTTP server IP address, 0.0.0.0 for all available IP addresses
-                     int serverPort = 80,                                                                   // HTTP server port
-                     bool (*firewallCallback) (char *connectingIP) = NULL,                                  // a reference to callback function that will be celled when new connection arrives 
-                     const char *httpServerHomeDirectory = "/var/www/html"
-                   )  { 
-                        // create directory structure
-                        #ifdef __FILE_SYSTEM__
-                          if (fileSystem.mounted ()) {
-                            if (!fileSystem.isDirectory ((char *) "/var/www/html")) { fileSystem.makeDirectory ((char *) "/var"); fileSystem.makeDirectory ((char *) "/var/www"); fileSystem.makeDirectory ((char *) "/var/www/html"); }
-                          }
-                        #endif
+                    webSocket_t (int connectionSocket,                                                            // socket number
+                                 char *clientIP,                                                                  // client's IP
+                                 char *serverIP,                                                                  // server's IP (the address to which the connection arrived)
+                                 String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection_t *hcn), // httpRequestHandlerCallback function provided by calling program
+                                 void (*wsRequestHandlerCallback) (char *httpRequest, webSocket_t *webSck)        // wsRequestHandlerCallback function provided by calling program
+                                ) : tcpConnection_t (connectionSocket, clientIP, serverIP) {
                         // create a local copy of parameters for later use
                         __httpRequestHandlerCallback__ = httpRequestHandlerCallback;
                         __wsRequestHandlerCallback__ = wsRequestHandlerCallback;
-                        strncpy (__serverIP__, serverIP, sizeof (__serverIP__)); __serverIP__ [sizeof (__serverIP__) - 1] = 0;
-                        __serverPort__ = serverPort;
-                        __firewallCallback__ = firewallCallback;
-                        #ifdef __FILE_SYSTEM__
-                            if (!httpServerHomeDirectory || !*httpServerHomeDirectory || strlen (httpServerHomeDirectory) >= sizeof (__httpServerHomeDirectory__) - 2) {
+                    }
+
+                    ~webSocket_t () {
+                        if (__recvFrameBuffer__) { // assuming WebSocket connection has been established
+                            __sendFrame__ (NULL, 0, CLOSE_FRAME_TYPE); // try sending closing WebSocket frame to the browser
+                            free (__recvFrameBuffer__);              
+                        }
+                    }
+
+
+                    // HTTP connection related functions
+
+                    char *getHttpRequest () { return __httpRequestAndReplyBuffer__; }
+
+                    cstring getHttpRequestHeaderField (const char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
+                        char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
+                        if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
+                            p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
+                            cstring s; while (*p >= ' ') s += *(p ++);
+                            return s;
+                        }
+                        return "";
+                    }
+
+                    cstring getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
+                        char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
+                        if (p) {
+                            p = strstr (p, cookieName); // find cookie name in HTTP header
+                            if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
+                                p += strlen (cookieName) + 1; while (*p == ' ' || *p == '=' ) p++; // p points to cookie value in HTTP request
+                                cstring s; while (*p > ' ' && *p != ';') s += *(p ++);
+                                return s;
+                            }
+                        }
+                        return "";
+                    }
+
+                    void setHttpReplyStatus (const char *status) { strncpy (__httpReplyStatus__, status, HTTP_REPLY_STATUS_MAX_LENGTH); __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH - 1] = 0; }
+        
+                    void setHttpReplyHeaderField (cstring fieldName, cstring fieldValue) { 
+                        __httpReplyHeader__ += fieldName;
+                        __httpReplyHeader__ +=  + ": ";
+                        __httpReplyHeader__ += fieldValue;
+                        __httpReplyHeader__ += "\r\n"; 
+                    }
+
+                    void setHttpReplyCookie (cstring cookieName, cstring cookieValue, time_t expires = 0, cstring path = "/") { 
+                        char e [50] = "";
+                        if (expires) {
+                            if (expires < 1687461154) { // 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
                                 #ifdef __DMESG__
-                                    dmesgQueue << "[httpServer] invalid httpServerHomeDirectory";
+                                    dmesgQueue << "[httpConn] can't set cookie expiratin time for the time has not been set yet";
                                 #endif
+                            }
+                            struct tm st;
+                            gmtime_r (&expires, &st);
+                            strftime (e, sizeof (e), "; Expires=%a, %d %b %Y %H:%M:%S GMT", &st);
+                        }
+                        // save whole fieldValue into cookieName to save stack space
+                        cookieName += "=";
+                        cookieName += cookieValue;
+                        cookieName += "; Path=";
+                        cookieName += path;
+                        cookieName += e;
+                        setHttpReplyHeaderField ("Set-Cookie", cookieName);
+                    }
+
+
+                    // support for web sessions
+                    #ifdef USE_WEB_SESSIONS
+
+                        // combination of clientIP and User-Agent HTTP header field - used for calculation of web session token
+                        String getClientSpecificInformation () { return String (getClientIP ()) + getHttpRequestHeaderField ("User-Agent"); }
+
+                        // calculates new token from random number and client specific information
+                        webSessionToken_t newWebSessionToken (char *userName, time_t expires) {
+
+                            // first delete all already expired tokens
+                            if (time (NULL) > 1736439853) { // 1736439853 = 2025/01/09 15:... is the time when I'm writing this code, any valid time should be greater than this
+                                webSessionToken_t expiredToken;
+                                webSessionTokenInformation_t webSessionTokenInformation;
+                                while (true) {
+                                    expiredToken = "";
+                                    for (auto p: webSessionTokenDatabase) {
+                                        signed char e = webSessionTokenDatabase.FindValue (p.key, &webSessionTokenInformation, p.blockOffset);
+                                        if (e == err_ok && webSessionTokenInformation.expires && webSessionTokenInformation.expires <= time (NULL)) {
+                                            expiredToken = p.key;
+                                            break;
+                                        } 
+                                    }
+                                    if (expiredToken != "") {
+                                        // DEBUG: cout << "[httpConn] deleteing expired token " << expiredToken << endl;
+                                        signed char e = webSessionTokenDatabase.Delete (expiredToken); // can't delete the token while scanning with for loop
+                                        if (e) { // != OK
+                                            #ifdef __DMESG__
+                                                dmesgQueue << "[httpConn] webSessionTokenDatabase.Delete error: " << e; 
+                                            #endif
+                                            // DEBUG: cout << "[httpConn] webSessionTokenDatabase.Delete error: " << e << endl; 
+                                        }                                        
+                                    } else {
+                                        break;
+                                    }     
+                                }
+                            }
+
+                            // generate new token
+                            static int tokenCounter = 0;
+                            webSessionToken_t webSessionToken;
+                            sha256 ((char *) webSessionToken.c_str (), 64 + 1, (char *) (String (tokenCounter ++) + String (esp_random ()) + String (getClientIP ()) + getHttpRequestHeaderField ("User-Agent")).c_str ());
+                            
+                            // insert the new token into token database together with information associated with it
+                            signed char e = webSessionTokenDatabase.Insert (webSessionToken, {expires, userName}); // if Insert fails, the token will just not work
+                            if (e) { // != OK
+                                #ifdef __DMESG__
+                                    dmesgQueue << "[httpConn] webSessionTokenDatabase.Insert error: " << e; 
+                                #endif
+                                // DEBUG: cout << "[httpConn] webSessionTokenDatabase.Insert error: " << e << endl; 
+                            }             
+                            return webSessionToken;
+                        }
+
+                        // check validity of a token in webSessionTokenDatabase
+                        Cstring<64> getUserNameFromToken (webSessionToken_t& webSessionToken) {
+                            // find token in the webSessionTokenDatabase
+                            webSessionTokenInformation_t webSessionTokenInformation;
+                            signed char e = webSessionTokenDatabase.FindValue (webSessionToken, &webSessionTokenInformation);
+                            switch (e) {
+                                case err_ok:
+                                                    if ((time (NULL) > 1687461154 && webSessionTokenInformation.expires > time (NULL)) || webSessionTokenInformation.expires == 0)  // 1687461154 = 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
+                                                        return webSessionTokenInformation.userName;
+                                                    else
+                                                        return "";
+                                case err_not_found: return "";
+                                default:                                
+                                                #ifdef __DMESG__
+                                                    dmesgQueue << "[httpConn] webSessionTokenDatabase.FindValue error: " << e; 
+                                                #endif
+                                                return "";
+                            }
+                        }
+
+                        // updates the token in webSessionTokenDatabase
+                        bool updateWebSessionToken (webSessionToken_t& webSessionToken, Cstring<64>& userName, time_t expires) {
+                            return (webSessionTokenDatabase.Update (webSessionToken, {expires, userName}) == err_ok);
+                        }
+
+                        // deletes the token from webSessionTokenDatabase
+                        bool deleteWebSessionToken (webSessionToken_t& webSessionToken) {
+                            return (webSessionTokenDatabase.Delete (webSessionToken) == err_ok);
+                        }
+
+                    #endif
+
+
+                    // WebSocket implementation of recvBlock, sendBlock, recvString, sendString functions
+
+                    int recvBlock (void *buf, size_t len) {
+                        while (true) {
+                            switch (peek ()) {
+                                case 0:                 break;  // not read yet, continue waiting
+                                case BINARY_FRAME_TYPE: __recvFrameState__ = EMPTY; 
+                                                        memcpy (buf, __payload__, min (__payloadLength__, (int) len));
+                                                        return __payloadLength__; 
+                                default:                return -1; // error, wrong frame type, ...
+                            }
+                            delay (1);
+                        }
+                        return 0; // ever executes
+                    }
+
+                    bool sendBlock (void *buf, size_t bufSize) { return __sendFrame__ ((byte *) buf, bufSize, BINARY_FRAME_TYPE); } // returns success
+                    
+                    bool recvString (char *buf, size_t len) {
+                        while (true) {
+                            switch (peek ()) {
+                                case 0:                 break;  // not read yet, continue waiting
+                                case STRING_FRAME_TYPE: __recvFrameState__ = EMPTY;
+                                                        len = min (__payloadLength__, (int) len - 1);
+                                                        memcpy (buf, __payload__, len);
+                                                        buf [len] = 0;
+                                                        return true;
+                                default:                return false; // error, wrong frame type, ...
+                            }
+                            delay (1);
+                        }
+                        return 0; // ever executes
+                    }
+
+                    bool sendString (const char *buf) { return __sendFrame__ ((byte *) buf, strlen (buf), STRING_FRAME_TYPE); } // returns success
+
+                    int peek ()  { // returns the type of the frame received or 0 if the frame has not arrived (yet completely), -1 in case of error
+                        switch (__recvFrameState__) {
+                            case EMPTY:                     {
+                                                                // prepare data structure for the first read operation
+                                                                __bytesReceived__ = 0;
+                                                                __recvFrameState__ = READING_SHORT_HEADER;
+                                                                // continue reading immediately
+                                                            }
+                            case READING_SHORT_HEADER:      { 
+                                                                // check socket if data is pending to be read
+                                                                switch (tcpConnection_t::peek (__recvFrameBuffer__, 6)) {
+                                                                    case -1:  // error
+                                                                              return -1;
+                                                                    case 0:   // no data is available
+                                                                              return 0;
+                                                                    default:  break; // continue
+                                                                }
+                                                                // read 6 bytes of short header
+                                                                tcpConnection_t::recvBlock (__recvFrameBuffer__ + __bytesReceived__, 6 - __bytesReceived__); // can't fail now
+
+                                                                // check if this frame type is supported
+                                                                if (!(__recvFrameBuffer__ [0] & 0b10000000)) { // check if fin bit is set
+                                                                    #ifdef __DMESG__
+                                                                        dmesgQueue << "[webSocket] frame type not supported";
+                                                                    #endif
+                                                                    return -1;
+                                                                }
+
+                                                                // read frame type
+                                                                byte frameType = __recvFrameBuffer__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close, ...
+                                                                if (frameType == CLOSE_FRAME_TYPE)
+                                                                    return CLOSE_FRAME_TYPE;
+
+                                                                if (frameType != STRING_FRAME_TYPE && frameType != BINARY_FRAME_TYPE) {
+                                                                    #ifdef __DMESG__
+                                                                        dmesgQueue << "[webSocket] frame type not supported";
+                                                                    #endif
+                                                                    return -1;
+                                                                } 
+                                                                // NOTE: after this point only TEXT and BINRY frames are processed!
+                                                              
+                                                                // check payload length that also determines frame type
+                                                                __payloadLength__ = __recvFrameBuffer__ [1] & 0b01111111; // byte 1: mask bit is always 1 for packets that come from browsers, cut it off
+                                                                if (__payloadLength__ <= 125) { // short payload
+                                                                    __frameMask__ = __recvFrameBuffer__ + 2; // bytes 2, 3, 4, 5
+                                                                    __payload__  = __recvFrameBuffer__ + 6; // skip 6 bytes of header, note that __recvFrameBuffer__ is large enough
+                                                                    // continue with reading payload immediatelly
+                                                                    __recvFrameState__ = READING_PAYLOAD;
+                                                                    goto readingPayload;
+                                                                } else if (__payloadLength__ == 126) { // 126 means medium payload, read additional 2 bytes of header
+                                                                    __recvFrameState__ = READING_MEDIUM_HEADER;
+                                                                    // continue reading immediately
+                                                                } else { // 127 means large data block - not supported since ESP32 doesn't have enough memory
+                                                                    #ifdef __DMESG__
+                                                                        dmesgQueue << "[webSocket] frame type not supported";
+                                                                    #endif
+                                                                    return -1;
+                                                                }
+                                                            }
+                              case READING_MEDIUM_HEADER:   {
+                                                                // we don't have to repeat the checking already done in short header case, just read additional 2 bytes and update the data structure
+                                                                // read additional 2 bytes (8 altogether) bytes of medium header
+                                                                switch (tcpConnection_t::peek (__recvFrameBuffer__ + 6, 2)) {
+                                                                    case -1:  // error
+                                                                              return -1;
+                                                                    case 0:   // no data is available
+                                                                              return 0;
+                                                                    default:  break; // continue
+                                                                }
+                                                                // read additional 2 bytes of header
+                                                                tcpConnection_t::recvBlock (__recvFrameBuffer__ + __bytesReceived__, 8 - __bytesReceived__); // can't fail now
+
+                                                                // correct internal structure for reading into extended buffer and continue immediately
+                                                                __payloadLength__ = __recvFrameBuffer__ [2] << 8 | __recvFrameBuffer__ [3];
+                                                                __frameMask__ = __recvFrameBuffer__ + 4; // bytes 4, 5, 6, 7
+                                                                __payload__ = __recvFrameBuffer__ + 8; // skip 8 bytes of header, check if __readFrame is large enough:
+                                                                if (__payloadLength__ > HTTP_WS_FRAME_MAX_SIZE - 8) {
+                                                                    #ifdef __DMESG__
+                                                                        dmesgQueue << "[webSocket] buffer too small";
+                                                                    #endif
+                                                                    return -1;
+                                                                }
+                                                                __recvFrameState__ = READING_PAYLOAD;
+                                                                // continue with reading payload immediatelly
+                                                            }
+                              case READING_PAYLOAD:
+                          readingPayload:
+                                                            {
+                                                                __bytesReceived__ = 0; // reset the counter, count only payload from now on
+                                                                // read all the payload bytes if possible
+                                                                int i = tcpConnection_t::recv (__payload__ + __bytesReceived__, __payloadLength__ - __bytesReceived__);
+                                                                if (i <= 0)
+                                                                    return -1;
+                                                                __bytesReceived__ += i;
+                                                                if (__bytesReceived__ != __payloadLength__) 
+                                                                    return 0;
+
+                                                                // all is read, decode (unmask) the data
+                                                                for (int i = 0; i < __payloadLength__; i++)
+                                                                    __payload__ [i] ^= __frameMask__ [i % 4];
+                                                                // conclude payload with 0 in case this is going to be interpreted as text - like C string
+                                                                __payload__ [__payloadLength__] = 0;
+                                                                __recvFrameState__ = FULL;     // stop reading until buffer is read by the calling program
+                                                                return __recvFrameBuffer__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close, ...
+                                                            }
+
+                              case FULL:                    // return immediately, there is no space left to read additional incoming data
+                                                            return __recvFrameBuffer__ [0] & 0b00001111; // check opcode, 1 = text, 2 = binary, 8 = close, ...
+                          }
+                          // for every case that has not been handeled earlier return not available
+                          return 0;
+                      }
+
+
+                private:
+
+                    // HTTP connection related variables
+                    Cstring <HTTP_BUFFER_SIZE> __httpRequestAndReplyBuffer__ = ""; // by default
+                    char  __httpReplyStatus__ [HTTP_REPLY_STATUS_MAX_LENGTH] = "200 OK"; // by default
+                    cstring __httpReplyHeader__ = ""; // by default
+
+                    // WebSocket related variables
+                    byte *__recvFrameBuffer__ = NULL;
+                    byte *__sendFrameBuffer__ = NULL;
+                    int __bytesReceived__;
+                    byte *__frameMask__;
+                    int __payloadLength__;
+                    byte *__payload__; // will be initialized when the header is read
+
+                    // WebSocket functions
+
+                    enum RECV_FRAME_STATE {
+                        EMPTY = 0,                                  // frame is empty
+                        READING_SHORT_HEADER = 1,
+                        READING_MEDIUM_HEADER = 2,
+                        READING_PAYLOAD = 3,
+                        FULL = 4                                    // frame is full and waiting to be read by the calling program
+                    }; 
+                    RECV_FRAME_STATE __recvFrameState__ = EMPTY;
+
+                    bool __sendFrame__ (byte *buffer, size_t bufferSize, byte frameType) {
+                        if (bufferSize > 0xFFFF) { // this size fits in large frame size - not supported here
+                            #ifdef __DMESG__
+                                dmesgQueue << "[webSocket] large frame size is not supported";
+                            #endif
+                            return false;
+                        } 
+                        // byte *frame = NULL;
+                        if (bufferSize > HTTP_WS_FRAME_MAX_SIZE - 4) { // 4 bytes are needed for header
+                            #ifdef __DMESG__
+                                dmesgQueue << "[webSocket] frame size > " << HTTP_WS_FRAME_MAX_SIZE - 4 << "is not supported";
+                            #endif
+                            return false;                         
+                        }           
+                        int sendFrameSize;
+                        if (bufferSize > 125) { // medium frame size
+                            // frame type
+                            __sendFrameBuffer__ [0] = 0b10000000 | frameType; // set FIN bit and frame data type
+                            __sendFrameBuffer__ [1] = 126; // medium frame size, without masking (we won't do the masking, we won't set the MASK bit)
+                            __sendFrameBuffer__ [2] = bufferSize >> 8; // / 256;
+                            __sendFrameBuffer__ [3] = bufferSize; // % 256;
+                            memcpy (__sendFrameBuffer__ + 4, buffer, bufferSize);  
+                            sendFrameSize = bufferSize + 4;
+                        } else { // small frame size
+                            __sendFrameBuffer__ [0] = 0b10000000 | frameType; // set FIN bit and frame data type
+                            __sendFrameBuffer__ [1] = bufferSize; // small frame size, without masking (we won't do the masking, we won't set the MASK bit)
+                            if (bufferSize) memcpy (__sendFrameBuffer__ + 2, buffer, bufferSize);  
+                            sendFrameSize = bufferSize + 2;
+                        }
+                        if (tcpConnection_t::sendBlock (__sendFrameBuffer__, sendFrameSize) != sendFrameSize)
+                            return false;
+                        return true;
+                    }
+
+
+                    void __runConnectionTask__ () {
+
+                        // ----- this is where HTTP connection starts, the socket is already opened -----
+
+                        bool keepAlive;
+                        do { // while keepAlive
+
+                            // 1. read the request
+                            switch (tcpConnection_t::recvString (__httpRequestAndReplyBuffer__, HTTP_BUFFER_SIZE, "\r\n\r\n")) {
+                                case -1:                // error
+                                case 0:                 // connection closed by peer
+                                                        return;
+                                case HTTP_BUFFER_SIZE:  // buffer full but end of request did not arrive
+                                                        #ifdef __DMESG__
+                                                            dmesgQueue << (const char *) "[httpConn] buffer too small for " << __httpRequestAndReplyBuffer__;
+                                                        #endif
+                                                        Serial.print ((const char *) "[httpConn] buffer too small for "); Serial.println (__httpRequestAndReplyBuffer__);
+                                                        return;
+                                default:                break; // continue
+                            }
+
+                            // connection: keep-alive?
+                            keepAlive = (stristr (__httpRequestAndReplyBuffer__, "CONNECTION: KEEP-ALIVE") != NULL);
+
+                            // 2. is it a websocket request?
+                            if (stristr (__httpRequestAndReplyBuffer__, (char *) "UPGRADE: WEBSOCKET")) {
+
+                                // a. change timeout for WebSOcket
+                                if (setTimeout (WEB_SESSION_TIME_OUT) < 0) {
+                                    #ifdef __DMESG__
+                                        dmesgQueue << (const char *) "[httpConn] setsockopt error: " << errno << " " << strerror (errno);
+                                    #endif
+                                    return;
+                                }
+
+                                // b. get additional memory for frame buffers
+                                __recvFrameBuffer__ = (byte *) malloc (2 * HTTP_WS_FRAME_MAX_SIZE);
+                                if (!__recvFrameBuffer__) {
+                                    #ifdef __DMESG__
+                                        dmesgQueue << (const char *) "[httpConn] out of memory";
+                                    #endif
+                                    return;                                  
+                                }
+                                __sendFrameBuffer__ = __recvFrameBuffer__ + HTTP_WS_FRAME_MAX_SIZE;
+
+                                // c. do the handshake with the browser so it would consider webSocket connection established
+                                char *i = stristr (__httpRequestAndReplyBuffer__, (char *) "SEC-WEBSOCKET-KEY: ");
+                                if (i) {             
+                                    i += 19;
+                                    char *j = strstr (i, "\r\n");
+                                    if (j) {
+                                        if (j - i <= 24) { // Sec-WebSocket-Key is not supposed to exceed 24 characters
+                                            char key [25]; 
+                                            memcpy (key, i, j - i); 
+                                            key [j - i] = 0; 
+                                            // calculate Sec-WebSocket-Accept
+                                            char s1 [64]; 
+                                            strcpy (s1, key); 
+                                            strcat (s1, (char *) "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"); 
+                                            #define SHA1_RESULT_SIZE 20
+                                            unsigned char s2 [SHA1_RESULT_SIZE]; 
+                                            esp_sha (SHA1, (unsigned char *) s1, strlen (s1), s2);
+                                            #define WS_CLIENT_KEY_LENGTH 24
+                                            size_t olen = WS_CLIENT_KEY_LENGTH;
+                                            char s3 [32];
+                                            mbedtls_base64_encode ((unsigned char *) s3, 32, &olen, s2, SHA1_RESULT_SIZE);
+                                            // compose websocket accept response and send it back to the client
+                                            char buffer  [255]; // 255 will do
+                                            sprintf (buffer, "HTTP/1.1 101 Switching Protocols \r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: %s\r\n\r\n", s3);
+                                            if (tcpConnection_t::sendString (buffer) <= 0)
+                                                return;
+                                        } else { // |key| > 24
+                                            #ifdef __DMESG__
+                                                dmesgQueue << "[webSocket] WsRequest key too long";
+                                            #endif
+                                            return;
+                                        }
+                                    } else { // j == NULL
+                                        #ifdef __DMESG__
+                                            dmesgQueue << "[webSocket] WsRequest without key";
+                                        #endif
+                                        return;
+                                    }
+
+                                    // d. call __wsRequestHandlerCallback__
+                                    if (__wsRequestHandlerCallback__) {
+                                        __wsRequestHandlerCallback__ (__httpRequestAndReplyBuffer__, this);
+                                    } else {
+                                        #ifdef __DMESG__
+                                            dmesgQueue << (const char *) "[httpConn]", " wsRequestHandlerCallback was not provided to handle WebSocket";
+                                        #endif
+                                        return;
+                                    }
+
+                                } else { // i == NULL
+                                    #ifdef __DMESG__
+                                        dmesgQueue << "[webSocket] WsRequest without key";
+                                    #endif
+                                }
                                 return;
                             }
-                            strcpy (__httpServerHomeDirectory__, httpServerHomeDirectory);
-                            if (__httpServerHomeDirectory__ [strlen (__httpServerHomeDirectory__) - 1] != '/') strcat (__httpServerHomeDirectory__, "/"); // __httpServerHomeDirectory__ always ends with /
-                        #endif                        
 
-                        // start listener in its own thread (task)
-                        __state__ = STARTING;                        
-                        #define tskNORMAL_PRIORITY 1
-                        #ifdef HTTP_SERVER_CORE
-                            BaseType_t taskCreated = xTaskCreatePinnedToCore (__listenerTask__, "httpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL, HTTP_SERVER_CORE);
-                        #else
-                            BaseType_t taskCreated = xTaskCreate (__listenerTask__, "httpServer", 2 * 1024, this, tskNORMAL_PRIORITY, NULL);
-                        #endif
-                        if (pdPASS != taskCreated) {
-                            #ifdef __DMESG__
-                                dmesgQueue << "[httpServer] xTaskCreate error";
-                            #endif
-                        } else {
-                          // wait until listener starts accepting connections
-                          while (__state__ == STARTING) delay (1); 
-                          // when constructor returns __state__ could be eighter RUNNING (in case of success) or NOT_RUNNING (in case of error)
-                        }
-                      }
-        
-        ~httpServer ()  {
-                          // close listening socket
-                          int listeningSocket;
-                          xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                            listeningSocket = __listeningSocket__;
-                            __listeningSocket__ = -1;
-                          xSemaphoreGive (__httpServerSemaphore__);
-                          if (listeningSocket > -1) close (listeningSocket);
+                            // 3. will httpRequestHandlerCallback function provide (at least content part of) the reply?
+                            String httpReplyContent ("");
+                            if (__httpRequestHandlerCallback__) {
 
-                          // wait until listener finishes before unloading so that memory variables are still there while the listener is running
-                          while (__state__ != NOT_RUNNING) delay (1);
-                        }
- 
-      private:
+                                httpReplyContent = __httpRequestHandlerCallback__ (__httpRequestAndReplyBuffer__, (httpConnection_t *) this);
 
-        STATE_TYPE __state__ = NOT_RUNNING;
-
-        String (* __httpRequestHandlerCallback__) (char *httpRequest, httpConnection *hcn) = NULL;
-        void (* __wsRequestHandlerCallback__) (char *wsRequest, WebSocket *webSocket) = NULL;
-        char __serverIP__ [46] = "0.0.0.0";
-        int __serverPort__ = 80;
-        bool (* __firewallCallback__) (char *connectingIP) = NULL;
-
-        #ifdef __FILE_SYSTEM__
-            char __httpServerHomeDirectory__ [FILE_PATH_MAX_LENGTH] = "/var/www/html";
-        #else
-            char *__httpServerHomeDirectory__; // not used
-        #endif        
-
-        int __listeningSocket__ = -1;
-
-        static void __listenerTask__ (void *pvParameters) {
-          {
-            // get "this" pointer
-            httpServer *ths = (httpServer *) pvParameters;  
-
-            #ifdef WEB_SESSIONS
-                // load database and start database cleaning task
-                xTaskCreate ([] (void *param) { 
-                                                  // load existing tokens
-                                                  signed char e = webSessionTokenDatabase.loadData ("/var/www/webSessionTokens.db");
-                                                  if (e != OK) {
-                                                      #ifdef __DMESG__
-                                                          dmesgQueue << "[httpServer] webSessionCleaner: webSessionTokenDatabase.loadData error: " << e << ", truncating webSessionTokenDatabase";
-                                                      #endif
-                                                      webSessionTokenDatabase.Truncate (); // forget all stored data and try to make it work from the start
-                                                  }
-
-                                                  // periodically delete expired tokens
-                                                  while (true) {
-                                                      webSessionToken_t expiredToken;
-                                                      webSessionTokenInformation_t webSessionTokenInformation;
-                                                      for (auto p: webSessionTokenDatabase) {
-                                                          signed char e = webSessionTokenDatabase.FindValue (p->key, &webSessionTokenInformation, p->blockOffset);
-                                                          if (e == OK && time () && webSessionTokenInformation.expires && webSessionTokenInformation.expires <= time ()) {
-                                                              expiredToken = p->key;
-                                                              break;
-                                                          } 
-                                                      }
-                                                      if (expiredToken > "") {
-                                                          webSessionTokenDatabase.Delete (expiredToken);
-                                                      }
-
-                                                      delay (6000); // repeat every 6 sec
-                                                  }
-                                              }, 
-                                              "webSessionCleaner", 4 * 1024, NULL, 1, NULL);                
-            #endif            
-    
-            // start listener
-            ths->__listeningSocket__ = socket (PF_INET, SOCK_STREAM, 0);
-            if (ths->__listeningSocket__ == -1) {
-                #ifdef __DMESG__
-                    dmesgQueue << "[httpServer] socket error: " << errno << " " << strerror (errno);
-                #endif
-            } else {
-              // make address reusable - so we won't have to wait a few minutes in case server will be restarted
-              int flag = 1;
-              if (setsockopt (ths->__listeningSocket__, SOL_SOCKET, SO_REUSEADDR, &flag, sizeof (flag)) == -1) {
-                  #ifdef __DMESG__
-                      dmesgQueue << "[httpServer] setsockopt error: " << errno << " " << strerror (errno);
-                  #endif
-              } else {
-                // bind listening socket to IP address and port     
-                struct sockaddr_in serverAddress; 
-                memset (&serverAddress, 0, sizeof (struct sockaddr_in));
-                serverAddress.sin_family = AF_INET;
-                serverAddress.sin_addr.s_addr = inet_addr (ths->__serverIP__);
-                serverAddress.sin_port = htons (ths->__serverPort__);
-                if (bind (ths->__listeningSocket__, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-                    #ifdef __DMESG__
-                        dmesgQueue << "[httpServer] bind error: " << errno << " " << strerror (errno);
-                    #endif
-               } else {
-                 // mark socket as listening socket
-                 if (listen (ths->__listeningSocket__, 12) == -1) {
-                    #ifdef __DMESG__
-                        dmesgQueue << "[httpServer] listen error: " << errno << " " << strerror (errno);
-                    #endif
-                 } else {
-
-                  // remember some information that netstat telnet command would use
-                  additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET] = { __LISTENING_SOCKET__, 0, 0, millis (), millis () };
-          
-                  // listener is ready for accepting connections
-                  ths->__state__ = RUNNING;
-                  #ifdef __DMESG__
-                      dmesgQueue << "[httpServer] listener is running on core " << xPortGetCoreID ();
-                      dmesgQueue << "[httpServer] home (root) directory is " << ths->__httpServerHomeDirectory__; 
-                  #endif
-                  while (ths->__listeningSocket__ > -1) { // while listening socket is opened
-          
-                      int connectingSocket;
-                      struct sockaddr_in connectingAddress;
-                      socklen_t connectingAddressSize = sizeof (connectingAddress);
-                      // while (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) delay (10); // there is no memory block large enough evailable to start a new task that would handle the new connection
-                      connectingSocket = accept (ths->__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
-                      if (connectingSocket == -1) {
-                        if (ths->__listeningSocket__ > -1) {
-                            #ifdef __DMESG__
-                                dmesgQueue << "[httpServer] accept error: " << errno << " " << strerror (errno);
-                            #endif
-                        }
-                      } else {
-
-                        // remember some information that netstat telnet command would use
-                        additionalSocketInformation [ths->__listeningSocket__ - LWIP_SOCKET_OFFSET].lastActiveMillis = millis ();
-                        additionalSocketInformation [connectingSocket - LWIP_SOCKET_OFFSET] = { __HTTP_SERVER_SOCKET__, 0, 0, millis (), millis () };
-
-                        // get client's IP address
-                        char clientIP [46]; inet_ntoa_r (connectingAddress.sin_addr, clientIP, sizeof (clientIP)); 
-                        // get server's IP address
-                        char serverIP [46]; struct sockaddr_in thisAddress = {}; socklen_t len = sizeof (thisAddress);
-                        if (getsockname (connectingSocket, (struct sockaddr *) &thisAddress, &len) != -1) inet_ntoa_r (thisAddress.sin_addr, serverIP, sizeof (serverIP));
-                        // port number could also be obtained if needed: ntohs (thisAddress.sin_port);
-                        if (ths->__firewallCallback__ && !ths->__firewallCallback__ (clientIP)) {
-                            #ifdef __DMESG__
-                                dmesgQueue <<"[httpServer] firewall rejected connection from " << clientIP;
-                            #endif
-                          close (connectingSocket);
-                        } else {
-                          // make the socket non-blocking so that we can detect time-out
-                          if (fcntl (connectingSocket, F_SETFL, O_NONBLOCK) == -1) {
-                              #ifdef __DMESG__
-                                  dmesgQueue <<"[httpServer] fcntl error: " << errno << " " << strerror (errno);
-                              #endif
-                              close (connectingSocket);
-                          } else {
-                                // create httpConnection instence that will handle the connection, then we can lose reference to it - httpConnection will handle the rest
-                                httpConnection *hcp = new (std::nothrow) httpConnection (connectingSocket, ths->__httpRequestHandlerCallback__, ths->__wsRequestHandlerCallback__, clientIP, serverIP, ths->__httpServerHomeDirectory__);
-                                if (!hcp) {
-                                  // dmesg ("[httpServer] new httpConnection error");
-                                  sendAll (connectingSocket, reply503, HTTP_CONNECTION_TIME_OUT);
-                                  close (connectingSocket); // normally httpConnection would do this but if it is not created we have to do it here
-                                } else {
-                                  if (hcp->state () != httpConnection::RUNNING) {
-                                    sendAll (connectingSocket, reply503, HTTP_CONNECTION_TIME_OUT);
-                                    delete (hcp); // normally httpConnection would do this but if it is not running we have to do it here
-                                  } else {
-                                    ; // httpConnection is running in its own task and will stop by itself 
-                                  }
+                                if (!httpReplyContent) { // out of memory
+                                    #ifdef __DMESG__
+                                        dmesgQueue << (const char *) "[httpConn] out of memory";
+                                    #endif
+                                    tcpConnection_t::sendString (reply503);
+                                    return;
                                 }
-                                                               
-                          } // fcntl
-                        } // firewall
-                      } // accept
+                            }
 
-                  } // while accepting connections
-                  #ifdef __DMESG__
-                      dmesgQueue << "[httpServer] stopped";
-                  #endif
-          
-                 } // listen
-               } // bind
-              } // setsockopt
-              int listeningSocket;
-              xSemaphoreTake (__httpServerSemaphore__, portMAX_DELAY);
-                listeningSocket = ths->__listeningSocket__;
-                ths->__listeningSocket__ = -1;
-              xSemaphoreGive (__httpServerSemaphore__);
-              if (listeningSocket > -1) close (listeningSocket);
-            } // socket
-            ths->__state__ = NOT_RUNNING;
-          }
-          // stop the listening thread (task)
-          vTaskDelete (NULL); // it is listener's responsibility to close itself          
-        }
-          
+                            if (httpReplyContent != "") {
+
+                                // if content-type was not provided with __httpRequestHandlerCallback__ try guessing what it is
+                                if (!stristr (__httpReplyHeader__, "CONTENT-TYPE")) { 
+                                    if (stristr ((char *) httpReplyContent.c_str (), "<HTML")) {
+                                        setHttpReplyHeaderField ("Content-Type", "text/html");
+                                    } else if (strstr ((char *) httpReplyContent.c_str (), "{")) {
+                                        setHttpReplyHeaderField ("Content-Type", "application/json");
+                                    // ... add more if needed
+                                    } else {
+                                        setHttpReplyHeaderField ("Content-Type", "text/plain");
+                                    }
+                                }
+                                if (__httpReplyHeader__.errorFlags ()) {
+                                    #ifdef __DMESG__
+                                        dmesgQueue << (const char *) "[httpConn] buffer too small";
+                                    #endif
+                                    tcpConnection_t::sendString (reply507);
+                                    return;
+                                }
+
+                                // construct the whole HTTP reply from differrent pieces and send it to the client (browser)
+                                // if the reply is short enough send it in one block, 
+                                // if not send header first and then the content, so we won't have to move hughe blocks of data
+                                __httpRequestAndReplyBuffer__ = "";
+                                __httpRequestAndReplyBuffer__ += "HTTP/1.1 ";
+                                __httpRequestAndReplyBuffer__ += __httpReplyStatus__;
+                                __httpRequestAndReplyBuffer__ += "\r\n";
+                                __httpRequestAndReplyBuffer__ += __httpReplyHeader__;
+                                __httpRequestAndReplyBuffer__ += "Content-Length: ";
+                                __httpRequestAndReplyBuffer__ += httpReplyContent.length ();
+                                __httpRequestAndReplyBuffer__ += "\r\n\r\n";
+
+                                unsigned long httpReplyHeaderLen = __httpRequestAndReplyBuffer__.length ();
+
+                                // can not happen due to the difference in lengths, we can skip checking:
+                                // if (ths->__httpRequestAndReplyBuffer__.error ()) {
+                                //    dmesg ("[httpConn] __httpRequestAndReplyBuffer__ too small");
+                                //    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
+                                //    goto endOfConnection;
+                                // }
+                                unsigned long contentBytesToSendThisTime = min ((unsigned long) httpReplyContent.length (), HTTP_BUFFER_SIZE - httpReplyHeaderLen);
+                                unsigned long contentBytesSentTotal = 0;
+                                memcpy (&__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (char *) httpReplyContent.c_str (), contentBytesToSendThisTime);
+                                while (true) {
+                                    if (tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, httpReplyHeaderLen + contentBytesToSendThisTime) <= 0)
+                                        return;
+
+                                    httpReplyHeaderLen = 0; // we won't send the header any more
+                                    contentBytesSentTotal += contentBytesToSendThisTime;
+                                    contentBytesToSendThisTime = min (httpReplyContent.length () - contentBytesSentTotal, (unsigned long) HTTP_BUFFER_SIZE);
+                                    if (!contentBytesToSendThisTime)
+                                        break;
+                                    memcpy (__httpRequestAndReplyBuffer__, (char *) httpReplyContent.c_str () + contentBytesSentTotal, contentBytesToSendThisTime);
+                                }
+
+                                // content-type provided with __httpRequestHandlerCallback__ was sent to the browser, continue with the next request on this connection
+                                goto nextHttpRequest;
+                            }
+
+                            // 4. if the request is a file name
+                            #ifdef __FILE_SYSTEM__
+                                if (fileSystem.mounted ()) {
+                                    if (strstr (__httpRequestAndReplyBuffer__.c_str (), "GET ") == __httpRequestAndReplyBuffer__.c_str ()) {
+                                        char *p = strstr (__httpRequestAndReplyBuffer__.c_str () + 4, " ");
+                                        if (p) {
+                                            *p = 0;
+                                            // get file name from HTTP request
+                                            cstring fileName (__httpRequestAndReplyBuffer__.c_str () + 4);
+                                            if (fileName == "" || fileName == "/") fileName = "/index.html";
+                                            fileName = cstring (HTTP_SERVER_HOME_DIRECTORY) + (fileName.c_str () + 1); // HTTP_SERVER_HOME_DIRECTORY always ends with /
+                                            // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
+                                            if (!stristr ((char *) __httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
+                                                     if (fileName.endsWith (".bmp"))                                setHttpReplyHeaderField ("Content-Type", "image/bmp");
+                                                else if (fileName.endsWith (".css"))                                setHttpReplyHeaderField ("Content-Type", "text/css");
+                                                else if (fileName.endsWith (".csv"))                                setHttpReplyHeaderField ("Content-Type", "text/csv");
+                                                else if (fileName.endsWith (".gif"))                                setHttpReplyHeaderField ("Content-Type", "image/gif");
+                                                else if (fileName.endsWith (".htm") || fileName.endsWith (".html")) setHttpReplyHeaderField ("Content-Type", "text/html");
+                                                else if (fileName.endsWith (".jpg") || fileName.endsWith (".jpeg")) setHttpReplyHeaderField ("Content-Type", "image/jpeg");
+                                                else if (fileName.endsWith (".js"))                                 setHttpReplyHeaderField ("Content-Type", "text/javascript");
+                                                else if (fileName.endsWith (".json"))                               setHttpReplyHeaderField ("Content-Type", "application/json");
+                                                else if (fileName.endsWith (".mpeg"))                               setHttpReplyHeaderField ("Content-Type", "video/mpeg");
+                                                else if (fileName.endsWith (".pdf"))                                setHttpReplyHeaderField ("Content-Type", "application/pdf");
+                                                else if (fileName.endsWith (".png"))                                setHttpReplyHeaderField ("Content-Type", "image/png");
+                                                else if (fileName.endsWith (".tif") || fileName.endsWith (".tiff")) setHttpReplyHeaderField ("Content-Type", "image/tiff");
+                                                else if (fileName.endsWith (".txt"))                                setHttpReplyHeaderField ("Content-Type", "text/plain");
+                                                // ... add more if needed but Contet-Type can often be omitted without problems ...
+                                            }
+
+                                            // serving files works better if served one at a time
+                                            if (HTTP_CONNECTION_TIME_OUT == 0) {
+                                                xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                            } else {
+                                                if (xSemaphoreTake (__tcpServerSemaphore__, pdMS_TO_TICKS (HTTP_CONNECTION_TIME_OUT * 1000)) != pdTRUE) {
+                                                    tcpConnection_t::sendString (reply503);
+                                                    return;
+                                                }
+                                            }
+
+                                            File f = fileSystem.open (fileName, "r");           
+                                            if (f) {
+                                                if (!f.isDirectory ()) {
+                                                    __diskTraffic__.bytesRead += f.size (); // asume the whole file will be read - update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+
+                                                    if (__httpReplyHeader__.errorFlags ()) {
+                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                        f.close ();
+                                                        #ifdef __DMESG__
+                                                            dmesgQueue << "[httpConn] __httpReplyHeader__ too small for HTTP reply header";
+                                                        #endif
+                                                        tcpConnection_t::sendString (reply507);
+                                                        return;
+                                                    }
+                    
+                                                    // construct the whole HTTP reply from differrent pieces and send it to client (browser)
+                                                    // if the reply is short enough send it in one block,
+                                                    // if not send header first and then the content, so we won't have to move hughe blocks of data
+                                                    unsigned long httpReplyContentLen = f.size ();
+                                                    __httpRequestAndReplyBuffer__ = "";
+                                                    __httpRequestAndReplyBuffer__ += "HTTP/1.1 ";
+                                                    __httpRequestAndReplyBuffer__ += __httpReplyStatus__;
+                                                    __httpRequestAndReplyBuffer__ += "\r\n";
+                                                    __httpRequestAndReplyBuffer__ += __httpReplyHeader__;
+                                                    __httpRequestAndReplyBuffer__ += "Content-Length: ";
+                                                    __httpRequestAndReplyBuffer__ += httpReplyContentLen; 
+                                                    __httpRequestAndReplyBuffer__ += "\r\n\r\n";
+
+                                                    unsigned long httpReplyHeaderLen = __httpRequestAndReplyBuffer__.length ();
+
+                                                    // can not happen due to the difference in lengths, we can skip checking:
+                                                    // if (ths->__httpRequestAndReplyBuffer__.error ()) {
+                                                    //    dmesg ("[httpConn] __httpRequestAndReplyBuffer__ too small");
+                                                    //    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
+                                                    //    goto endOfConnection;
+                                                    // }
+
+                                                    int bytesToReadThisTime = min (httpReplyContentLen, HTTP_BUFFER_SIZE - httpReplyHeaderLen); 
+                                                    int bytesReadThisTime = f.read ((uint8_t *) &__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], bytesToReadThisTime);
+                                                    __httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
+                                                    if (!bytesToReadThisTime || tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime) <= 0) {
+                                                        f.close ();
+                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                        tcpConnection_t::sendString (reply507);                                                   
+                                                        return;
+                                                    }
+                                            
+                                                    int bytesSent = bytesReadThisTime; // already sent
+                                                    while (bytesSent < httpReplyContentLen) {
+                                                        bytesToReadThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) HTTP_BUFFER_SIZE);
+                                                        bytesReadThisTime = f.read ((uint8_t *) &__httpRequestAndReplyBuffer__ [0], (unsigned long) bytesToReadThisTime);
+                                                        delay (2); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
+                                                        if (!bytesToReadThisTime || tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, bytesReadThisTime) <= 0) {
+                                                            f.close ();
+                                                            xSemaphoreGive (__tcpServerSemaphore__);
+                                                            tcpConnection_t::sendString (reply507);                                                         
+                                                            return;
+                                                        }
+                                                        bytesSent += bytesReadThisTime; // already sent
+                                                    }
+                                                    // HTTP reply sent
+                                                    f.close ();
+                                                    xSemaphoreGive (__tcpServerSemaphore__);                                                   
+                                                    goto nextHttpRequest;
+                                                } // if file is a file
+                                                f.close ();
+                                            } // if file is open
+
+                                            xSemaphoreGive (__tcpServerSemaphore__);
+                                        }
+                                    }
+                                }
+                            #endif
+
+                            // 5. HTTP request was not handeled above
+                            if (tcpConnection_t::sendString (reply404) <= 0)
+                                return;
+
+                      nextHttpRequest:
+                            // check how much stack did we use
+                            UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark (NULL);
+                            if (__lastHighWaterMark__ > highWaterMark) {
+                                #ifdef __DMESG__
+                                    dmesgQueue << (const char *) "[httpConn] new HTTP connection stack high water mark reached: " << highWaterMark << (const char *) " not used bytes";
+                                #endif
+                                // DEBUG: 
+                                Serial.print ((const char *) "[httpConn] new HTTP connection stack high water mark reached: "); Serial.print (highWaterMark); Serial.println ((const char *) " not used bytes");
+                                __lastHighWaterMark__ = highWaterMark;
+                            }
+
+                            // if we are running out of ESP32's resources we won't try to keep the connection alive, this would slow down the server a bit but it would let still it handle requests from different clients
+                            if (getSocket () >= LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 2)  // running out of sockets
+                                return;
+                            if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) // there is not a memory block large enough evailable to start a new task that would handle the connection
+                                return;
+
+                            // restore default values of member variables for the next HTTP request on this connection                              
+                            __httpRequestAndReplyBuffer__ = "";
+                            strcpy (__httpReplyStatus__, "200 OK");
+                            __httpReplyHeader__ = "";
+                        
+                        } while (keepAlive); // while
+
+                        // ----- this is where HTTP connection ends, the socket will be closed upon return -----
+
+                    }
+
+            };
+
+            class httpConnection_t : public webSocket_t {
+                // make it look like httpConnection is actually inherited from tcpConnection directly and not from webSocket
+                using tcpConnection_t::recvBlock;
+                using tcpConnection_t::sendBlock;
+                using tcpConnection_t::recvString;
+                using tcpConnection_t::sendString;
+                using tcpConnection_t::peek;
+            };
+
+
+            String (*__httpRequestHandlerCallback__) (char *httpRequest, httpConnection_t *hcn);            // will be initialized in constructor
+            void (*__wsRequestHandlerCallback__) (char *httpRequest, webSocket_t *webSck);  // will be initialized in constructor
+
+
+        public:
+
+            httpServer_t (String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection_t *hcn) = NULL, // httpRequestHandlerCallback function provided by calling program
+                          void (*wsRequestHandlerCallback) (char *httpRequest, webSocket_t *webSck) = NULL,       // wsRequestHandlerCallback function provided by calling program
+                          int serverPort = 80,                                                                    // HTTP server port
+                          bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL                          // a reference to callback function that will be celled when new connection arrives 
+                         ) : tcpServer_t (serverPort, firewallCallback) {
+                // create a local copy of parameters for later use
+                __httpRequestHandlerCallback__ = httpRequestHandlerCallback;
+                __wsRequestHandlerCallback__ = wsRequestHandlerCallback;
+
+                #ifdef __FILE_SYSTEM__
+                    if (fileSystem.mounted ()) {
+                        cstring d = HTTP_SERVER_HOME_DIRECTORY;
+                        if (!fileSystem.isDirectory ((char *) d)) {
+                            // DEBUG: Serial.print ("[httpServer] creating "); Serial.println (HTTP_SERVER_HOME_DIRECTORY);
+
+                            bool b = false;
+                            for (int i = 0; d [i] && d [i]; i++) 
+                                if (i && d [i] == '/') {
+                                  d [i] = 0; 
+                                  b = fileSystem.makeDirectory (d); 
+                                  d [i] = '/'; 
+                              }
+                            if (!b) {
+                                // DEBUG: Serial.print ("[httpServer] error creating "); Serial.println (HTTP_SERVER_HOME_DIRECTORY);
+                                #ifdef __DMESG__
+                                    dmesgQueue << "[httpServer] can't create " << HTTP_SERVER_HOME_DIRECTORY;
+                                #endif
+                            }
+                        }
+                    }
+
+                    #ifdef USE_WEB_SESSIONS
+                        // load existing tokens
+                        signed char e = webSessionTokenDatabase.Open (WEB_SESSION_TOKEN_DATABASE);
+                        if (e != err_ok) {
+                            #ifdef __DMESG__
+                                dmesgQueue << "[httpServer] webSessionCleaner: webSessionTokenDatabase.loadData error: " << e << ", truncating webSessionTokenDatabase";
+                            #endif
+                            webSessionTokenDatabase.Truncate (); // forget all stored data and try to make it work from the start
+                        }
+                    #endif
+
+                #endif
+
+                #ifdef USE_mDNS
+                    // register mDNS servise
+                    MDNS.addService ("http", "tcp", serverPort); // won't work if not connected yet
+                    #ifdef __NETWK__
+                        __httpPort__ = serverPort; // remember HTTP port so __NETWK__ onEvent handler would call MDNS.addService again when connected
+                    #endif
+                #endif
+            }
+
+            tcpConnection_t *__createConnectionInstance__ (int connectionSocket, char *clientIP, char *serverIP) override {
+
+                webSocket_t *connection = new (std::nothrow) webSocket_t (connectionSocket, clientIP, serverIP, __httpRequestHandlerCallback__, __wsRequestHandlerCallback__);
+
+                if (!connection) {
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[httpServer] can't create connection instance, out of memory?";
+                    #endif
+                    send (connectionSocket, reply503, strlen (reply503), 0);
+                    close (connectionSocket); // normally tcpConnection would do this but if it is not created we have to do it here since the connection was not created
+                    return NULL;
+                }
+
+                if (connection->setTimeout (HTTP_CONNECTION_TIME_OUT) == -1) {
+                    #ifdef __DMESG__
+                        dmesgQueue << "[httpConn] setsockopt error: " << errno << strerror (errno);
+                    #endif
+                    send (connectionSocket, reply503, strlen (reply503), 0);
+                    delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
+                    return NULL;
+                } 
+
+                if (pdPASS != xTaskCreate ([] (void *thisInstance) {
+                                                                        httpConnection_t* ths = (httpConnection_t *) thisInstance; // get "this" pointer
+
+                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                            __runningTcpConnections__ ++;
+                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+
+                                                                        // DEBUG: cout << "httpConnection task started: " << (unsigned long) xTaskGetCurrentTaskHandle << ", currently running: " << __runningTcpConnections__ << endl;
+
+                                                                        ths->__runConnectionTask__ ();
+
+                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                            __runningTcpConnections__ --;
+                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+
+                                                                        // DEBUG: cout << "httpConnection task ended: " << (unsigned long) xTaskGetCurrentTaskHandle << ", currently running: " << __runningTcpConnections__ << endl;
+
+                                                                        delete ths;
+                                                                        vTaskDelete (NULL); // it is connection's responsibility to close itself
+                                                                    }
+                                            , "httpConn", HTTP_CONNECTION_STACK_SIZE, connection, tskNORMAL_PRIORITY, NULL)) {
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[httpServer] create connection task, out of memory?";
+                    #endif
+                    send (connectionSocket, reply503, strlen (reply503), 0);
+                    delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
+                    return NULL;
+                }
+            
+                return NULL; // success, but don't return connection, since it may already been closed and destructed by now
+            }
+
     };
-    
+
+    // declare static member outside of class definition
+    UBaseType_t httpServer_t::webSocket_t::__lastHighWaterMark__ = HTTP_CONNECTION_STACK_SIZE;
+
 #endif

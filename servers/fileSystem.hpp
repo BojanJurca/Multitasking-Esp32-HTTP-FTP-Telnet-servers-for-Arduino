@@ -114,11 +114,11 @@
 
 
     // log disk Traffic information
-    struct diskTrafficInformationType {
+    struct diskTraffic_t {
         unsigned long bytesRead;
         unsigned long bytesWritten;
     };
-    diskTrafficInformationType diskTrafficInformation = {}; // measure disk Traffic on ESP32 level
+    diskTraffic_t __diskTraffic__ = {}; // measure disk Traffic on ESP32 level
 
 
     class fileSystem_t { 
@@ -137,7 +137,7 @@
             #endif
 
 
-            // mounts built-in flash disk
+            // s built-in flash disk
 
             #if (FILE_SYSTEM & FILE_SYSTEM_FAT) == FILE_SYSTEM_FAT // FILE_SYSTEM == FILE_SYSTEM_SD_CARD or FILE_SYSTEM == (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
                 bool mountFAT (bool formatIfUnformatted) { 
@@ -172,7 +172,7 @@
                         #ifdef __DMESG__
                             dmesgQueue << "[fileSystem] failed to mount FAT";
                         #endif
-                        return flse;
+                        return false;
                     }
                 }
 
@@ -608,8 +608,8 @@
                     struct tm fTime = {};
                     time_t lTime = f.getLastWrite ();
                     localtime_r (&lTime, &fTime);
-                    sprintf (s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // cstring = Cstring<350> so we have enough space
-                    strftime (s.c_str () + strlen (s.c_str ()), 25, " %b %d %H:%M      ", &fTime);  
+                    sprintf ((char *) s.c_str (), "%crw-rw-rw-   1 root     root          %7lu ", f.isDirectory () ? 'd' : '-', f.size ());  // cstring = Cstring<350> so we have enough space
+                    strftime ((char *) s.c_str () + strlen (s.c_str ()), 25, " %b %d %H:%M      ", &fTime);  
                     if (showFullPath || !strcmp (fileOrDirectory, "/")) {
                         s += fileOrDirectory;
                     } else {

@@ -4,136 +4,136 @@
   
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
-    HTTP client combines a HTTP request from server, page and method and returns a HTTP reply or "" if there is none.
-  
-    May 22, 2024, Bojan Jurca
+    December 6, 2024, Bojan Jurca
+
+    Classes used in this module:
+
+        tcpClient_t
+
+    Inheritance diagram:    
+
+             ┌─────────────┐
+             │ tcpServer_t ┼┐
+             └─────────────┘│
+                            │
+      ┌─────────────────┐   │
+      │ tcpConnection_t ┼┐  │
+      └─────────────────┘│  │
+                         │  │
+                         │  │  ┌─────────────────────────┐
+                         │  ├──┼─ httpServer_t           │
+                         ├─────┼──── webSocket_t         │
+                         │  │  │     └── httpConection_t │
+                         │  │  └─────────────────────────┘
+                         │  │  logicly webSocket_t would inherit from httpConnection_t but it is easier to implement it the other way around
+                         │  │
+                         │  │
+                         │  │  ┌────────────────────────┐
+                         │  ├──┼─ telnetServer_t        │
+                         ├─────┼──── telnetConnection_t │
+                         │  │  └────────────────────────┘
+                         │  │
+                         │  │
+                         │  │  ┌────────────────────────────┐
+                         │  └──┼─ ftpServer_t               │
+                         ├─────┼──── ftpControlConnection_t │
+                         │     └────────────────────────────┘
+                         │  
+                         │  
+                         │     ┌──────────────┐
+                         └─────┼─ tcpClient_t │
+                               └──────────────┘
 
 */
 
 
-    // ----- includes, definitions and supporting functions -----
+#include <WiFi.h>
+#include "tcpClient.hpp"
+#include "std/Cstring.hpp"
 
-    #include <WiFi.h>
-    #include <lwip/netdb.h>
-    // fixed size strings
-    #include "std/Cstring.hpp"
-    
 
 #ifndef __HTTP_CLIENT__
-  #define __HTTP_CLIENT__
+    #define __HTTP_CLIENT__
 
 
-    // ----- functions and variables in this modul -----
+        // ----- functions and variables in this modul -----
 
-    String httpClient (const char *serverName, int serverPort, const char *httpRequest, const char *httpMethod, unsigned long timeOut);
-
-
-    // ----- TUNNING PARAMETERS -----
-
-    #define HTTP_REPLY_TIME_OUT 3000              // 1500 ms = 1,5 sec for HTTP requests
-    #define HTTP_REPLY_BUFFER_SIZE 1500           // reading HTTP reply, MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1500 seems the best option
+        String httpRequest (const char *httpServer, int httpPort, const char *httpRequest, const char *httpMethod, unsigned long timeOut);
 
 
-    // ----- CODE -----
+        // ----- TUNNING PARAMETERS -----
 
-    String httpClient (const char *serverName, int serverPort, const char *httpAddress, const char *httpMethod = (char *) "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
-      // get server address
-      struct hostent *he = gethostbyname (serverName);
-      if (!he) return "[httpClient] gethostbyname() error: " + String (h_errno) + " " + hstrerror (h_errno);
-      // create socket
-      int connectionSocket = socket (PF_INET, SOCK_STREAM, 0);
-      if (connectionSocket == -1) return "[httpClient] socket() error: " + String (errno) + " " + strerror (errno);
+        #define HTTP_REPLY_TIME_OUT 3                 // 3 s
+        #define HTTP_REPLY_BUFFER_SIZE 1500           // reading HTTP reply, MTU = 1500 (maximum transmission unit), TCP_SND_BUF = 5744 (a maximum block size that ESP32 can send), FAT cluster size = n * 512. 1500 seems the best option
 
-      // remember some information that netstat telnet command would use
-      additionalSocketInformation [connectionSocket - LWIP_SOCKET_OFFSET] = { __HTTP_CLIENT_SOCKET__, 0, 0, millis (), millis () };
 
-      // make the socket not-blocking so that time-out can be detected
-      if (fcntl (connectionSocket, F_SETFL, O_NONBLOCK) == -1) {
-        int e = errno;
-        close (connectionSocket);
-        return "[httpClient] fcnt() error: " + String (e) + " " + strerror (e);
-      }
-      // connect to server
-      struct sockaddr_in serverAddress;
-      serverAddress.sin_family = AF_INET;
-      serverAddress.sin_port = htons (serverPort);
-      serverAddress.sin_addr.s_addr = *(in_addr_t *) he->h_addr; 
-      if (connect (connectionSocket, (struct sockaddr *) &serverAddress, sizeof (serverAddress)) == -1) {
-        if (errno != EINPROGRESS) {
-          int e = errno;
-          close (connectionSocket);
-          return "[httpClient] connect() error: " + String (e) + " " + strerror (e);
-        } // it is likely that socket is not connected yet at this point
-      }
+        // ----- CODE -----
 
-      // construct and send minimal HTTP request (or almost minimal, IIS for example, requires Host field)
-      char serverIP [46];
-      inet_ntoa_r (serverAddress.sin_addr, serverIP, sizeof (serverIP));
-      cstring httpRequest;
-      httpRequest += httpMethod;
-      httpRequest += " ";
-      httpRequest += httpAddress;
-      httpRequest += " HTTP/1.0\r\nHost: ";
-      httpRequest += serverIP;
-      httpRequest += "\r\n\r\n"; // 1.0 HTTP does not know keep-alive directive - we want the server to close the connection immediatelly after sending the reply
-      if (httpRequest.errorFlags ()) {
-          close (connectionSocket);
-          return "Out of memory";
-      }
-      if (sendAll (connectionSocket, httpRequest, timeOut) == -1) {
-          int e = errno;
-          close (connectionSocket);
-          return "[httpClient] send() error: " + String (e) + " " + strerror (e);
-      }
-      // read HTTP reply  
-      char __httpReply__ [HTTP_REPLY_BUFFER_SIZE];
-      int receivedThisTime;    
-      unsigned long lastActive = millis ();
-      String httpReply ("");
-      while (true) { // read blocks of incoming data
-        switch (receivedThisTime = recv (connectionSocket, __httpReply__, HTTP_REPLY_BUFFER_SIZE - 1, 0)) {
-          case -1: {    // error
-                        if ((errno == EAGAIN || errno == ENAVAIL) && HTTP_REPLY_TIME_OUT && millis () - lastActive < HTTP_REPLY_TIME_OUT) break; // not time-out yet
-                        int e = errno;
-                        close (connectionSocket);
-                        return "[httpClient] recv() error: " + String (e) + " " + strerror (e);
-                    }
-          case 0:       // connection closed by peer
-                        close (connectionSocket);  
-                        if (stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:")) return ""; // Content-lenght does not match
-                        else return httpReply; // return what we have recived without checking if HTTP reply is OK
-          default:
+        String httpRequest (const char *httpServer, int httpPort, const char *httpAddress, const char *httpMethod = (const char *) "GET", unsigned long timeOut = HTTP_REPLY_TIME_OUT) {
 
-                        additionalNetworkInformation.bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                        additionalSocketInformation [connectionSocket - LWIP_SOCKET_OFFSET].bytesReceived += receivedThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+            if (WiFi.status () != WL_CONNECTED) {
+                #ifdef __DMESG__
+                    dmesgQueue << (const char *) "[httpClient] not connected to WiFi";
+                #endif
+                return (const char *) "[httpClient] not connected to WiFi";
+            }
 
-                        __httpReply__ [receivedThisTime] = 0;
-                          int bl = httpReply.length ();
-                        httpReply += __httpReply__;
-                          if (httpReply.length () != bl + strlen (__httpReply__)) {
-                            close (connectionSocket);
-                            return "Out of memory";
-                          }
-                        lastActive = millis ();
-                        // check if HTTP reply is complete
-                        char *p = stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:");
-                        if (p) {
-                          p += 16;
-                          unsigned int contentLength;
-                          if (sscanf (p, "%u", &contentLength) == 1) {
-                            p = strstr (p, "\r\n\r\n"); // the content comes afterwards
-                            if (p && contentLength == strlen (p + 4)) {
-                              close (connectionSocket);
-                              return httpReply;
-                            }
-                          }
-                        }
-                        // else continue reading
+            tcpClient_t httpClient (httpServer, httpPort, HTTP_REPLY_TIME_OUT);
+            if (httpClient.errText ())
+                return httpClient.errText ();
+
+            // 1. send HTTP request
+            cstring httpRequest;
+            httpRequest += httpMethod;
+            httpRequest += " ";
+            httpRequest += httpAddress;
+            httpRequest += " HTTP/1.0\r\nHost: ";
+            httpRequest += httpServer;
+            httpRequest += "\r\n\r\n"; // 1.0 HTTP does not know keep-alive directive - we want the server to close the connection immediatelly after sending the reply
+            if (httpRequest.errorFlags ())
+                return "HTTP request too long";
+
+            switch (httpClient.sendString (httpRequest)) {
+                case -1:  return strerror (errno);
+                case 0:   return (const char *) "Connection closed by peer";
+                default:  break; // OK
+            }
+
+            // 2. read HTTP reply
+            String httpReply ("");
+            char buffer [HTTP_REPLY_BUFFER_SIZE];
+            int receivedTotal = 0;
+            int receivedThisTime;
+
+            while (true) { // read blocks of incoming data
+                receivedThisTime = httpClient.recv (buffer, HTTP_REPLY_BUFFER_SIZE - 1);
+                switch (receivedThisTime) {
+                    case -1:      // error
+                                  return strerror (errno);
+                    case 0:       // connection closed by peer
+                                  return (const char *) "Connection closed by peer";
+                    default:      // block arrived
+
+                                  buffer [receivedThisTime] = 0;
+                                  if (!httpReply.concat (buffer))
+                                      return (const char *) "Out of memory";
+
+                                  // check if HTTP reply is complete
+                                  char *p = stristr ((char *) httpReply.c_str (), (char *) "\nCONTENT-LENGTH:");
+                                  if (p) {
+                                      p += 16;
+                                      unsigned int contentLength;
+                                      if (sscanf (p, "%u", &contentLength) == 1) {
+                                          p = strstr (p, "\r\n\r\n"); // the content comes afterwards
+                                          if (p && contentLength == strlen (p + 4))
+                                              return httpReply;
+                                      }
+                                  }
+                                  // else continue reading
+                                  break;
+                } // switch
+            } // while       
+            return ""; // never executes
         }
-      }
-      // never executes
-      close (connectionSocket);
-      return "";
-    }
- 
+
 #endif

@@ -7,25 +7,19 @@
     Issues:
             - when WiFi is in WIFI_AP or WIFI_STA_AP mode is oscillospe causes WDT problem when working at higher frequenceses
 
-    May 22, 2024, Bojan Jurca
+    February 6, 2025, Bojan Jurca
              
 */
 
 
-    // ----- includes, definitions and supporting functions -----
-
-    #include <WiFi.h>
-
-    // digitalRead
-    #include "driver/gpio.h"
-    #include "hal/gpio_hal.h"
-
-//    #include <soc/gpio_sig_map.h> // to digitalRead PWM and other GPIOs ...
-    #include <driver/adc.h>       // to use adc1_get_raw instead of analogRead
-    #include <driver/i2s.h>
-
-    // fixed size strings    
-    #include "std/Cstring.hpp"
+// digitalRead
+#include "driver/gpio.h"
+#include "hal/gpio_hal.h"
+// #include <soc/gpio_sig_map.h> // to digitalRead PWM and other GPIOs ...
+#include <driver/adc.h>       // to use adc1_get_raw instead of analogRead
+#include <driver/i2s.h>
+#include "std/Cstring.hpp"
+#include "httpServer.hpp"
 
 
 #ifndef __OSCILLOSCOPE__
@@ -41,12 +35,9 @@
 
     // ----- TUNNING PARAMETERS -----
 
-    #define HTTP_CONNECTION_STACK_SIZE  12 * 1024                     // increase default HTTP_CONNECTION_STACK_SIZE
-    #include "httpServer.hpp"
-
-    #define OSCILLOSCOPE_I2S_BUFFER_SIZE 746                          // max number of samples per screen, 746 samples * 2 bytes per sample = 1492 bytes, which must be <= HTTP_WS_FRAME_MAX_SIZE - 8
-    #define OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE 373                      // max number of samples per screen, 373 samples * 4 bytes per sample = 1492 bytes, which must be <= HTTP_WS_FRAME_MAX_SIZE - 8
-    #define OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE 248                     // max number of samples per screen, 248 samples * 6 bytes per sample = 1488 bytes, which must be <= HTTP_WS_FRAME_MAX_SIZE - 8
+    #define OSCILLOSCOPE_I2S_BUFFER_SIZE 666                          // max number of samples per screen, 720 samples (including 1 dummy sample) * 2 bytes per sample = 1332 bytes, which must be <= HTTP_WS_FRAME_MAX_SIZE - 8 (WebSocket header) = 1332
+    #define OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE 333                      // max number of samples per screen, 333 samples (including 1 dummy sample) * 4 bytes per sample = 1332 bytes, which must be <= HTTP_WS_FRAME_MAX_SIZE - 8 (WebSocket header) = 1332
+    #define OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE 222                     // max number of samples per screen, 222 samples (including 1 dummy sample) * 6 bytes per sample = 1332 bytes, which must be <= HTTP_WS_FRAME_MAX_SIZE - 8 (WebSocket header) = 1332
 
 
     // some ESP32 boards read analog values inverted, uncomment the following line to invert read values back again 
@@ -58,7 +49,7 @@
     // some ESP32 boards with I2S interface read analog values inverted, uncomment the following line to invert read values back again 
     // #define INVERT_I2S_READ
 
-    // define a correction factor for sampling frequency if it needs to be corrected
+    // define a correction factor for I2S sampling frequency if it needs to be corrected
     #define I2S_FREQ_CORRECTION (1.2)
 
 
@@ -68,7 +59,6 @@
         #pragma message "I2S interface not used or present, Oscilloscope will use adc1_get_raw (for monitoring single and double analog signals)."
     #endif
 
-    // #define OSCILLOSCOPE_READER_CORE 1 // 1 or 0                   // #define OSCILLOSCOPE_READER_CORE if you want oscilloscope reader to run on specific core    
     #ifndef OSCILLOSCOPE_READER_PRIORITY
         #define OSCILLOSCOPE_READER_PRIORITY 1                        // normal priority if not define differently
     #endif
@@ -76,7 +66,7 @@
 
     // ----- CODE -----
 
-    #include "httpServer.hpp"                 // oscilloscope uses websockets defined in webServer.hpp  
+    #include "httpServer.hpp"                                         // oscilloscope uses websockets defined in httpServer.hpp  
 
     // for digital reading
     static gpio_hal_context_t __gpio_hal__ = {
@@ -84,29 +74,29 @@
     };        
 
     // oscilloscope samples
-    struct oscI2sSample {                     // one sample
-        int16_t signal1;                       // signal value of 1st GPIO read by analogRead or digialRead   
+    struct oscI2sSample {                       // one sample
+        int16_t signal1;                        // signal value of 1st GPIO read by analogRead or digialRead   
     }; // = 2 bytes per sample
 
-    struct osc1SignalSample {                        // one sample
-        int16_t signal1;                       // signal value of 1st GPIO read by analogRead or digialRead   
-        int16_t deltaTime;                     // sample time - offset from previous sample in ms or us  
+    struct osc1SignalSample {                   // one sample
+        int16_t signal1;                        // signal value of 1st GPIO read by analogRead or digialRead   
+        int16_t deltaTime;                      // sample time - offset from previous sample in ms or us  
     }; // = 4 bytes per sample
 
-    struct osc2SignalsSample {                        // one sample
-        int16_t signal1;                       // signal value of 1st GPIO read by analogRead or digialRead   
-        int16_t signal2;                       // signal value of 2nd GPIO if requested   
-        int16_t deltaTime;                     // sample time - offset from previous sample in ms or us  
+    struct osc2SignalsSample {                  // one sample
+        int16_t signal1;                        // signal value of 1st GPIO read by analogRead or digialRead   
+        int16_t signal2;                        // signal value of 2nd GPIO if requested   
+        int16_t deltaTime;                      // sample time - offset from previous sample in ms or us  
     }; // = 6 bytes per sample
     
-    struct oscSamples {                               // buffer with samples
+    struct oscSamples {                         // buffer with samples
         union {
-            oscI2sSample        samplesI2sSignal  [OSCILLOSCOPE_I2S_BUFFER_SIZE];     
+            oscI2sSample        samplesI2sSignal  [OSCILLOSCOPE_I2S_BUFFER_SIZE + 8]; // note that there is place for 8 additional samples
             osc1SignalSample    samples1Signal    [OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE];
             osc2SignalsSample   samples2Signals   [OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE];
         };
-        unsigned int sampleCount;                      // number of samples in the buffer
-        bool samplesAreReady;                          // is the buffer ready for sending
+        unsigned int sampleCount;               // number of samples in the buffer
+        bool samplesAreReady;                   // is the buffer ready for sending
     };
 
     enum readerState { INITIAL = 0, START = 1, STARTED = 2, STOP = 3, STOPPED = 4 };
@@ -119,12 +109,12 @@
 
     struct oscSharedMemory {         // data structure to be shared among oscilloscope tasks
       // basic data for web oscilloscope
-      WebSocket *webSocket;                   // open webSocket for communication with javascript client
+      httpServer_t::webSocket_t *webSck;      // open webSocket for communication with javascript client
       bool clientIsBigEndian;                 // true if javascript client is big endian machine
       // basic data for PulseView
       int noOfSamples;
       // sampling sharedMemory
-      char readType [8];                      // analog or digital  
+      char readType [8];                      // analog or digital
       bool analog;                            // true if readType is analog, false if digital (digitalRead)
       gpio_num_t gpio1;                       // gpio where ESP32 is taking samples from (digitalRead)
       gpio_num_t gpio2;                       // 2nd gpio if requested
@@ -175,13 +165,13 @@
 
         // Is samplingTime large enough to fill the whole screen? If not, make a correction.
         if (noOfSignals == 1) {
-            if ((unsigned long) samplingTime * (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 2) < screenWidthTime) {
-                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 2)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
+            if ((unsigned long) samplingTime * (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 1) < screenWidthTime) {
+                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 1)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
                 __oscilloscope_h_debug__ ("oscReader_millis: 1 signal samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         } else {
-            if ((unsigned long) samplingTime * (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 2) < screenWidthTime) {
-                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 2)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
+            if ((unsigned long) samplingTime * (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 1) < screenWidthTime) {
+                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 1)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
                 __oscilloscope_h_debug__ ("oscReader_millis: 2 signals samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         }
@@ -275,11 +265,11 @@
                     };
 
                     #ifdef INVERT_ADC1_GET_RAW
-                        if (noOfSignals == 1) { if (doAnalogRead) new1SignalSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) 0}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) 0}; } // gpio1 should always be valid PIN
-                        else                  { if (doAnalogRead) new2SignalsSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) ~(adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) 0}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) gpio_hal_get_level (&__gpio_hal__, gpio2), (int16_t) 0}; } // gpio1 should always be valid PIN
+                        if (noOfSignals == 1) { if (doAnalogRead) new1SignalSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) deltaTime}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
+                        else                  { if (doAnalogRead) new2SignalsSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) ~(adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) deltaTime}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) gpio_hal_get_level (&__gpio_hal__, gpio2), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
                     #else
-                        if (noOfSignals == 1) { if (doAnalogRead) new1SignalSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) 0}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) 0}; } // gpio1 should always be valid PIN
-                        else                  { if (doAnalogRead) new2SignalsSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) (adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) 0}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) gpio_hal_get_level (&__gpio_hal__, gpio2), (int16_t) 0}; } // gpio1 should always be valid PIN
+                        if (noOfSignals == 1) { if (doAnalogRead) new1SignalSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) deltaTime}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
+                        else                  { if (doAnalogRead) new2SignalsSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) (adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) deltaTime}; else last2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) gpio_hal_get_level (&__gpio_hal__, gpio2), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
                     #endif
 
                     // Compare both samples to check if the trigger condition has occured, only gpio1 is used to trigger the sampling. Please note that it doesn't matter wether we compare last1SignalSample or last2SignalsSample since they share the same space and signal1 is always on the same place.
@@ -397,13 +387,13 @@
 
         // Is samplingTime large enough to fill the whole screen? If not, make a correction.
         if (noOfSignals == 1) {
-            if ((unsigned long) samplingTime * (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 2) < screenWidthTime) {
-                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 2)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
+            if ((unsigned long) samplingTime * (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 1) < screenWidthTime) {
+                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 1)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
                 __oscilloscope_h_debug__ ("oscReader_digital: 1 signal samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         } else {
-            if ((unsigned long) samplingTime * (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 2) < screenWidthTime) {
-                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 2)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
+            if ((unsigned long) samplingTime * (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 1) < screenWidthTime) {
+                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 1)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
                 __oscilloscope_h_debug__ ("oscReader_digital: 2 signals samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         }
@@ -492,8 +482,8 @@
                         osc1SignalSample new1SignalSample;
                         osc2SignalsSample new2SignalsSample;
                     };
-                    if (noOfSignals == 1) { new2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) 0}; } // gpio1 should always be valid PIN
-                    else                  { new2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) gpio_hal_get_level (&__gpio_hal__, gpio2), (int16_t) 0}; } // gpio1 should always be valid PIN
+                    if (noOfSignals == 1) { new2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
+                    else                  { new2SignalsSample = {(int16_t) gpio_hal_get_level (&__gpio_hal__, gpio1), (int16_t) gpio_hal_get_level (&__gpio_hal__, gpio2), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
 
                     // Compare both samples to check if the trigger condition has occured, only gpio1 is used to trigger the sampling. Please note that it doesn't matter wether we compare last1SignalSample or last2SignalsSample since they share the same space and signal1 is always on the same place.
                     if ((positiveTrigger && last2SignalsSample.signal1 < positiveTriggerTreshold && new2SignalsSample.signal1 >= positiveTriggerTreshold) || (negativeTrigger && last2SignalsSample.signal1 > negativeTriggerTreshold && new2SignalsSample.signal1 <= negativeTriggerTreshold)) { 
@@ -588,13 +578,13 @@
 
         // Is samplingTime large enough to fill the whole screen? If not, make a correction.
         if (noOfSignals == 1) {
-            if ((unsigned long) samplingTime * (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 2) < screenWidthTime) {
-                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 2)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
+            if ((unsigned long) samplingTime * (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 1) < screenWidthTime) {
+                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_1SIGNAL_BUFFER_SIZE - 1)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
                 __oscilloscope_h_debug__ ("oscReader_analog: 1 signal samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         } else {
-            if ((unsigned long) samplingTime * (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 2) < screenWidthTime) {
-                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 2)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
+            if ((unsigned long) samplingTime * (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 1) < screenWidthTime) {
+                samplingTime = max ((int) (screenWidthTime / (OSCILLOSCOPE_2SIGNALS_BUFFER_SIZE - 1)) + 1, 1); // + 1 just to be on the safe side due to integer calculation rounding
                 __oscilloscope_h_debug__ ("oscReader_analog: 2 signals samplingTime was too short (regarding to buffer size) and is corrected to " + String (samplingTime));
             }
         }
@@ -643,8 +633,8 @@
             #ifdef __DMESG__
                 dmesgQueue << "[oscilloscope] the settings exceed oscilloscope capabilities.";
             #endif
-            ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] the settings exceed oscilloscope capabilities."); // send error to javascript client
-            ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
+            ((oscSharedMemory *) sharedMemory)->webSck->sendString ("[oscilloscope] the settings exceed oscilloscope capabilities."); // send error to javascript client
+            // ((oscSharedMemory *) sharedMemory)->webSck->closeWebSocket ();
             while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
             ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;
             vTaskDelete (NULL);
@@ -698,11 +688,11 @@
                     };
 
                     #ifdef INVERT_ADC1_GET_RAW
-                        if (noOfSignals == 1) { new2SignalsSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) 0}; } // gpio1 should always be valid PIN
-                        else                  { new2SignalsSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) (~adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) 0}; } // gpio1 should always be valid PIN
+                        if (noOfSignals == 1) { new2SignalsSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
+                        else                  { new2SignalsSample = {(int16_t) (~adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) (~adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
                     #else
-                        if (noOfSignals == 1) { new2SignalsSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) 0}; } // gpio1 should always be valid PIN
-                        else                  { new2SignalsSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) (adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) 0}; } // gpio1 should always be valid PIN
+                        if (noOfSignals == 1) { new2SignalsSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
+                        else                  { new2SignalsSample = {(int16_t) (adc1_get_raw (adcchannel1) & 0xFFF), (int16_t) (adc1_get_raw (adcchannel2) & 0xFFF), (int16_t) deltaTime}; } // gpio1 should always be valid PIN
                     #endif
 
                     // Compare both samples to check if the trigger condition has occured, only gpio1 is used to trigger the sampling. Please note that it doesn't matter wether we compare last1SignalSample or last2SignalsSample since they share the same space and signal1 is always on the same place.
@@ -814,11 +804,11 @@
             cout << "samplingTime " << samplingTime << " us" << endl;
 
             // calculate correct sampling time so that it will prefectly aligh with sampleRate (regarding integer calculation rounding) and that the sample buffer is large enough 
-            unsigned long sampleRate = 1000000 / samplingTime; // samplingTime is in us
+            unsigned long sampleRate = 1000000 / (samplingTime); // samplingTime is in us
             int noOfSamplesToTakeFirstTime = sampleRate * screenWidthTime / 1000000 + 1 + 8; // screenWidhtTime is in us, 1 sample more than the distancesbetween them (A) (E)
             while (samplingTime != 1000000 / sampleRate // integer clculation rounding missmatch
               || (unsigned long) samplingTime * (OSCILLOSCOPE_I2S_BUFFER_SIZE - 1 - 1) < screenWidthTime // samples do not fill the screen (additional - 1 due to possible (B))
-              || noOfSamplesToTakeFirstTime > (OSCILLOSCOPE_I2S_BUFFER_SIZE - 1 - 1) // samples do not fit in the buffer (the first sample is dummy sample, additional - 1 due to (B))
+              || noOfSamplesToTakeFirstTime > (OSCILLOSCOPE_I2S_BUFFER_SIZE + 8 - 1 - 1) // samples do not fit in the buffer (the first sample is dummy sample, additional - 1 due to (B)), 8 is added due to (D)
               || samplingTime < 4 // dummy values -2 and -3 are already taken for different types of buffer
               || samplingTime < 7) // max ESP32 sampling rate = 150 kHz (sampling time >= 6.6 us)
             {
@@ -827,7 +817,7 @@
                 noOfSamplesToTakeFirstTime = sampleRate * screenWidthTime / 1000000 + 1 + 8; // (A) (E)
             }
             if (noOfSamplesToTakeFirstTime % 2 != 0) noOfSamplesToTakeFirstTime ++; // (B)
-            if (noOfSamplesToTakeFirstTime <= 8) noOfSamplesToTakeFirstTime = 10; // (D), add at least 2 usefull samples
+            if (noOfSamplesToTakeFirstTime < 10) noOfSamplesToTakeFirstTime = 10; // (D), add at least 2 usefull samples
 
             // Is samplingTime is too long for 15 bits, make a correction. Max sample time can be 32767 (15 bits) but since in some case actual sample time can be much larger than required le's keep it below 5000.
             if (samplingTime > 32767) {
@@ -904,13 +894,13 @@
                 err = i2s_driver_install (I2S_NUM_0, &i2s_config,  0, NULL);  //step 2
 
                 if (err != ESP_OK) {
-                    Serial.printf ("Failed installing driver: %d\n", err);
+                    // DEBUG: Serial.printf ("Failed installing driver: %d\n", err);
                     #ifdef __DMESG__
                         dmesgQueue << "[oscilloscope][oscReader_oscReader_analog_1_signal_i2s] failed to install the driver: " << err;
                     #endif
 
-                    ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed to install the i2s driver."); // send error to javascript client
-                    ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
+                    ((oscSharedMemory *) sharedMemory)->webSck->sendString ("[oscilloscope] failed to install the i2s driver."); // send error to javascript client
+                    // ((oscSharedMemory *) sharedMemory)->webSck->closeWebSocket ();
                     // wait for the STOP signal
                     while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
                     ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;
@@ -919,14 +909,14 @@
 
                 err = i2s_set_adc_mode (ADC_UNIT_1, adcchannel1);
                 if (err != ESP_OK) {
-                    Serial.printf ("Failed setting up adc mode: %d\n", err);
+                    // DEBUG: Serial.printf ("Failed setting up adc mode: %d\n", err);
                     #ifdef __DMESG__
                         dmesgQueue << "[oscilloscope][oscReader_oscReader_analog_1_signal_i2s] failed setting up adc mode: " << err;
                     #endif
                     i2s_driver_uninstall (I2S_NUM_0);
 
-                    ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed setting up i2s adc mode."); // send error to javascript client
-                    ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
+                    ((oscSharedMemory *) sharedMemory)->webSck->sendString ("[oscilloscope] failed setting up i2s adc mode."); // send error to javascript client
+                    // ((oscSharedMemory *) sharedMemory)->webSck->closeWebSocket ();
                     // wait for the STOP signal
                     while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
                     ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;                
@@ -943,15 +933,15 @@
                                     &bytesRead,
                                     pdMS_TO_TICKS (1000)); // portMAX_DELAY); // no timeout
                     noOfSamplesTaken = bytesRead >> 1; // samples are 16 bit integers 
-                    if (err != ESP_OK || noOfSamplesTaken < 10) { // we'll leave first 8 samples out so if we don't have even 2 usable samples there id probably something wrong
+                    if (err != ESP_OK || noOfSamplesTaken < 10) { // we'll leave first 8 samples out so if we don't have even 2 usable samples there is probably something wrong
                         Serial.printf ("Failed reading the samples: %d\n", err);
                         #ifdef __DMESG__
                             dmesgQueue << "[oscilloscope][oscReader_oscReader_analog_1_signal_i2s] failed reading  the samples: " << err;
                         #endif
                         i2s_driver_uninstall (I2S_NUM_0);
 
-                        ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed reading the samples."); // send error to javascript client
-                        ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
+                        ((oscSharedMemory *) sharedMemory)->webSck->sendString ("[oscilloscope] failed reading the samples."); // send error to javascript client
+                        // ((oscSharedMemory *) sharedMemory)->webSck->closeWebSocket ();
                         // wait for the STOP signal
                         while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
                         ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;                    
@@ -998,8 +988,8 @@
                                     #endif
                                     i2s_driver_uninstall (I2S_NUM_0);
 
-                                    ((oscSharedMemory *) sharedMemory)->webSocket->sendString ("[oscilloscope] failed reading the samples."); // send error to javascript client
-                                    ((oscSharedMemory *) sharedMemory)->webSocket->closeWebSocket ();
+                                    ((oscSharedMemory *) sharedMemory)->webSck->sendString ("[oscilloscope] failed reading the samples."); // send error to javascript client
+                                    // ((oscSharedMemory *) sharedMemory)->webSck->closeWebSocket ();
                                     // wait for the STOP signal
                                     while (((oscSharedMemory *) sharedMemory)->oscReaderState != STOP) delay (1);
                                     ((oscSharedMemory *) sharedMemory)->oscReaderState = STOPPED;                                
@@ -1062,7 +1052,7 @@
       oscSamples *sendBuffer =                &((oscSharedMemory *) sharedMemory)->sendBuffer;
       sendBuffer->samplesAreReady = false;     
       bool clientIsBigEndian =                ((oscSharedMemory *) sharedMemory)->clientIsBigEndian;
-      WebSocket *webSocket =                  ((oscSharedMemory *) sharedMemory)->webSocket; 
+      httpServer_t::webSocket_t *webSck =         ((oscSharedMemory *) sharedMemory)->webSck; 
     
       unsigned long lastMillis = millis ();
       while (true) { 
@@ -1090,50 +1080,61 @@
             uint16_t *w = (uint16_t *) &sendSamples;
             for (size_t i = 0; i < sendWords; i ++) w [i] = htons (w [i]);
           }
-          if (!webSocket->sendBinary ((byte *) &sendSamples,  sendBytes)) return;
+          if (!webSck->sendBlock ((byte *) &sendSamples,  sendBytes)) return;
         }
     
         // read (text) stop command form javscrip client if it arrives - according to oscilloscope protocol the string could only be 'stop' - so there is no need checking it
-        if (webSocket->available () != WebSocket::NOT_AVAILABLE) return; // this also covers ERROR and TIME_OUT
-        if (webSocket->getSocket () == -1) return; // if the socket has been closed by oscReader
+        if (webSck->peek () != 0) return; // this also covers errors, ...
+        // if (webSck->getSocket () == -1) return; // if the socket has been closed by oscReader
       }
     }
 
     // main oscilloscope function - it reads request from javascript client then starts two threads: oscilloscope reader (that reads samples ans packs them into buffer) and oscilloscope sender (that sends buffer to javascript client)
 
-    void runOscilloscope (WebSocket *webSocket) {
+    void runOscilloscope (httpServer_t::webSocket_t *webSck) {
     
-      // set up oscilloscope shared memory that will be shared among all 3 oscilloscope threads
-      oscSharedMemory sharedMemory = {};                           // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
-      sharedMemory.webSocket = webSocket;                          // put webSocket rference into shared memory
-      sharedMemory.readBuffer.samplesAreReady = true;              // this value will be copied into sendBuffer later where this flag will be checked
+      oscSharedMemory *sharedMemory; 
+      // get some memory that will be shared among all oscilloscope threads and initialize it with zerros
+      sharedMemory = (oscSharedMemory *) malloc (sizeof (oscSharedMemory));
+      if (!sharedMemory) {
+          #ifdef __DMESG__
+              dmesgQueue << "[oscilloscope] out of memory.";
+          #endif
+          webSck->sendString ("[oscilloscope] out of memory."); // send error also to javascript client
+          return;
+      }
+      memset (sharedMemory, 0, sizeof (oscSharedMemory));
+
+      sharedMemory->webSck = webSck;                                 // put webSocket rference into shared memory
+      sharedMemory->readBuffer.samplesAreReady = true;               // this value will be copied into sendBuffer later where this flag will be checked
     
       // oscilloscope protocol starts with binary endian identification from the client
       uint16_t endianIdentification = 0;
-      if (webSocket->readBinary ((byte *) &endianIdentification, sizeof (endianIdentification)) == sizeof (endianIdentification))
-        sharedMemory.clientIsBigEndian = (endianIdentification == 0xBBAA); // cient has sent 0xAABB
+      if (webSck->recvBlock ((byte *) &endianIdentification, sizeof (endianIdentification)) == sizeof (endianIdentification))
+        sharedMemory->clientIsBigEndian = (endianIdentification == 0xBBAA); // cient has sent 0xAABB
       if (!(endianIdentification == 0xAABB || endianIdentification == 0xBBAA)) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] communication does not follow oscilloscope protocol. Expected endian identification.";
         #endif
-        webSocket->sendString ("[oscilloscope] communication does not follow oscilloscope protocol. Expected endian identification."); // send error also to javascript client
+        webSck->sendString ("[oscilloscope] communication does not follow oscilloscope protocol. Expected endian identification."); // send error also to javascript client
+        free (sharedMemory);
         return;
       }
     
       // oscilloscope protocol continues with (text) start command in the following forms:
       // start digital sampling on GPIO 36 every 250 ms screen width = 10000 ms
       // start analog sampling on GPIO 22, 23 every 100 ms screen width = 400 ms set positive slope trigger to 512 set negative slope trigger to 0
-      cstring s = webSocket->readString (); 
+      cstring s;
+      if (!webSck->recvString ((char *) s, s.max_size ())) {
+          #ifdef __DMESG__
+            dmesgQueue << "[oscilloscope] communication does not follow oscilloscope protocol. Expected start oscilloscope parameters.";
+          #endif
+          webSck->sendString ("[oscilloscope] communication does not follow oscilloscope protocol. Expected start oscilloscope parameters."); // send error also to javascript client
+          free (sharedMemory);
+          return;
+      }
       __oscilloscope_h_debug__ ("runOscilloscope: command =  " + String ((char *) s));
 
-      if (s == "") {
-        #ifdef __DMESG__
-          dmesgQueue << "[oscilloscope] communication does not follow oscilloscope protocol. Expected start oscilloscope parameters.";
-        #endif
-        webSocket->sendString ("[oscilloscope] communication does not follow oscilloscope protocol. Expected start oscilloscope parameters."); // send error also to javascript client
-        return;
-      }
-      
       // try to parse what we have got from client
       char posNeg1 [9] = "";
       char posNeg2 [9] = "";
@@ -1149,52 +1150,55 @@
           *(cmdPart3++) = 0;
       }
       // parse 1st part
-      sharedMemory.gpio1 = sharedMemory.gpio2 = (gpio_num_t) 255; // invalid GPIO
-      if (sscanf (cmdPart1, "start %7s sampling on GPIO %2i, %2i", sharedMemory.readType, &sharedMemory.gpio1, &sharedMemory.gpio2) < 2) {
+      sharedMemory->gpio1 = sharedMemory->gpio2 = (gpio_num_t) 255; // invalid GPIO
+      if (sscanf (cmdPart1, "start %7s sampling on GPIO %2i, %2i", sharedMemory->readType, &sharedMemory->gpio1, &sharedMemory->gpio2) < 2) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] oscilloscope protocol syntax error.";
         #endif
-        webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
+        webSck->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
+        free (sharedMemory);
         return;
       }
       // use adc1_get_raw instead of analogRead
-      if (!strcmp (sharedMemory.readType, "analog")) {
+      if (!strcmp (sharedMemory->readType, "analog")) {
 
           #if CONFIG_IDF_TARGET_ESP32
               __oscilloscope_h_debug__ ("MCU ESP32 pinout");
 
               // ESP32 board: https://docs.espressif.com/projects/esp-idf/en/v4.2/esp32/api-reference/peripherals/adc.html
-              switch (sharedMemory.gpio1) {
+              switch (sharedMemory->gpio1) {
                   // ADC1
-                  case 36: sharedMemory.adcchannel1 = ADC1_CHANNEL_0; break;
-                  case 37: sharedMemory.adcchannel1 = ADC1_CHANNEL_1; break;
-                  case 38: sharedMemory.adcchannel1 = ADC1_CHANNEL_2; break;
-                  case 39: sharedMemory.adcchannel1 = ADC1_CHANNEL_3; break;
-                  case 32: sharedMemory.adcchannel1 = ADC1_CHANNEL_4; break;
-                  case 33: sharedMemory.adcchannel1 = ADC1_CHANNEL_5; break;
-                  case 34: sharedMemory.adcchannel1 = ADC1_CHANNEL_6; break;
-                  case 35: sharedMemory.adcchannel1 = ADC1_CHANNEL_7; break;
+                  case 36: sharedMemory->adcchannel1 = ADC1_CHANNEL_0; break;
+                  case 37: sharedMemory->adcchannel1 = ADC1_CHANNEL_1; break;
+                  case 38: sharedMemory->adcchannel1 = ADC1_CHANNEL_2; break;
+                  case 39: sharedMemory->adcchannel1 = ADC1_CHANNEL_3; break;
+                  case 32: sharedMemory->adcchannel1 = ADC1_CHANNEL_4; break;
+                  case 33: sharedMemory->adcchannel1 = ADC1_CHANNEL_5; break;
+                  case 34: sharedMemory->adcchannel1 = ADC1_CHANNEL_6; break;
+                  case 35: sharedMemory->adcchannel1 = ADC1_CHANNEL_7; break;
                   // ADC2 (GPIOs 4, 0, 2, 15, 13, 12, 14, 27, 25, 26), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio1) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString ((char *) (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio1) + ".")); // send the error also to javascript client
+                            free (sharedMemory);  
+                            return;
               }
-              switch (sharedMemory.gpio2) {
+              switch (sharedMemory->gpio2) {
                   // ADC1
-                  case 36: sharedMemory.adcchannel2 = ADC1_CHANNEL_0; break;
-                  case 37: sharedMemory.adcchannel2 = ADC1_CHANNEL_1; break;
-                  case 38: sharedMemory.adcchannel2 = ADC1_CHANNEL_2; break;
-                  case 39: sharedMemory.adcchannel2 = ADC1_CHANNEL_3; break;
-                  case 32: sharedMemory.adcchannel2 = ADC1_CHANNEL_4; break;
-                  case 33: sharedMemory.adcchannel2 = ADC1_CHANNEL_5; break;
-                  case 34: sharedMemory.adcchannel2 = ADC1_CHANNEL_6; break;
-                  case 35: sharedMemory.adcchannel2 = ADC1_CHANNEL_7; break;
+                  case 36: sharedMemory->adcchannel2 = ADC1_CHANNEL_0; break;
+                  case 37: sharedMemory->adcchannel2 = ADC1_CHANNEL_1; break;
+                  case 38: sharedMemory->adcchannel2 = ADC1_CHANNEL_2; break;
+                  case 39: sharedMemory->adcchannel2 = ADC1_CHANNEL_3; break;
+                  case 32: sharedMemory->adcchannel2 = ADC1_CHANNEL_4; break;
+                  case 33: sharedMemory->adcchannel2 = ADC1_CHANNEL_5; break;
+                  case 34: sharedMemory->adcchannel2 = ADC1_CHANNEL_6; break;
+                  case 35: sharedMemory->adcchannel2 = ADC1_CHANNEL_7; break;
                   // not used
                   case 255: break;
                   // ADC2 (GPIOs 4, 0, 2, 15, 13, 12, 14, 27, 25, 26), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio2) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString ((char *) (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio2) + ".")); // send the error also to javascript client
+                            free (sharedMemory);  
+                            return;
               }
 
 
@@ -1203,41 +1207,43 @@
               __oscilloscope_h_debug__ ("MCU ESP32S2 pinout");
 
               // ESP32 S2 board: https://docs.espressif.com/projects/esp-idf/en/v4.4.1/esp32s2/api-reference/peripherals/adc.html
-              switch (sharedMemory.gpio1) {
+              switch (sharedMemory->gpio1) {
                   // ADC1
-                  case  1: sharedMemory.adcchannel1 = ADC1_CHANNEL_0; break;
-                  case  2: sharedMemory.adcchannel1 = ADC1_CHANNEL_1; break;
-                  case  3: sharedMemory.adcchannel1 = ADC1_CHANNEL_2; break;
-                  case  4: sharedMemory.adcchannel1 = ADC1_CHANNEL_3; break;
-                  case  5: sharedMemory.adcchannel1 = ADC1_CHANNEL_4; break;
-                  case  6: sharedMemory.adcchannel1 = ADC1_CHANNEL_5; break;
-                  case  7: sharedMemory.adcchannel1 = ADC1_CHANNEL_6; break;
-                  case  8: sharedMemory.adcchannel1 = ADC1_CHANNEL_7; break;
-                  case  9: sharedMemory.adcchannel1 = ADC1_CHANNEL_8; break;
-                  case 10: sharedMemory.adcchannel1 = ADC1_CHANNEL_9; break;
+                  case  1: sharedMemory->adcchannel1 = ADC1_CHANNEL_0; break;
+                  case  2: sharedMemory->adcchannel1 = ADC1_CHANNEL_1; break;
+                  case  3: sharedMemory->adcchannel1 = ADC1_CHANNEL_2; break;
+                  case  4: sharedMemory->adcchannel1 = ADC1_CHANNEL_3; break;
+                  case  5: sharedMemory->adcchannel1 = ADC1_CHANNEL_4; break;
+                  case  6: sharedMemory->adcchannel1 = ADC1_CHANNEL_5; break;
+                  case  7: sharedMemory->adcchannel1 = ADC1_CHANNEL_6; break;
+                  case  8: sharedMemory->adcchannel1 = ADC1_CHANNEL_7; break;
+                  case  9: sharedMemory->adcchannel1 = ADC1_CHANNEL_8; break;
+                  case 10: sharedMemory->adcchannel1 = ADC1_CHANNEL_9; break;
                   // ADC2 (GPIOs 11, 12, 13, 14, 15, 16, 17, 18, 19, 20), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio1) + "."); // send error also to javascript client
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio1) + "."); // send error also to javascript client
+                            free (sharedMemory);
                             return;  
               }
-              switch (sharedMemory.gpio2) {
+              switch (sharedMemory->gpio2) {
                   // ADC1
-                  case  1: sharedMemory.adcchannel2 = ADC1_CHANNEL_0; break;
-                  case  2: sharedMemory.adcchannel2 = ADC1_CHANNEL_1; break;
-                  case  3: sharedMemory.adcchannel2 = ADC1_CHANNEL_2; break;
-                  case  4: sharedMemory.adcchannel2 = ADC1_CHANNEL_3; break;
-                  case  5: sharedMemory.adcchannel2 = ADC1_CHANNEL_4; break;
-                  case  6: sharedMemory.adcchannel2 = ADC1_CHANNEL_5; break;
-                  case  7: sharedMemory.adcchannel2 = ADC1_CHANNEL_6; break;
-                  case  8: sharedMemory.adcchannel2 = ADC1_CHANNEL_7; break;
-                  case  9: sharedMemory.adcchannel2 = ADC1_CHANNEL_8; break;
-                  case 10: sharedMemory.adcchannel2 = ADC1_CHANNEL_9; break;
+                  case  1: sharedMemory->adcchannel2 = ADC1_CHANNEL_0; break;
+                  case  2: sharedMemory->adcchannel2 = ADC1_CHANNEL_1; break;
+                  case  3: sharedMemory->adcchannel2 = ADC1_CHANNEL_2; break;
+                  case  4: sharedMemory->adcchannel2 = ADC1_CHANNEL_3; break;
+                  case  5: sharedMemory->adcchannel2 = ADC1_CHANNEL_4; break;
+                  case  6: sharedMemory->adcchannel2 = ADC1_CHANNEL_5; break;
+                  case  7: sharedMemory->adcchannel2 = ADC1_CHANNEL_6; break;
+                  case  8: sharedMemory->adcchannel2 = ADC1_CHANNEL_7; break;
+                  case  9: sharedMemory->adcchannel2 = ADC1_CHANNEL_8; break;
+                  case 10: sharedMemory->adcchannel2 = ADC1_CHANNEL_9; break;
                   // not used
                   case 255: break;
                   // ADC2 (GPIOs 11, 12, 13, 14, 15, 16, 17, 18, 19, 20), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio2) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio2) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
               }
 
           // #elif CONFIG_IDF_TARGET_ESP32C2
@@ -1246,72 +1252,76 @@
               __oscilloscope_h_debug__ ("MCU ESP32S3 pinout");
 
               // ESP32 S3 board: https://docs.espressif.com/projects/esp-idf/en/v4.4/esp32s3/api-reference/peripherals/adc.html
-              switch (sharedMemory.gpio1) {
+              switch (sharedMemory->gpio1) {
                   // ADC1
-                  case  1: sharedMemory.adcchannel1 = ADC1_CHANNEL_0; break;
-                  case  2: sharedMemory.adcchannel1 = ADC1_CHANNEL_1; break;
-                  case  3: sharedMemory.adcchannel1 = ADC1_CHANNEL_2; break;
-                  case  4: sharedMemory.adcchannel1 = ADC1_CHANNEL_3; break;
-                  case  5: sharedMemory.adcchannel1 = ADC1_CHANNEL_4; break;
-                  case  6: sharedMemory.adcchannel1 = ADC1_CHANNEL_5; break;
-                  case  7: sharedMemory.adcchannel1 = ADC1_CHANNEL_6; break;
-                  case  8: sharedMemory.adcchannel1 = ADC1_CHANNEL_7; break;
-                  case  9: sharedMemory.adcchannel1 = ADC1_CHANNEL_8; break;
-                  case 10: sharedMemory.adcchannel1 = ADC1_CHANNEL_9; break;
+                  case  1: sharedMemory->adcchannel1 = ADC1_CHANNEL_0; break;
+                  case  2: sharedMemory->adcchannel1 = ADC1_CHANNEL_1; break;
+                  case  3: sharedMemory->adcchannel1 = ADC1_CHANNEL_2; break;
+                  case  4: sharedMemory->adcchannel1 = ADC1_CHANNEL_3; break;
+                  case  5: sharedMemory->adcchannel1 = ADC1_CHANNEL_4; break;
+                  case  6: sharedMemory->adcchannel1 = ADC1_CHANNEL_5; break;
+                  case  7: sharedMemory->adcchannel1 = ADC1_CHANNEL_6; break;
+                  case  8: sharedMemory->adcchannel1 = ADC1_CHANNEL_7; break;
+                  case  9: sharedMemory->adcchannel1 = ADC1_CHANNEL_8; break;
+                  case 10: sharedMemory->adcchannel1 = ADC1_CHANNEL_9; break;
                   // ADC2 (GPIOs 11, 12, 13, 14, 15, 16, 17, 18, 19, 20), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio1) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio1) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
               }
-              switch (sharedMemory.gpio2) {
+              switch (sharedMemory->gpio2) {
                   // ADC1
-                  case  1: sharedMemory.adcchannel2 = ADC1_CHANNEL_0; break;
-                  case  2: sharedMemory.adcchannel2 = ADC1_CHANNEL_1; break;
-                  case  3: sharedMemory.adcchannel2 = ADC1_CHANNEL_2; break;
-                  case  4: sharedMemory.adcchannel2 = ADC1_CHANNEL_3; break;
-                  case  5: sharedMemory.adcchannel2 = ADC1_CHANNEL_4; break;
-                  case  6: sharedMemory.adcchannel2 = ADC1_CHANNEL_5; break;
-                  case  7: sharedMemory.adcchannel2 = ADC1_CHANNEL_6; break;
-                  case  8: sharedMemory.adcchannel2 = ADC1_CHANNEL_7; break;
-                  case  9: sharedMemory.adcchannel2 = ADC1_CHANNEL_8; break;
-                  case 10: sharedMemory.adcchannel2 = ADC1_CHANNEL_9; break;
+                  case  1: sharedMemory->adcchannel2 = ADC1_CHANNEL_0; break;
+                  case  2: sharedMemory->adcchannel2 = ADC1_CHANNEL_1; break;
+                  case  3: sharedMemory->adcchannel2 = ADC1_CHANNEL_2; break;
+                  case  4: sharedMemory->adcchannel2 = ADC1_CHANNEL_3; break;
+                  case  5: sharedMemory->adcchannel2 = ADC1_CHANNEL_4; break;
+                  case  6: sharedMemory->adcchannel2 = ADC1_CHANNEL_5; break;
+                  case  7: sharedMemory->adcchannel2 = ADC1_CHANNEL_6; break;
+                  case  8: sharedMemory->adcchannel2 = ADC1_CHANNEL_7; break;
+                  case  9: sharedMemory->adcchannel2 = ADC1_CHANNEL_8; break;
+                  case 10: sharedMemory->adcchannel2 = ADC1_CHANNEL_9; break;
                   // not used
                   case 255: break;
                   // ADC2 (GPIOs 11, 12, 13, 14, 15, 16, 17, 18, 19, 20), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio2) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio2) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
               }
 
           #elif CONFIG_IDF_TARGET_ESP32C3
               __oscilloscope_h_debug__ ("MCU ESP32C3 pinout");
 
               // ESP32 C3 board: https://docs.espressif.com/projects/esp-idf/en/latest/esp32c3/hw-reference/esp32c3/user-guide-devkitm-1.html
-              switch (sharedMemory.gpio1) {
+              switch (sharedMemory->gpio1) {
                   // ADC1
-                  case  0: sharedMemory.adcchannel1 = ADC1_CHANNEL_0; break;
-                  case  1: sharedMemory.adcchannel1 = ADC1_CHANNEL_1; break;
-                  case  2: sharedMemory.adcchannel1 = ADC1_CHANNEL_2; break;
-                  case  3: sharedMemory.adcchannel1 = ADC1_CHANNEL_3; break;
-                  case  4: sharedMemory.adcchannel1 = ADC1_CHANNEL_4; break;
+                  case  0: sharedMemory->adcchannel1 = ADC1_CHANNEL_0; break;
+                  case  1: sharedMemory->adcchannel1 = ADC1_CHANNEL_1; break;
+                  case  2: sharedMemory->adcchannel1 = ADC1_CHANNEL_2; break;
+                  case  3: sharedMemory->adcchannel1 = ADC1_CHANNEL_3; break;
+                  case  4: sharedMemory->adcchannel1 = ADC1_CHANNEL_4; break;
                   // ADC2 (GPIO 5), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio1) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio1) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
               }
-              switch (sharedMemory.gpio2) {
+              switch (sharedMemory->gpio2) {
                   // ADC1
-                  case  0: sharedMemory.adcchannel2 = ADC1_CHANNEL_0; break;
-                  case  1: sharedMemory.adcchannel2 = ADC1_CHANNEL_1; break;
-                  case  2: sharedMemory.adcchannel2 = ADC1_CHANNEL_2; break;
-                  case  3: sharedMemory.adcchannel2 = ADC1_CHANNEL_3; break;
-                  case  4: sharedMemory.adcchannel2 = ADC1_CHANNEL_4; break;
+                  case  0: sharedMemory->adcchannel2 = ADC1_CHANNEL_0; break;
+                  case  1: sharedMemory->adcchannel2 = ADC1_CHANNEL_1; break;
+                  case  2: sharedMemory->adcchannel2 = ADC1_CHANNEL_2; break;
+                  case  3: sharedMemory->adcchannel2 = ADC1_CHANNEL_3; break;
+                  case  4: sharedMemory->adcchannel2 = ADC1_CHANNEL_4; break;
                   // not used
                   case 255: break;
                   // ADC2 (GPIO 5), the reading blocks when used together with WiFi?
                   // other GPIOs do not have ADC
-                  default:  webSocket->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory.gpio2) + "."); // send error also to javascript client
-                            return;  
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio2) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
               }
 
           // #elif CONFIG_IDF_TARGET_ESP32C6
@@ -1329,15 +1339,17 @@
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] oscilloscope protocol syntax error.";
         #endif
-        webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
-        return;        
+        webSck->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
+        free (sharedMemory);    
+        return;
       }
-      if (sscanf (cmdPart2, "every %i %2s screen width = %lu %2s", &sharedMemory.samplingTime, sharedMemory.samplingTimeUnit, &sharedMemory.screenWidthTime, sharedMemory.screenWidthTimeUnit) != 4) {
+      if (sscanf (cmdPart2, "every %i %2s screen width = %lu %2s", &sharedMemory->samplingTime, sharedMemory->samplingTimeUnit, &sharedMemory->screenWidthTime, sharedMemory->screenWidthTimeUnit) != 4) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] oscilloscope protocol syntax error.";
         #endif
-        webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
-        return;    
+        webSck->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
+        free (sharedMemory);
+        return;
       }
           
       // parse 3rd part
@@ -1347,139 +1359,144 @@
                   break;
           case 4: // two triggers
                   if (!strcmp (posNeg2, "positive")) {
-                    sharedMemory.positiveTrigger = true;
-                    sharedMemory.positiveTriggerTreshold = treshold2;
+                    sharedMemory->positiveTrigger = true;
+                    sharedMemory->positiveTriggerTreshold = treshold2;
                   }
                   if (!strcmp (posNeg2, "negative")) {
-                    sharedMemory.negativeTrigger = true;
-                    sharedMemory.negativeTriggerTreshold = treshold2;
+                    sharedMemory->negativeTrigger = true;
+                    sharedMemory->negativeTriggerTreshold = treshold2;
                   }    
                   // don't break, continue to the next case
           case 2: // one trigger
                   if (!strcmp (posNeg1, "positive")) {
-                    sharedMemory.positiveTrigger = true;
-                    sharedMemory.positiveTriggerTreshold = treshold1;
+                    sharedMemory->positiveTrigger = true;
+                    sharedMemory->positiveTriggerTreshold = treshold1;
                   }
                   if (!strcmp (posNeg1, "negative")) {
-                    sharedMemory.negativeTrigger = true;
-                    sharedMemory.negativeTriggerTreshold = treshold1;
+                    sharedMemory->negativeTrigger = true;
+                    sharedMemory->negativeTriggerTreshold = treshold1;
                   }
                   break;
           default:
                   #ifdef __DMESG__
                       dmesgQueue << "[oscilloscope] oscilloscope protocol syntax error.";
                   #endif
-                  webSocket->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
-                  return;    
+                  webSck->sendString ("[oscilloscope] oscilloscope protocol syntax error."); // send error also to javascript client
+                  free (sharedMemory);
+                  return;
         }
       }
 
       // check the values and calculate derived values
-      if (!(!strcmp (sharedMemory.readType, "analog") || !strcmp (sharedMemory.readType, "digital"))) {
+      if (!(!strcmp (sharedMemory->readType, "analog") || !strcmp (sharedMemory->readType, "digital"))) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] wrong readType. Read type can only be analog or digital.";
         #endif
-        webSocket->sendString ("[oscilloscope] wrong readType. Read type can only be analog or digital."); // send error also to javascript client
-        return;    
+        webSck->sendString ("[oscilloscope] wrong readType. Read type can only be analog or digital."); // send error also to javascript client
+        free (sharedMemory);
+        return;
       }
-      if (sharedMemory.gpio1 < 0 || sharedMemory.gpio2 < 0) {
+      if (sharedMemory->gpio1 < 0 || sharedMemory->gpio2 < 0) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] invalid GPIO.";
         #endif
-        webSocket->sendString ("[oscilloscope] invalid GPIO."); // send error also to javascript client
-        return;      
+        webSck->sendString ("[oscilloscope] invalid GPIO."); // send error also to javascript client
+        free (sharedMemory);
+        return; 
       }
-      if (!(sharedMemory.samplingTime >= 1 && sharedMemory.samplingTime <= 25000)) {
+      if (!(sharedMemory->samplingTime >= 1 && sharedMemory->samplingTime <= 25000)) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] invalid sampling time. Sampling time must be between 1 and 25000.";
         #endif
-        webSocket->sendString ("[oscilloscope] invalid sampling time. Sampling time must be between 1 and 25000."); // send error also to javascript client
-        return;      
+        webSck->sendString ("[oscilloscope] invalid sampling time. Sampling time must be between 1 and 25000."); // send error also to javascript client
+        free (sharedMemory);
+        return;
       }
-      if (strcmp (sharedMemory.samplingTimeUnit, "ms") && strcmp (sharedMemory.samplingTimeUnit, "us")) {
+      if (strcmp (sharedMemory->samplingTimeUnit, "ms") && strcmp (sharedMemory->samplingTimeUnit, "us")) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] wrong samplingTimeUnit. Sampling time unit can only be ms or us.";
         #endif
-        webSocket->sendString ("[oscilloscope] wrong samplingTimeUnit. Sampling time unit can only be ms or us."); // send error also to javascript client
-        return;    
+        webSck->sendString ("[oscilloscope] wrong samplingTimeUnit. Sampling time unit can only be ms or us."); // send error also to javascript client
+        free (sharedMemory);
+        return;
       }
 
-      if (strcmp (sharedMemory.screenWidthTimeUnit, sharedMemory.samplingTimeUnit)) {
+      if (strcmp (sharedMemory->screenWidthTimeUnit, sharedMemory->samplingTimeUnit)) {
         #ifdef __DMESG__
             dmesgQueue << "[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit.";
         #endif        
-        webSocket->sendString ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit."); // send error also to javascript client
-        return;    
+        webSck->sendString ("[oscilloscope] screenWidthTimeUnit must be the same as samplingTimeUnit."); // send error also to javascript client
+        free (sharedMemory);
+        return;
       }
 
-      if (sharedMemory.positiveTrigger) {
-        if (sharedMemory.positiveTriggerTreshold > 0 && sharedMemory.positiveTriggerTreshold <= (strcmp (sharedMemory.readType, "analog") ? 1 : 4095)) {
-          ;// Serial.printf ("[oscilloscope] positive slope trigger treshold = %i\n", sharedMemory.positiveTriggerTreshold);
+      if (sharedMemory->positiveTrigger) {
+        if (sharedMemory->positiveTriggerTreshold > 0 && sharedMemory->positiveTriggerTreshold <= (strcmp (sharedMemory->readType, "analog") ? 1 : 4095)) {
+          ;// Serial.printf ("[oscilloscope] positive slope trigger treshold = %i\n", sharedMemory->positiveTriggerTreshold);
         } else {
           #ifdef __DMESG__
               dmesgQueue << "[oscilloscope] invalid positive slope trigger treshold (according to other settings).";
           #endif
-          webSocket->sendString ("[oscilloscope] invalid positive slope trigger treshold (according to other settings)."); // send error also to javascript client
-          return;      
+          webSck->sendString ("[oscilloscope] invalid positive slope trigger treshold (according to other settings)."); // send error also to javascript client
+          free (sharedMemory);
+          return;
         }
       }
-      if (sharedMemory.negativeTrigger) {
-        if (sharedMemory.negativeTriggerTreshold >= 0 && sharedMemory.negativeTriggerTreshold < (strcmp (sharedMemory.readType, "analog") ? 1 : 4095)) {
-          ;//Serial.printf ("[oscilloscope] negative slope trigger treshold = %i\n", sharedMemory.negativeTriggerTreshold);
+      if (sharedMemory->negativeTrigger) {
+        if (sharedMemory->negativeTriggerTreshold >= 0 && sharedMemory->negativeTriggerTreshold < (strcmp (sharedMemory->readType, "analog") ? 1 : 4095)) {
+          ;//Serial.printf ("[oscilloscope] negative slope trigger treshold = %i\n", sharedMemory->negativeTriggerTreshold);
         } else {
           #ifdef __DMESG__
               dmesgQueue << "[oscilloscope] invalid negative slope trigger treshold (according to other settings).";
           #endif
-          webSocket->sendString ("[oscilloscope] invalid negative slope trigger treshold (according to other settings)."); // send error also to javascript client
-          return;      
+          webSck->sendString ("[oscilloscope] invalid negative slope trigger treshold (according to other settings)."); // send error also to javascript client
+          free (sharedMemory);
+          return;
         }
       }
 
       // choose the corect oscReader
       void (*oscReader) (void *sharedMemory);
-      if (strcmp (sharedMemory.readType, "analog")) {
+      if (strcmp (sharedMemory->readType, "analog")) {
           oscReader = oscReader_digital; // us sampling interval, 1-2 signals, digital reader
       } else {
           oscReader = oscReader_analog; // us sampling interval, 1-2 signals, analog reader
           #ifdef USE_I2S_INTERFACE
-            if (sharedMemory.gpio2 > 39) // 1 signal only
+            if (sharedMemory->gpio2 > 39 && sharedMemory->samplingTime <= 1000) // 1 signal only, sampling time is short enough
                 oscReader = oscReader_analog_1_signal_i2s; // us sampling interval, 1 signal, (fast, DMA) I2S analog reader
           #endif
       }
-      if (!strcmp (sharedMemory.samplingTimeUnit, "ms")) {
+      if (!strcmp (sharedMemory->samplingTimeUnit, "ms")) {
           oscReader = oscReader_millis; // ms sampling intervl, 1-2 signals, digital or analog reader with 'sample at a time' or 'screen at a time' options
       }
 
-      sharedMemory.oscReaderState = INITIAL;
+      sharedMemory->oscReaderState = INITIAL;
 
-      #ifdef OSCILLOSCOPE_READER_CORE
-          BaseType_t taskCreated = xTaskCreatePinnedToCore (oscReader, "oscReader", 4 * 1024, (void *) &sharedMemory, OSCILLOSCOPE_READER_PRIORITY, NULL, OSCILLOSCOPE_READER_CORE);
-      #else
-          BaseType_t taskCreated = xTaskCreate (oscReader, "oscReader", 4 * 1024, (void *) &sharedMemory, OSCILLOSCOPE_READER_PRIORITY, NULL);
-      #endif
+      BaseType_t taskCreated = xTaskCreate (oscReader, "oscReader", 4 * 1024, (void *) sharedMemory, OSCILLOSCOPE_READER_PRIORITY, NULL);
       if (pdPASS != taskCreated) {
             #ifdef __DMESG__
                 dmesgQueue << "[oscilloscope] could not start oscReader";
             #endif
-            webSocket->sendString ("[oscilloscope] could not start oscReader."); // send error also to javascript client
+            webSck->sendString ("[oscilloscope] could not start oscReader."); // send error also to javascript client
       } else {
 
                 // send oscReader START signal and wait until STARTED
-                sharedMemory.oscReaderState = START; 
-                while (sharedMemory.oscReaderState == START) delay (1); 
+                sharedMemory->oscReaderState = START; 
+                while (sharedMemory->oscReaderState == START) delay (1); 
 
         // start oscilloscope sender in this thread
 
-        oscSender ((void *) &sharedMemory); 
+        oscSender ((void *) sharedMemory); 
         // stop reader - we can not simply vTaskDelete (oscReaderHandle) since this could happen in the middle of analogRead which would leave its internal semaphore locked
 
                 // send oscReader STOP signal
-                sharedMemory.oscReaderState = STOP; 
+                sharedMemory->oscReaderState = STOP; 
 
                 // wait until oscReader STOPPED or error
-                while (sharedMemory.oscReaderState != STOPPED) delay (1); 
+                while (sharedMemory->oscReaderState != STOPPED) delay (1); 
       }
-      
+
+      free (sharedMemory);
       return;
     }
 
