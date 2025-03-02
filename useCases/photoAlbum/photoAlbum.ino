@@ -1,6 +1,6 @@
 /*
  
-    photoAlbum.ino - an use case of Esp32_web_ftp_telnet_server_template project 
+    photoAlbum.ino - web portal use case of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
     
         Compile this code with Arduino for:
             - one of ESP32 boards (Tools | Board) and 
@@ -17,10 +17,8 @@
       if your photo file is 20230314_095846.jpg then its smaller version should have name 20230314_095846-small.jpg.
     - Upload these files to /var/www/html/photoAlbum directory as well.
     - Since built-in flash disk is small compared to picture sizes, it is recommended to use a SC card
-
-    This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Esp32_web_ftp_telnet_server_template
      
-    October 23, 2023, Bojan Jurca
+    February 6, 2025, Bojan Jurca
 
 */
 
@@ -28,13 +26,18 @@
 // --- PLEASE MODIFY THIS FILE FIRST! --- This is where you can configure your network credentials, which servers will be included, etc ...
 #include "Esp32_servers_config.h"
 
+#include "servers/std/Cstring.hpp"
+#include "servers/std/console.hpp"
+#include "servers/keyValueDatabase.hpp"
 
-                    // -----photoALbum-----
-                    persistentKeyValuePairs<String, unsigned long> imgViewCountDatabase;
-                    persistentKeyValuePairs<String, String> imgCaptionDatabase;
+
+
+                    // ----- photoAlbum -----
+                    keyValueDatabase<String, unsigned long> imgViewCountDatabase;
+                    keyValueDatabase<String, String> imgCaptionDatabase;
 
                     #include "photoAlbum.h"
-                    // -----photoALbum-----
+                    // ----- photoAlbum -----
 
  
 // httpRequestHandlerCallback function returns the content part of HTTP reply in HTML, json, ... format (header fields will be added by 
@@ -43,31 +46,31 @@
 // PLEASE NOTE: since httpServer is implemented as a multitasking server, httpRequestHandlerCallback function can run in different tasks at the same time
 //              therefore httpRequestHandlerCallback function must be reentrant.
 
-String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) { 
+String httpRequestHandlerCallback (char *httpRequest, httpServer_t::httpConnection_t *httpConnection) { 
     // httpServer will add HTTP header to the String that this callback function returns and then send everithing to the Web browser (this callback function is suppose to return only the content part of HTTP reply)
 
     #define httpRequestStartsWith(X) (strstr(httpRequest,X)==httpRequest)
 
                     // -----web session login/logout-----
-                    fsString<64> sessionToken = hcn->getHttpRequestCookie ("sessionToken").c_str ();
-                    fsString<64>userName;
-                    if (sessionToken > "") userName = hcn->getUserNameFromToken (sessionToken); // if userName > "" the user is loggedin
+                    Cstring<64> sessionToken = httpConnection->getHttpRequestCookie ("sessionToken").c_str ();
+                    Cstring<64>userName;
+                    if (sessionToken > "") userName = httpConnection->getUserNameFromToken (sessionToken); // if userName > "" the user is loggedin
 
                     // REST call to login       
                     if (httpRequestStartsWith ("GET /login/")) { // GET /login/userName%20password - called (for example) from login.html when "Login" button is pressed
                         // delete sessionToken from cookie and database if it already exists
                         if (sessionToken > "") {
-                            hcn->deleteWebSessionToken (sessionToken);
-                            hcn->setHttpReplyCookie ("sessionToken", "");
-                            hcn->setHttpReplyCookie ("sessionUser", "");
+                            httpConnection->deleteWebSessionToken (sessionToken);
+                            httpConnection->setHttpReplyCookie ("sessionToken", "");
+                            httpConnection->setHttpReplyCookie ("sessionUser", "");
                         }
                         // check new login credentials and login
-                        fsString<64>password;
+                        Cstring<64>password;
                         if (sscanf (httpRequest, "%*[^/]/login/%64[^%%]%%20%64s", (char *) userName, (char *) password) == 2) {
                             if (userManagement.checkUserNameAndPassword (userName, password)) { // check if they are OK against system users or find another way of authenticating the user
-                                sessionToken = hcn->newWebSessionToken (userName, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT).c_str (); // use 0 for infinite
-                                hcn->setHttpReplyCookie ("sessionToken", (char *) sessionToken, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT); // TIME_OUT is in sec, use 0 for infinite
-                                hcn->setHttpReplyCookie ("sessionUser", (char *) userName, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT); // TIME_OUT is in sec, use 0 for infinite
+                                sessionToken = httpConnection->newWebSessionToken (userName, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT).c_str (); // use 0 for infinite
+                                httpConnection->setHttpReplyCookie ("sessionToken", (char *) sessionToken, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT); // TIME_OUT is in sec, use 0 for infinite
+                                httpConnection->setHttpReplyCookie ("sessionUser", (char *) userName, WEB_SESSION_TIME_OUT == 0 ? 0 : time () + WEB_SESSION_TIME_OUT); // TIME_OUT is in sec, use 0 for infinite
                                 return "loggedIn"; // notify the client about success
                             } else {
                                 return "Not logged in. Wrong username and/or password."; // notify the client login.html about failure
@@ -78,16 +81,16 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                     // REST call to logout
                     if (httpRequestStartsWith ("PUT /logout ")) {
                         // delete token from the cookie and the database
-                        hcn->deleteWebSessionToken (sessionToken);
-                        hcn->setHttpReplyCookie ("sessionToken", "");
-                        hcn->setHttpReplyCookie ("sessionUser", "");
+                        httpConnection->deleteWebSessionToken (sessionToken);
+                        httpConnection->setHttpReplyCookie ("sessionToken", "");
+                        httpConnection->setHttpReplyCookie ("sessionUser", "");
                         return "Logged out.";
                     }
 
                     // -----photoAlbum-----
                     if (httpRequestStartsWith ("PUT /photoAlbum/changeImgCaption/")) {
                         if (userName == "webadmin") {
-                            char id [256]; // picture id is its file name without .jpg
+                            char id [FILE_PATH_MAX_LENGTH + 1]; // picture id is its file name without .jpg
                             char encodedImgCaption [256] = {};
                             if (sscanf (httpRequest, "%*[^/]/%*[^/]/%*[^/]/%255[^/]/%255s", (char *) id, (char *) encodedImgCaption) == 2) { 
                                 char imgCaption [255]; // it will surely be shorter than encodedImgCaption
@@ -95,31 +98,36 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                 mbedtls_base64_decode ((unsigned char *) imgCaption, 255, &imgCaptionLen, (const unsigned char *) encodedImgCaption, strlen (encodedImgCaption));
                                 imgCaption [imgCaptionLen] = 0;
                                 if ((strlen (encodedImgCaption) == 0) == (imgCaptionLen == 0)) {
-                                      persistentKeyValuePairs<String, String>::errorCode e;
-                                      e = imgCaptionDatabase.Upsert (id, imgCaption);
+                                      signed char e;
+                                      e = imgCaptionDatabase.Update (id, imgCaption);
                                       if (!e) return "imgCaptionChanged";
-                                      else    return imgCaptionDatabase.errorCodeText (e);
+                                      else    return "server-side error";
                                 } else {
-                                    hcn->setHttpReplyStatus ("400 bad request");
+                                    httpConnection->setHttpReplyStatus ("400 bad request");
                                     return "bad request";
                                 }
                             } else { // wrong REST call syntax
-                                hcn->setHttpReplyStatus ("400 bad request");
+                                httpConnection->setHttpReplyStatus ("400 bad request");
                                 return "bad request";
                             }
                         } else { // user not logged in or some other user than webadmin
-                          hcn->setHttpReplyStatus ("403 forbidden");
+                          httpConnection->setHttpReplyStatus ("403 forbidden");
                           return "forbidden";
                         }
                     }
 
                     if (httpRequestStartsWith ("GET /photoAlbum/")) {
                         if (strstr (httpRequest, ".jpg ") && !strstr (httpRequest, "-small.jpg ")) { // count only ful size picture hits
-                            char id [256];
+                            char id [FILE_PATH_MAX_LENGTH + 1];
                             if (sscanf (httpRequest, "%*[^/]/%*[^/]/%255[^.]", id) == 1) { 
-                                persistentKeyValuePairs<String, unsigned long>::errorCode e; 
-                                e = imgViewCountDatabase.Upsert (id, [] (unsigned long& value) { value ++; }, 1);
-                                if (e != imgViewCountDatabase.OK) Serial.printf ("[photoAlbum] imgViewCountDatabase ++ error: %s\n", imgViewCountDatabase.errorCodeText (e));
+                                imgViewCountDatabase [id] ++;
+
+                                if (imgViewCountDatabase.errorFlags ()) { 
+                                    cout << "error " << imgViewCountDatabase.errorFlags () << ": imgViewCountDatabase.Upsert (++)\n";
+                                    imgViewCountDatabase.clearErrorFlags ();                                    
+                                } else {
+                                    cout << "OK: imgViewCountDatabase.Upsert (++)\n";
+                                }
                             }
                         }                  
                     }
@@ -140,7 +148,7 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                           for (File f = d.openNextFile (); f; f = d.openNextFile ()) {
                               if (strstr (f.name (), "-small.jpg")) {
                                   // get id (original picture .jpg file name) from f.name (), image's hit count and its caption
-                                  char id [256];
+                                  char id [FILE_PATH_MAX_LENGTH + 1];
                                   unsigned long count = 0;
                                   String strCount = "";
                                   String caption = "";
@@ -152,21 +160,24 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                                                                                     "\n");
                                       }
 
-                                      persistentKeyValuePairs<String, unsigned long>::errorCode e1 = imgViewCountDatabase.FindValue (id, &count);
-                                      switch (e1) {
-                                          case imgViewCountDatabase.NOT_FOUND:  count = 0;
-                                          case imgViewCountDatabase.OK:         retValConstructionError += !(strCount = String (count));
-                                                                                break;
-                                          default:                              Serial.printf ("[photoAlbum] imgViewCountDatabase error: %s\n", imgViewCountDatabase.errorCodeText (e1));
-                                                                                break;
+                                      count = imgViewCountDatabase [id];
+                                      if (count == 0) {
+                                          retValConstructionError += !(strCount = "0");
+                                          if (imgViewCountDatabase.errorFlags () & ~err_not_found)
+                                              cout << "[photoAlbum] imgViewCountDatabase error: " << imgViewCountDatabase.errorFlags () << endl;
+                                      } else {
+                                          retValConstructionError += !(strCount = String (count));
                                       }
-                                      persistentKeyValuePairs<String, String>::errorCode e2 = imgCaptionDatabase.FindValue (id, &caption);
+
+                                      imgCaptionDatabase.Insert (id, id); // insert initial value in to database if id is not already there
+
+                                      signed char e2 = imgCaptionDatabase.FindValue (id, &caption);
                                       switch (e2) {
-                                          case imgCaptionDatabase.NOT_FOUND:  caption = id;
-                                          case imgCaptionDatabase.OK:         retValConstructionError += !caption;
-                                                                              break;
-                                          default:                            Serial.printf ("[photoAlbum] imgCaptionDatabase error: %s\n", imgCaptionDatabase.errorCodeText (e2));
-                                                                              break;
+                                          case err_not_found: caption = id;
+                                          case err_ok:        retValConstructionError += !caption;
+                                                              break;
+                                          default:            cout << "[photoAlbum] imgCaptionDatabase error: " << e2 << endl;
+                                                              break;
                                       }
 
                                       retValConstructionError += !retVal.concat ("    <div class='image'><a href='");
@@ -199,7 +210,7 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                           }
                           d.close ();
                         } else {
-                            Serial.printf ("Can't open /var/www/html/photoAlbum directory. Does it already exist?\n");
+                            cout << "Can't open /var/www/html/photoAlbum directory. Does it exist?\n";
                         }
 
 
@@ -214,7 +225,7 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
                         retValConstructionError += !retVal.concat (photoAlbumEnd);
 
                         if (retValConstructionError) {
-                            hcn->setHttpReplyStatus ("503 service unavailable");
+                            httpConnection->setHttpReplyStatus ("503 service unavailable");
                             return "Service is unavailable right now.";
                         }
                         return retVal;
@@ -226,8 +237,7 @@ String httpRequestHandlerCallback (char *httpRequest, httpConnection *hcn) {
 
 
 void setup () {
-    Serial.begin (115200);
-    Serial.println (string (MACHINETYPE " (") + string ((int) ESP.getCpuFreqMHz ()) + (char *) " MHz) " HOSTNAME " SDK: " + ESP.getSdkVersion () + (char *) " " VERSION_OF_SERVERS " compiled at: " __DATE__ " " __TIME__); 
+    cinit (false); // Serial.begin (115200);
 
     // 1. Mount file system - this is the first thing to do since all the configuration files reside on the file system.
     #if (FILE_SYSTEM & FILE_SYSTEM_LITTLEFS) == FILE_SYSTEM_LITTLEFS
@@ -266,28 +276,32 @@ void setup () {
 
     // 5. Start the servers.
     #ifdef __HTTP_SERVER__
-        httpServer *httpSrv = new (std::nothrow) httpServer ( httpRequestHandlerCallback, // a callback function that will handle HTTP requests that are not handled by webServer itself
-                                                              NULL,                       // a callback function that will handle WS requests, NULL to ignore WS requests
-                                                              "0.0.0.0",                  // start HTTP server on all available IP addresses
-                                                              80,                         // default HTTP port
-                                                              NULL);                      // we won't use firewallCallback function for HTTP server
-        if (!httpSrv && httpSrv->state () != httpServer::RUNNING) dmesg ("[httpServer] did not start.");
+        httpServer_t *httpServer = new (std::nothrow) httpServer_t (httpRequestHandlerCallback); // a callback function that will handle HTTP requests that are not handled by webServer itself
+        if (httpServer && *httpServer)
+            ;
+        else 
+            cout << "[httpServer] did not start\n";
     #endif
     #ifdef __FTP_SERVER__
-        ftpServer *ftpSrv = new (std::nothrow) ftpServer ("0.0.0.0",          // start FTP server on all available ip addresses
-                                                          21,                 // default FTP port
-                                                          NULL);              // we won't use firewallCallback function for HTTP server
-        if (ftpSrv && ftpSrv->state () != ftpServer::RUNNING) dmesg ("[ftpServer] did not start.");
+        ftpServer_t *ftpServer = new (std::nothrow) ftpServer_t ();
+        if (ftpServer && *ftpServer) 
+            ;
+        else
+            cout << "[ftpServer] did not start\n";
     #endif
 
                     // -----photoAlbum-----
                     int e;
-                    e = imgCaptionDatabase.loadData ("/var/www/imgCaptions.kvp");                    
-                    if (e) Serial.printf ("Error loading data into imgCaptionDatabase: %i\n", e);
-                    else Serial.printf ("imgCaptionDatabase: %i captions loaded at startup\n", imgCaptionDatabase.size ());
-                    e = imgViewCountDatabase.loadData ("/var/www/imgViews.kvp");
-                    if (e) Serial.printf ("Error loading data into imgviewCount: %i\n", e);
-                    else Serial.printf ("imgviewCount: %i counters loaded at startup\n", imgViewCountDatabase.size ());
+                    e = imgCaptionDatabase.Open ("/var/www/imgCaptions.db");
+                    if (e) 
+                        cout << "Error loading data into imgCaptionDatabase: " << e << endl;
+                    else 
+                        cout << "imgCaptionDatabase: " << imgCaptionDatabase.size () << " captions loaded at startup\n";
+                    e = imgViewCountDatabase.Open ("/var/www/imgViews.db");
+                    if (e)
+                        cout << "Error loading data into imgviewCount: " << e << endl;
+                    else
+                        cout << "imgviewCount: " << imgViewCountDatabase.size () << " counters loaded at startup\n";
                     // -----photoAlbum-----
 
 }
