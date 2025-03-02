@@ -272,15 +272,29 @@
 				if (obj.scale [i] % scaleModule == 0)
 					ctx.fillText (obj.scale [i], ox + fx * (i + 1) - 5, c.height);
 			}
+
 			ctx.beginPath ();
+			ctx.setLineDash ([]);
+			ctx.lineWidth = 5;
+			ctx.strokeStyle = graphColour;
+			let avg = parseFloat (obj.value [0]);
 			ctx.moveTo (ox + fx,oy + fy * parseInt (obj.value [0]));
 			for(i = 1; i < obj.value.length; i++){
+				avg += parseFloat (obj.value [i]);
 				ctx.lineTo (ox + fx * (i + 1), oy + fy * parseInt (obj.value [i]));
 				retVal = obj.value [i];
 			}
-			ctx.lineWidth = 4;
-			ctx.strokeStyle = graphColour;
 			ctx.stroke ();
+			avg /= obj.value.length;
+
+			// average
+			ctx.beginPath ();
+			ctx.setLineDash ([5, 3]); // dashes are 5px and spaces are 3px
+			ctx.lineWidth = 1;
+			ctx.moveTo (ox + fx * i, oy + fy * avg); // parseInt (obj.average));
+			ctx.lineTo (ox + fx, oy + fy * avg); // parseInt (obj.average));
+			ctx.stroke ();				
+
 			return retVal;
 		}
 

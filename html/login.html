@@ -22,7 +22,7 @@
     
   
 			/* button */
-			.button {padding: 10px 15px; font-size: 22px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 42px}
+			.button {padding: 10px 15px; font-size: 26px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 48px}
 			button:disabled {background-color: #aaa}
 			button:disabled:hover {background-color: #aaa}
  			/* blue button */
@@ -44,7 +44,7 @@
 				float:left;
 				width:25%;
 				font-family:verdana;
-				font-size:30px;
+				font-size:32px;
 				color:gray;
 			}
 			div.d3 {
@@ -52,7 +52,7 @@
 				float:left;
 				width:30%;
 				font-family:verdana;
-				font-size:30px;
+				font-size:32px;
 				color:black;
 			}
 			div.d4 {
@@ -60,7 +60,7 @@
 				float:left;
 				width:45%;
 				font-family:verdana;
-				font-size:15px;
+				font-size:16px;
 				color:black;
 			}
 
@@ -226,7 +226,7 @@
 			client.request 	(clientRequest, 'GET', function (serverReply) 	{
 												if (serverReply == "loggedIn") {
 													alert (document.cookie); // success, got sessionToken cookie
-													window.location.href = "/protectedPage.html";
+													window.location.replace ("/protectedPage.html");
 												} else {
 													alert (serverReply); // report error
 												}
