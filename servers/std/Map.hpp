@@ -1,13 +1,13 @@
 /*
- * Map.hpp for Arduino
+ *  Map.hpp for Arduino
  * 
- * This file is part of C++ std package for Arduino: https://github.com/BojanJurca/console-string-vector-map-for-Arduino
+ *  This file is part of Lightweight C++ Standard Template Library (STL) for Arduino: https://github.com/BojanJurca/Lightweight-Standard-Template-Library-STL-for-Arduino
  * 
- * The data storage is internaly implemented as balanced binary search tree for good searching performance.
+ *  The data storage is internaly implemented as balanced binary search tree for good searching performance.
  *
- * Map functions are not thread-safe.
+ *  Map functions are not thread-safe.
  * 
- * May 22, 2024, Bojan Jurca
+ *  October 23, 2024, Bojan Jurca
  *  
  */
 
@@ -27,7 +27,6 @@
     #define err_bad_alloc       ((signed char) 0b10000001)  // -127 - out of memory
     #define err_not_found       ((signed char) 0b10000100)  // -124 - key is not found
     #define err_not_unique      ((signed char) 0b10001000)  // -120 - key is not unique
-    #define err_cant_do_it_now  ((signed char) 0b11000000)  //  -64 - not the right time to do the operation, like triing to change data while iterating
 
 
     // type of memory used
@@ -52,8 +51,8 @@
 
 
             struct Pair {
-                keyType key;          // node key
-                valueType value;      // node value
+                keyType first;          // node key
+                valueType second;       // node value
             };
 
 
@@ -78,21 +77,21 @@
                     for (auto i: il) {
 
                         if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                            if (!i.key) {                           // ... check if parameter construction is valid
+                            if (!*(String *) &i.first) {                           // ... check if parameter construction is valid
                                 // log_e ("BAD_ALLOC");
                                 __errorFlags__ = err_bad_alloc;         // report error if it is not
                                 return;
                             }
 
                         if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                            if (!i.value) {                         // ... check if parameter construction is valid
+                            if (!*(String *) &i.second) {                         // ... check if parameter construction is valid
                                 // log_e ("BAD_ALLOC");
                                 __errorFlags__ = err_bad_alloc;         // report error if it is not
                                 return;
                             }
 
                         __balancedBinarySearchTreeNode__ *pInserted = NULL; 
-                        signed char h = __insert__ (&__root__, i.key, i.value, &pInserted);
+                        signed char h = __insert__ (&__root__, i.first, i.second, &pInserted);
                         if  (h >= 0)  // OK, h contains the balanced binary search tree height 
                             __height__ = h;
                     }
@@ -149,7 +148,7 @@
                 // copy other's elements
                 for (auto e: other) {
                     __balancedBinarySearchTreeNode__ *pInserted = NULL; 
-                    int h = this->__insert__ (&__root__, e->key, e->value, &pInserted); if  (h >= 0) __height__ = h;
+                    int h = this->__insert__ (&__root__, e.first, e.second, &pInserted); if  (h >= 0) __height__ = h;
                 }
                 // copy the error flags as well
                 __errorFlags__ |= other.__errorFlags__;
@@ -172,7 +171,7 @@
                 for (auto e: other) {
 
                     if (is_same<keyType, String>::value)     // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                        if (!e->key) {                            // ... check if parameter construction is valid
+                        if (!*(String *) &e.first) {                            // ... check if parameter construction is valid
                             // log_e ("BAD_ALLOC");
                             #ifdef __USE_MAP_EXCEPTIONS__
                                 throw err_bad_alloc;
@@ -182,7 +181,7 @@
                         }
 
                     if (is_same<valueType, String>::value)   // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                        if (!e->value) {                          // ... check if parameter construction is valid
+                        if (!*(String *) &e.second) {                          // ... check if parameter construction is valid
                             // log_e ("BAD_ALLOC");
                             #ifdef __USE_MAP_EXCEPTIONS__
                                 throw err_bad_alloc;
@@ -192,38 +191,12 @@
                         }
 
                     __balancedBinarySearchTreeNode__ *pInserted = NULL; 
-                    int h = this->__insert__ (&__root__, e->key, e->value, &pInserted); if  (h >= 0) __height__ = h;
+                    int h = this->__insert__ (&__root__, e.first, e.second, &pInserted); if  (h >= 0) __height__ = h;
                 }
                 // copy the error flags as well
                 __errorFlags__ |= other.__errorFlags__;
 
                 return this;
-            }
-
-
-            /*
-            *  Returns a pointer to the value associated with the key, if key is found, NULL if it is not. Example:
-            *  
-            *    String *value = mpB.find (1);
-            *    if (value) 
-            *        Serial.println (*value); 
-            *    else 
-            *        Serial.println ("not found");
-            */
-            
-            valueType *find (keyType key) {
-
-                if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                 // ... check if parameter construction is valid
-                        // log_e ("BAD_ALLOC");
-                        #ifdef __USE_MAP_EXCEPTIONS__
-                            throw err_bad_alloc;
-                        #endif
-                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
-                        return NULL;
-                    }
-
-                return __find__ (__root__, key);
             }
 
 
@@ -242,29 +215,34 @@
                 static valueType dummyValue1 = {};
                 static valueType dummyValue2 = {};
 
-                if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                 // ... check if parameter construction is valid
+                if (is_same<keyType, String>::value)      // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
+                    if (!*(String *) &key) {              // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
-                        __errorFlags__ |= err_bad_alloc;        // report error if it is not
+                        __errorFlags__ |= err_bad_alloc;  // report error if it is not
                         dummyValue1 = dummyValue2;
-                        return dummyValue1;                 // operator must return a reference, so return the reference to dummy value (make a copy of the default value first)
+                        return dummyValue1;               // operator must return a reference, so return the reference to dummy value (make a copy of the default value first)
                     }
 
-                valueType *pValue = __find__ (__root__, key);
-                // if pair is found return the reference to the value
-                if (pValue) {
-                    valueType& refValue = *pValue;
-                    return refValue;
+                // find the right pair
+                __balancedBinarySearchTreeNode__ *p = __root__;
+                while (p != NULL) {
+                    if (key < p->pair.first) 
+                        p = p->leftSubtree;           // 1. case: continue searching in left subtree
+                    else if (p->pair.first < key) 
+                        p = p->rightSubtree;          // 2. case: continue searching in reight subtree
+                    else {
+                        return p->pair.second;        // 3. case: found, return the reference ot the value
+                    }
                 }
-                // else insert a new pair
+                // else                               // 4. case: not found, else insert a new pair
                 __balancedBinarySearchTreeNode__ *pInserted = NULL; 
                 signed char h = __insert__ (&__root__, key, dummyValue2, &pInserted);
                 if  (h >= 0) {  // OK, h contains the balanced binary search tree height 
                     __height__ = h;
-                    return pInserted->pair.value;
+                    return pInserted->pair.second;
                 }
                 // else there was some other kind of error
                 dummyValue1 = dummyValue2;
@@ -281,7 +259,7 @@
             signed char erase (keyType key) { 
 
                 if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &key) {                 // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                 // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -307,7 +285,7 @@
             signed char insert (Pair pair) { 
 
                 if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!pair.key) {                        // ... check if parameter construction is valid
+                    if (!*(String *) &pair.first) {                        // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -317,7 +295,7 @@
                     }
 
                 if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!pair.value) {                      // ... check if parameter construction is valid
+                    if (!*(String *) &pair.second) {                      // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -327,7 +305,7 @@
                     }
 
                 __balancedBinarySearchTreeNode__ *pInserted = NULL; 
-                int h = __insert__ (&__root__, pair.key, pair.value, &pInserted);                 
+                int h = __insert__ (&__root__, pair.first, pair.second, &pInserted);                 
                 if  (h >= 0) {  // OK, h contains the balanced binary search tree height 
                     __height__ = h;
                     return err_ok;
@@ -338,7 +316,7 @@
             signed char insert (keyType key, valueType value) { 
 
                 if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!key) {                             // ... check if parameter construction is valid
+                    if (!*(String *) &key) {                             // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -348,7 +326,7 @@
                     }
 
                 if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!(String *) &value) {               // ... check if parameter construction is valid
+                    if (!*(String *) &value) {               // ... check if parameter construction is valid
                         // log_e ("BAD_ALLOC");
                         #ifdef __USE_MAP_EXCEPTIONS__
                             throw err_bad_alloc;
@@ -372,7 +350,7 @@
             *   
             *   Example:
             *    for (auto pair: mp)
-            *        Serial.println (String (pair.key) + "-" + String (pair.value));
+            *        Serial.println (String (pair.first) + "-" + String (pair.second));
             */
         
         private:
@@ -381,19 +359,19 @@
 
         public:
 
-            class Iterator {
+            class iterator {
 
               public:
-              
-                // constructor called from begin () and first_element () - stack is needed for iterating through balanced binary search tree nodes
-                Iterator (Map* mp, int8_t stackSize) {
-                    __mp__ = mp;
-    
-                    if (!mp || !stackSize) return; // when end () is beeing called, stack for balanced binary search tree iteration is not needed (only the begin instance iterates)
-        
-                    // find the lowest pair in the balanced binary search tree (this would be the leftmost one) and fill the stack meanwhile
-                    Map::__balancedBinarySearchTreeNode__* p = mp->__root__;
 
+                // there are 2 cases when constructor gets called: begin (pointToFirstPair = true) and end (pointToFirstPair = false) 
+                iterator (Map* mp, bool pointToFirstPair) {
+                    __mp__ = mp;
+
+                    if (!pointToFirstPair || __mp__->size () == 0) // when end () is beeing called, stack for balanced binary search tree iteration is not needed (yet)
+                        return;
+                    // else find the lowest pair in the balanced binary search tree (this would be the leftmost one) and fill the stack meanwhile
+
+                    Map::__balancedBinarySearchTreeNode__* p = mp->__root__;
                     while (p) {
                         __stack__ [++ __stackPointer__] = p;                      
                         p = p->leftSubtree;
@@ -401,28 +379,41 @@
                     __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
                 }
 
-                // constructor called from last_element () - stack is not really needed but construct it anyway
-                Iterator (int8_t stackSize, Map* mp) {
+                // find the key, construct the stack meanwhile
+                iterator (keyType key, Map* mp) {
                     __mp__ = mp;
-    
-                    if (!mp || !stackSize) return; // when end () is beeing called, stack for balanced binary search tree iteration is not needed (only the begin instance iterates)
-    
-                    // find the highest pair in the balanced binary search tree (this would be the righttmost one) and fill the stack meanwhile
-                    Map::__balancedBinarySearchTreeNode__* p = mp->__root__;
 
+                    if (__mp__->size () == 0)
+                        return;
+                    // else
+
+                    Map::__balancedBinarySearchTreeNode__* p = mp->__root__;
                     while (p) {
-                        __stack__ [++ __stackPointer__] = p;                      
-                        p = p->rightSubtree;
+                        __stack__ [++ __stackPointer__] = p;            
+
+                        if (key < p->pair.first) 
+                            p = p->leftSubtree;                                 // 1. case: continue searching in left subtree
+                        else if (p->pair.first < key) 
+                            p = p->rightSubtree;                                // 2. case: continue searching in reight subtree
+                        else {
+                            __lastVisitedPair__ = __stack__ [__stackPointer__]; // 3. case: found, return the reference ot the value,  remember the last visited pair
+                            return;
+                        }
                     }
-                    __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
+
+                    __stackPointer__ = -1;                                      // 4. case: not found
+                    __lastVisitedPair__ = NULL;
                 }
 
 
                 // * operator
-                Pair * operator * () const { return &(__lastVisitedPair__->pair); }              
+                Pair& operator *() { return (__lastVisitedPair__->pair); }
+
+                // -> operator
+                Pair * operator -> () { return &(__lastVisitedPair__->pair); }
 
                 // ++ (prefix) increment actually moves the state of the stack so that the last element points to the next balanced binary search tree node
-                Iterator& operator ++ () { 
+                iterator& operator ++ () { 
 
                     // the current node is pointed to by stack pointer, move to the next node
 
@@ -435,21 +426,73 @@
                                 p = p->leftSubtree;
                             }
                             __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
-                            return *this; 
+                            return *this;
                         }
                     }
                     // else proceed with climbing up the stack to the first pair that is greater than the current node
                     {
                         int8_t i = __stackPointer__;
-                        -- __stackPointer__;
-                        while (__stackPointer__ >= 0 && __stack__ [__stackPointer__]->pair.key < __stack__ [i]->pair.key) __stackPointer__ --;
-                        __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
+                        if (-- __stackPointer__ >= 0)
+                            while (__stackPointer__ >= 0 && __stack__ [__stackPointer__]->pair.first < __stack__ [i]->pair.first) 
+                                __stackPointer__ --;
+
+                        if (__stackPointer__ >= 0)
+                          __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
+                        else
+                            __lastVisitedPair__ = NULL;
+
                         return *this;
                     }
                 }  
 
+                // -- (prefix) increment actually moves the state of the stack so that the last element points to the previous balanced binary search tree node
+                iterator& operator -- () { 
+                    if (__lastVisitedPair__ == NULL) { // we came here with -- end (), so the stack is not constructed yet, start with the last (rightmost) element
+                        if (__mp__->size () == 0) return *this;
+        
+                        // find the highest pair in the balanced binary search tree (this would be the righttmost one) and fill the stack meanwhile
+                        Map::__balancedBinarySearchTreeNode__* p = __mp__->__root__;
+                        while (p) {
+                            __stack__ [++ __stackPointer__] = p;                      
+                            p = p->rightSubtree;
+                        }
+                        __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
+                        return *this;
+                    }
+
+                    // the current node is pointed to by stack pointer, move to the previous node
+
+                    // if the node has a left subtree find the rightmost element in the left subtree and fill the stack meanwhile
+                    if (__stack__ [__stackPointer__]->leftSubtree != NULL) {
+                        Map::__balancedBinarySearchTreeNode__* p = __stack__ [__stackPointer__]->leftSubtree;
+                        if (p && p != __stack__ [__stackPointer__ + 1]) { // if the left subtree has not ben visited yet, proceed with the left subtree
+                            while (p) {
+                                __stack__ [++ __stackPointer__] = p;
+                                p = p->rightSubtree;
+                            }
+                            __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
+                            return *this; 
+                        }
+                    }
+                    // else proceed with climbing up the stack to the first pair that is lesser than the current node
+                    {
+                        int8_t i = __stackPointer__;
+                        if (-- __stackPointer__ >= 0)
+                            while (__stackPointer__ >= 0 && __stack__ [__stackPointer__]->pair.first > __stack__ [i]->pair.first) 
+                                __stackPointer__ --;
+
+                        if (__stackPointer__ >= 0)
+                          __lastVisitedPair__ = __stack__ [__stackPointer__]; // remember the last visited pair
+                        else
+                            __lastVisitedPair__ = NULL;
+
+                        return *this;
+                    }
+                }
+
                 // C++ will stop iterating when != operator returns false, this is when all nodes have been visited and stack pointer is negative
-                friend bool operator != (const Iterator& a, const Iterator& b) { return a.__stackPointer__ >= 0; };     
+                friend bool operator != (const iterator& a, const iterator& b) { return a.__lastVisitedPair__ != b.__lastVisitedPair__; }
+                friend bool operator == (const iterator& a, const iterator& b) { return a.__lastVisitedPair__ == b.__lastVisitedPair__; }
 
                 // this will tell if iterator is valid (if there are not elements the iterator can not be valid)
                 operator bool () const { return __mp__->size () > 0; }
@@ -461,60 +504,38 @@
                 // a stack is needed to iterate through binary balanced search tree nodes
                 Map::__balancedBinarySearchTreeNode__ *__stack__ [__MAP_MAX_STACK_SIZE__] = {};
                 int8_t __stackPointer__ = -1;
-                Map::__balancedBinarySearchTreeNode__ *__lastVisitedPair__;
+                Map::__balancedBinarySearchTreeNode__ *__lastVisitedPair__ = NULL;
 
             };      
   
-            Iterator begin () { return Iterator (this, __height__); } // only the begin () instance is neede for iteration ...
-            Iterator end ()   { return Iterator ((int8_t) 0, (Map *) NULL); } // ... so construct the dummy end () instance without stack - this would prevent it moving __lastVisitedPair__ variable
+            iterator begin () { return iterator (this, true); }
+            iterator end ()   { return iterator (this, false); }
 
 
             /*
-              *  Finds min and max values in Map.
-              *
-              *  Example:
-              *  
-              *     Map<int, String> mp = { {4, "four"}, {3, "tree"}, {6, "six"}, {5, "five"} };
-              *     auto minElement = mp.min_element ();
-              *     if (minElement) // check if min element is found (if mp is not empty)
-              *         Serial.printf ("min element of mp = %s\n", (*minElement).value.c_str ());
-              */
+            *  Returns an iterator to the pair with the key, if key is found, end () if it is not. Example:
+            *  
+            *    auto it = mpB.find (1);
+            *    if (it != mpB.end ()) 
+            *        Serial.println (*it); 
+            *    else 
+            *        Serial.println ("not found");
+            */
+            
+            iterator find (keyType key) {
 
-            Iterator min_element () {
-                auto minIt = begin ();
+                if (is_same<keyType, String>::value)      // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
+                    if (!*(String *) &key) {              // ... check if parameter construction is valid
+                        // log_e ("BAD_ALLOC");
+                        #ifdef __USE_MAP_EXCEPTIONS__
+                            throw err_bad_alloc;
+                        #endif
+                        __errorFlags__ |= err_bad_alloc;  // report error if it is not
+                        return end ();
+                    }
 
-                for (auto it = begin (); it != end (); ++ it)
-                    if ((*it)->value < (*minIt)->value) 
-                        minIt = it;
-
-                return minIt;
+                return iterator (key, this);
             }
-
-            Iterator max_element () {
-                auto maxIt = begin ();
-
-                for (auto it = begin (); it != end (); ++ it) 
-                    if ((*it)->value > (*maxIt)->value) 
-                        maxIt = it;
-
-                return maxIt;
-            }
-
-
-            /*
-              *  Finds min and max keys in Map.
-              *
-              *  Example:
-              *  
-              *     Map<int, String> mp = { {4, "four"}, {3, "tree"}, {6, "six"}, {5, "five"} };
-              *     auto firstElement = mp.first_element ();
-              *     if (firstElement) // check if the first element is found (if mp is not empty)
-              *         Serial.printf ("first element of mp = %i\n", (*firstElement).key);
-              */
-
-            Iterator first_element () { return Iterator (this, __height__); } // call the 'begin' constructor
-
-            Iterator last_element () { return Iterator (__height__, this); } // call the 'end' constructor
 
 
         private:
@@ -571,11 +592,11 @@
 
                         // in case of Strings - it is possible that key and value didn't get constructed, so just swap stack memory with parameters - this always succeeds
                         if (is_same<keyType, String>::value)   // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                            if (!n->pair.key)                       // ... check if parameter construction is valid
-                                __swapStrings__ ((String *) &n->pair.key, (String *) &key); 
+                            if (!*(String *) &n->pair.first)                       // ... check if parameter construction is valid
+                                __swapStrings__ ((String *) &n->pair.first, (String *) &key); 
                         if (is_same<valueType, String>::value) // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                            if (!n->pair.value)                     // ... check if parameter construction is valid
-                                __swapStrings__ ((String *) &n->pair.value, (String *) &value);
+                            if (!*(String *) &n->pair.second)                     // ... check if parameter construction is valid
+                                __swapStrings__ ((String *) &n->pair.second, (String *) &value);
 
                     *p = n;
                     __size__ ++;
@@ -583,7 +604,7 @@
                 }
                 
                 // 2. case: add a new node to the left subtree of the current node
-                if (key < (*p)->pair.key) {
+                if (key < (*p)->pair.first) {
                     // log_i ("add a new node to the left subtree");
 
                     int h = __insert__ (&((*p)->leftSubtree), key, value, pInserted);
@@ -626,7 +647,7 @@
                 }             
     
                 // 3. case: the node with the same values already exists 
-                if (!((*p)->pair.key < key)) { // meaning at this point that key == (*p)->pair.key
+                if (!((*p)->pair.first < key)) { // meaning at this point that key == (*p)->pair.first
                     // log_e ("NOT_UNIQUE");
                     #ifdef __USE_MAP_EXCEPTIONS__
                         throw err_not_unique;
@@ -677,13 +698,6 @@
                 return max ((*p)->leftSubtreeHeight, (*p)->rightSubtreeHeight) + 1; // the new height of (sub)tree
             }
     
-            valueType *__find__ (__balancedBinarySearchTreeNode__ *p, keyType& key) {
-                if (p == NULL) return NULL;                                     // 1. case: not found
-                if (key < p->pair.key) return __find__ (p->leftSubtree, key);   // 2. case: continue searching in left subtree
-                if (p->pair.key < key) return __find__ (p->rightSubtree, key);  // 3. case: continue searching in reight subtree
-                return &(p->pair.value);                                        // 4. case: found
-            }
-    
             signed char __erase__ (__balancedBinarySearchTreeNode__ **p, keyType& key) { // returns the height of balanced binary search tree or error
                 // 1. case: a leaf has been reached - key was not found
                 if ((*p) == NULL) {
@@ -696,7 +710,7 @@
                 }
                         
                 // 2. case: delete the node from the left subtree
-                if (key < (*p)->pair.key) {
+                if (key < (*p)->pair.first) {
                     int h = __erase__ (&((*p)->leftSubtree), key);
                     if (h < 0) return h; // < 0 means an error                    
                     (*p)->leftSubtreeHeight = h;
@@ -721,7 +735,7 @@
                 }
     
                 // 3. case: found
-                if (!((*p)->pair.key < key)) { // meaning at this point that key == (*p)->pair.key
+                if (!((*p)->pair.first < key)) { // meaning at this point that key == (*p)->pair.first
                     // 3.a. case: delete a node with no children
                     if ((*p)->leftSubtree == NULL && (*p)->rightSubtree == NULL) {
                         // remove the node
@@ -754,7 +768,7 @@
                         __balancedBinarySearchTreeNode__ *q = (*p)->rightSubtree; while (q->leftSubtree) q = q->leftSubtree;
                         // remember inorder successor and then delete it from right subtree
                         __balancedBinarySearchTreeNode__ tmp = *q;
-                        (*p)->rightSubtreeHeight = __erase__ (&((*p)->rightSubtree), q->pair.key);
+                        (*p)->rightSubtreeHeight = __erase__ (&((*p)->rightSubtree), q->pair.first);
                         (*p)->pair = tmp.pair;
                         if ((*p)->leftSubtreeHeight - (*p)->rightSubtreeHeight > 1) {
                             /* the tree is unbalanced, left subtree is too high, perform right rotation
@@ -822,48 +836,11 @@
             // swap strings by swapping their stack memory so constructors doesn't get called and nothing can go wrong like running out of memory meanwhile 
             void __swapStrings__ (String *a, String *b) {
                 char tmp [sizeof (String)];
-                memcpy (&tmp, a, sizeof (String));
+                memcpy (tmp, a, sizeof (String));
                 memcpy (a, b, sizeof (String));
                 memcpy (b, tmp, sizeof (String));
             }
     
       };
-
-
-      /*
-      *  It would be more natural to use min_element and max_element member functions,
-      *  but let's try to make compatible with vectors.
-      *
-      *  Example:
-      *  
-      *     Map<int, String> mp = { {4, "four"}, {3, "tree"}, {6, "six"}, {5, "five"} };
-      *     auto minElement = min_element (mp);
-      *     if (minElement) // check if min element is found (if mp is not empty)
-      *         Serial.printf ("min element of mp = %s\n", (*minElement).value.c_str ());
-      */
-
-      #ifndef __MIN_MAX_ELEMENT__ 
-          #define __MIN_MAX_ELEMENT__
-
-          template <typename T>
-          typename T::Iterator min_element (T& obj) { return obj.min_element (); }
-
-          template <typename T>
-          typename T::Iterator max_element (T& obj) { return obj.max_element (); }
-
-      #endif
-
-
-      #ifndef __FIRST_LAST_ELEMENT__ 
-          #define __FIRST_LAST_ELEMENT__
-
-          template <typename T>
-          typename T::Iterator first_element (T& obj) { return obj.first_element (); }
-
-          template <typename T>
-          typename T::Iterator last_element (T& obj) { return obj.last_element (); }
-
-    #endif
-
 
 #endif
