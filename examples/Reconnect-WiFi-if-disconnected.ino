@@ -1,9 +1,8 @@
-
 #define DEFAULT_STA_SSID                "YOUR_STA_SSID"
 #define DEFAULT_STA_PASSWORD            "YOUR_STA_PASSWORD"
 
 #include <esp_wifi.h>
-#include "servers/ESP32_ping.hpp"
+#include "./servers/ESP32_ping.hpp"
 
 
 void setup () {
@@ -15,7 +14,6 @@ void setup () {
         delay (1000);
         Serial.printf ("   .\n");
     } 
-
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
 }
 
@@ -35,7 +33,7 @@ void loop () {
                 if (!WiFi.isConnected ()) { 
                     Serial.println ("STAtion disconnected, reconnecting to WiFi");
                     WiFi.reconnect (); 
-                } else { // check if it really works anyway 
+                } else { // check if it really works 
                     esp32_ping routerPing;
                     routerPing.ping (WiFi.gatewayIP ());
                     for (int i = 0; i < 4; i++) {
@@ -46,12 +44,12 @@ void loop () {
                     }
                     if (!routerPing.received ()) {
                         Serial.println ("ping of router failed, reconnecting WiFi STAtion");
-                        WiFi.reconnect (); 
+                        WiFi.reconnect ();
                     }
                 }
             }
         }
 
     }
-    
+
 }

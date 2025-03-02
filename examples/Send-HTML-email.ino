@@ -1,11 +1,10 @@
-
-// #include "servers/fileSystem.hpp"       // all file name and file info related functions are there, by default FILE_SYSTEM is #defined as FILE_SYSTEM_LITTLEFS, other options are: FILE_SYSTEM_FAT, FILE_SYSTEM_SD_CARD and (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
+// #include "./servers/fileSystem.hpp"  // all file name and file info related functions are there, by default FILE_SYSTEM is #defined as FILE_SYSTEM_LITTLEFS, other options are: FILE_SYSTEM_FAT, FILE_SYSTEM_SD_CARD and (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD)
 
 #define DEFAULT_STA_SSID                "YOUR_STA_SSID"
 #define DEFAULT_STA_PASSWORD            "YOUR_STA_PASSWORD"
-#include "servers/netwk.h"              // sendAll and recvAll functions are declared there, if #included after fileSystem.hpp these files will be created: /network/interfaces, /etc/wpa_supplicant/wpa_supplicant.conf, /etc/dhcpcd.conf, /etc/hostapd/hostapd.conf
+#include "./servers/netwk.h"            // if #included after fileSystem.hpp these files will be created: /network/interfaces, /etc/wpa_supplicant/wpa_supplicant.conf, /etc/dhcpcd.conf, /etc/hostapd/hostapd.conf
 
-#include "servers/smtpClient.h"         // if #included after fileSystem.hpp SMTP client can also use /etc/mail/sendmail.cf file with default parameters
+#include "./servers/smtpClient.h"       // if #included after fileSystem.hpp SMTP client can also use /etc/mail/sendmail.cf file with default parameters
 
 
 void setup () {
@@ -19,7 +18,6 @@ void setup () {
         delay (1000); 
         Serial.printf ("   .\n"); 
     } 
-
     Serial.printf ("Got IP: %s\n", (char *) WiFi.localIP ().toString ().c_str ());
 
 
