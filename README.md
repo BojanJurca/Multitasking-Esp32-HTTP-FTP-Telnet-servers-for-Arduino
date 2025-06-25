@@ -1,26 +1,37 @@
 # ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
 
-This template is a multitasking, dual stack (IPv4 and IPv6) ESP32 server (HTTP, Telnet, FTP) with built-in tools that are needed to manage, monitor and program the IoT server (like ping, ifconfig, crontab, dmesg, web-based oscilloscope, ...). It is just a template so you can modify it to your needs and delete everything you don't need if you want to preserve some memory, ...
 
-With this template you can quickly and easily build a nice web based or telnet command line user interface for your project or prototype without having to take care of all the switches, LED diodes, displays, etc.
+This template is a multitasking, dual-stack (IPv4 and IPv6) ESP32 server featuring HTTP, Telnet, and FTP protocols. It includes a suite of built-in tools essential for managing, monitoring, and programming the IoT server, such as ping, ifconfig, crontab, dmesg, a web-based oscilloscope, and more.
 
-   - You only have to modify the telnetCommandHandlerCallback function to build the Telnet user interface for your project.
+As a flexible starting point, the template can be easily customized to suit your project needs. Unused features can be removed to conserve memory and optimize performance.
 
-   - You only have to modify the httpRequestHandler function to build the web user interface for your project. If you want a nice stylish look and feel there is also a FTP server built into the template so you can upload larger HTML files.
+With this template, you can rapidly build a sleek web-based or Telnet command-line interface for your prototype or project—without the need for physical buttons, LEDs, or displays.
 
-   - You can monitor run-time debug messages (when Esp32 is not connected to serial monitor) by using dmesg telnet command.
+   - To create your own Telnet user interface, simply customize the telnetCommandHandlerCallback() function.
+
+   - To build a web interface, modify the httpRequestHandler() function. If you’re aiming for a more polished, stylish user experience, the integrated FTP server allows you to upload larger HTML files effortlessly.
+
+   - You can also monitor run-time debug messages (even when the ESP32 isn't connected to the serial monitor) using the dmesg command over Telnet.
 
 Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.si)
 
 
-
 ## The latest changes
+
+
+**May 22, 2025**: 
+   - support for .html.gz (compressed) files,
+   - OTA support,
+   - stability improvements for smaller ESP32 models, like ESP32-S2, ... 
+   - it is possible now (but not required) to run listeners and cronDaemon in setup-loop task to spare some memory if needed
+
 
 **February 6, 2025**: 
    - dual stack (IPv4 and IPv6),
+   - support for Linux Telnet and FTP clients,
    - mDNS service added (server can be accessed in local network by its hostname),
    - optimized memory usage,
-   - energy saving modes,
+   - power saving modes,
    - support for locale (locales themselves are not implemented (if needed you must do it on your own)),
    - discontinuation of some less used functionalities.
 Since a lot of the original code has been refactored some data types and functions have changed a bit. If your old code does not compile immediately with the new version of the library please take a look at the examples provided here.
@@ -44,7 +55,7 @@ HTTP server can handle HTTP requests in two different ways. As a programmed resp
 ## Fully multitasking Telnet server
 
 
-Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a very basic text-editor built in, mainly for editing small configuration files. Demo Telnet server is available at 193.77.159.208 (login as root with default password rootpassword).
+Telnet server can, similarly to HTTP server, handle commands in two different ways. As a programmed response to some commands or it can execute already built-in commands (like ls, ping, ...). There is also a basic text-editor built in, mainly for editing small configuration files.
 
 
 ## Fully multitasking FTP server
@@ -96,8 +107,8 @@ A simple key-value database is included for the purpose of managing (keeping) we
 
         // Lightweight STL memory settings
         // #define LIST_MEMORY_TYPE          PSRAM_MEM
-        // #define VECTOR_QUEUE_MEMORY_TYPE  PSRAM_MEM
-        // #define MAP_MEMORY_TYPE           PSRAM_MEM
+        // #define VECTOR_QUEUE_MEMORY_TYPE  PSRAM_MEM // please note that this also affect keyValueDatabase
+        // #define MAP_MEMORY_TYPE           PSRAM_MEM // please note that this also affect keyValueDatabase
         // bool psramInitialized = psramInit ();
 
         // locale settings for Cstrings
@@ -156,23 +167,37 @@ A simple key-value database is included for the purpose of managing (keeping) we
     // use mDNS so the servers can be accessed in local network by HOSTNAME, but uses some additional memory
     #define USE_mDNS // comment this line out to save some memory and code space
 
+    // use Over The Air updates
+    // #define USE_OTA // comment this line out if you don't need OTA and want to save some memory and code space - doesn't work together with WiFi power saving modes (you ca swithc WiFi power saving mode off before the upload, for example through a Telnet command)
+
+
     // define the name Esp32 will use as its host name, if USE_mDNS is #dfined this is also the name by wich you can address your ESP32 on your local network
     #define HOSTNAME                                   "MyESP32Server"      // <- replace with your information,  max 32 bytes (ESP_NETIF_HOSTNAME_MAX_SIZE) - if you are using mDNS make sure host name complies also with mDNS requirements
     // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
     #if CONFIG_IDF_TARGET_ESP32
         #define MACHINETYPE "ESP32"
+        // performs OK
     #elif CONFIG_IDF_TARGET_ESP32S2
         #define MACHINETYPE "ESP32-S2"
+        #define MODEST_ESP32_MODEL // care must be taken not to put too much burden on ESP32-S2 
     #elif CONFIG_IDF_TARGET_ESP32S3
         #define MACHINETYPE "ESP32-S3"
+        // performs OK
+    #elif CONFIG_IDF_TARGET_ESP32C2
+        #define MACHINETYPE "ESP32-C2"
+        // not supported by Arduino
     #elif CONFIG_IDF_TARGET_ESP32C3
         #define MACHINETYPE "ESP32-C3"
+        // performs OK
     #elif CONFIG_IDF_TARGET_ESP32C6
         #define MACHINETYPE "ESP32-C6"
+        // couldn't get useful network performance
     #elif CONFIG_IDF_TARGET_ESP32H2
         #define MACHINETYPE "ESP32-H2"
+        // ???
     #else
         #define MACHINETYPE "ESP32 (other)"
+        // ???
     #endif
 
 

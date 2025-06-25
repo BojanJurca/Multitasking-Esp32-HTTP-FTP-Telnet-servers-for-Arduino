@@ -64,23 +64,37 @@
     // use mDNS so the servers can be accessed in local network by HOSTNAME, but uses some additional memory
     #define USE_mDNS // comment this line out to save some memory and code space
 
+    // use Over The Air updates
+    // #define USE_OTA // comment this line out if you don't need OTA and want to save some memory and code space - doesn't work together with WiFi power saving modes (you ca swithc WiFi power saving mode off before the upload, for example through a Telnet command)
+
+
     // define the name Esp32 will use as its host name, if USE_mDNS is #dfined this is also the name by wich you can address your ESP32 on your local network
     #define HOSTNAME                                   "MyESP32Server"      // <- replace with your information,  max 32 bytes (ESP_NETIF_HOSTNAME_MAX_SIZE) - if you are using mDNS make sure host name complies also with mDNS requirements
     // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
     #if CONFIG_IDF_TARGET_ESP32
         #define MACHINETYPE "ESP32"
+        // performs OK
     #elif CONFIG_IDF_TARGET_ESP32S2
         #define MACHINETYPE "ESP32-S2"
+        #define MODEST_ESP32_MODEL // care must be taken not to put too much burden on ESP32-S2 
     #elif CONFIG_IDF_TARGET_ESP32S3
         #define MACHINETYPE "ESP32-S3"
+        // performs OK
+    #elif CONFIG_IDF_TARGET_ESP32C2
+        #define MACHINETYPE "ESP32-C2"
+        // not supported by Arduino
     #elif CONFIG_IDF_TARGET_ESP32C3
         #define MACHINETYPE "ESP32-C3"
+        // performs OK
     #elif CONFIG_IDF_TARGET_ESP32C6
         #define MACHINETYPE "ESP32-C6"
+        // couldn't get useful network performance
     #elif CONFIG_IDF_TARGET_ESP32H2
         #define MACHINETYPE "ESP32-H2"
+        // ???
     #else
         #define MACHINETYPE "ESP32 (other)"
+        // ???
     #endif
 
 

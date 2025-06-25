@@ -1,5 +1,5 @@
 /*
- 
+
     Esp32_web_ftp_telnet_server_template.ino
 
         Compile this code with Arduino for:
@@ -8,7 +8,7 @@
 
     This file is part of Esp32_web_ftp_telnet_server_template project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
      
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
 
     PLEASE NOTE THAT THIS FILE IS JUST A TEMPLATE. YOU CAN INCLUDE OR EXCLUDE FUNCTIONALITIES YOU NEED OR DON'T NEED IN Esp32_servers_config.h.
@@ -19,12 +19,18 @@
 
 
 #include <WiFi.h>
-#include "./servers/std/Cstring.hpp"
 #include "./servers/std/console.hpp"
-
 
 // --- PLEASE MODIFY THIS FILE FIRST! --- This is where you can configure your network credentials, which servers will be included, etc ...
 #include "Esp32_servers_config.h"
+
+#include "./servers/std/Cstring.hpp"
+
+#ifdef USE_OTA
+    #include <ESPmDNS.h>
+    #include <NetworkUdp.h>
+    #include <ArduinoOTA.h>
+#endif
 
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING DEFINITIONS -----
@@ -60,91 +66,85 @@ String httpRequestHandlerCallback (char *httpRequest, httpServer_t::httpConnecti
                     char niceRadio5 [3] = "fm";
 
                     // ----- handle HTTP protocol requests -----
-                        if (httpRequestStartsWith ("GET /example01.html "))           { // used by example 01: Dynamically generated HTML page
-                                                                                          return "<HTML>Example 01 - dynamic HTML page<br><br><hr />" + String (digitalRead (LED_BUILTIN) ? "Led is on." : "Led is off.") + "<hr /></HTML>";
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /example07.html "))          { // used by example 07
-                                                                                          cstring refreshCounter = httpConnection->getHttpRequestCookie ("refreshCounter");
-                                                                                          if (refreshCounter == "") refreshCounter = "0";
-                                                                                          refreshCounter = cstring (atoi (refreshCounter) + 1);
-                                                                                          httpConnection->setHttpReplyCookie ("refreshCounter", refreshCounter, time () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
-                                                                                          return "<HTML>Web cookies<br><br>This page has been refreshed " + String (refreshCounter) + " times. Click refresh to see more.</HTML>";
-                                                                                      }                                                                                  
-                    else if (httpRequestStartsWith ("GET /builtInLed "))              { // used by example 02, example 03, example 04, index.html: REST function for static HTML page
-                                                                                          getBuiltInLed:
-                                                                                              return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + String (digitalRead (LED_BUILTIN) ? "on" : "off") + "\"}\r\n";
-                                                                                      }                                                                    
-                    else if (httpRequestStartsWith ("PUT /builtInLed/on "))           { // used by example 03, example 04: REST function for static HTML page
-                                                                                          digitalWrite (LED_BUILTIN, HIGH);
-                                                                                          goto getBuiltInLed;
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /builtInLed/off "))          { // used by example 03, example 04, index.html: REST function for static HTML page
-                                                                                          digitalWrite (LED_BUILTIN, LOW);
-                                                                                          goto getBuiltInLed;
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /upTime "))                  { // used by index.html: REST function for static HTML page
-                                                                                          char httpResponseContentBuffer [100];
-                                                                                          time_t t = getUptime ();       // t holds seconds
-                                                                                          int seconds = t % 60; t /= 60; // t now holds minutes
-                                                                                          int minutes = t % 60; t /= 60; // t now holds hours
-                                                                                          int hours = t % 24;   t /= 24; // t now holds days
-                                                                                          char c [25]; *c = 0;
-                                                                                          if (t) sprintf (c, "%lu days, ", t);
-                                                                                          sprintf (c + strlen (c), "%02i:%02i:%02i", hours, minutes, seconds);
-                                                                                          sprintf (httpResponseContentBuffer, "{\"id\":\"%s\",\"upTime\":\"%s\"}", HOSTNAME, c);
-                                                                                          return httpResponseContentBuffer;
-                                                                                      }                                                                    
-                    else if (httpRequestStartsWith ("GET /freeHeapGraph "))           { // deprecated: REST function for static HTML page
-                                                                                          return freeHeap.toJson ();
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /freeBlockGraph "))          { // deprecated: REST function for static HTML page
-                                                                                          return freeBlock.toJson ();
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /httpRequestCountGraph "))   { // deprecated: REST function for static HTML page
-                                                                                          return httpRequestCount.toJson ();
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /allGraphs "))               { // used by index.html: REST function for static HTML page
-                                                                                          return "{\"httpRequestCount\": " + httpRequestCount.toJson () + " , \"freeHeap\": " + freeHeap.toJson () + " , \"freeBlock\": " + freeBlock.toJson () + "}";
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /niceSwitch1 "))             { // used by example 05.html: REST function for static HTML page
-                                                                                          returnNiceSwitch1State:
-                                                                                              return "{\"id\":\"niceSwitch1\",\"value\":\"" + String (niceSwitch1) + "\"}";
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /niceSwitch1/"))             { // used by example 05.html: REST function for static HTML page
-                                                                                          *(httpRequest + 21) = 0;
-                                                                                          strcpy (niceSwitch1, strstr (httpRequest + 17, "true") ? "true": "false");
-                                                                                          goto returnNiceSwitch1State; // return success (or possible failure) back to the client
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /niceButton2/pressed "))     { // used by example 05.html: REST function for static HTML page
-                                                                                          return "{\"id\":\"niceButton2\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /niceSlider3 "))             { // used by example 05.html: REST function for static HTML page
-                                                                                          returnNiceSlider3Value:
-                                                                                              return "{\"id\":\"niceSlider3\",\"value\":\"" + String (niceSlider3) + "\"}";
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /niceSlider3/"))             { // used by example 05.html: REST function for static HTML page
-                                                                                          niceSlider3 = atoi (httpRequest + 17);
-                                                                                          cout << "[Got request from web browser for niceSlider3]: " << niceSlider3 << endl;
-                                                                                          goto returnNiceSlider3Value; // return success (or possible failure) back to the client
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /niceButton4/pressed "))     { // used by example 05.html: REST function for static HTML page
-                                                                                          cout << "[Got request from web browser for niceButton4]: pressed\n";
-                                                                                          return "{\"id\":\"niceButton4\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
-                                                                                      }
-                    else if (httpRequestStartsWith ("GET /niceRadio5 "))              { // used by example 05.html: REST function for static HTML page
-                                                                                          returnNiceRadio5Value:
-                                                                                              return "{\"id\":\"niceRadio5\",\"modulation\":\"" + String (niceRadio5) + "\"}";
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /niceRadio5/"))              { // used by example 05.html: REST function for static HTML page
-                                                                                          httpRequest [18] = 0;
-                                                                                          cout << httpRequest + 16 << endl;
-                                                                                          strcpy (niceRadio5, strstr (httpRequest + 16, "am") ? "am" : "fm");
-                                                                                          goto returnNiceRadio5Value; // return success (or possible failure) back to the client
-                                                                                      }
-                    else if (httpRequestStartsWith ("PUT /niceButton6/pressed "))     { // used by example 05.html: REST function for static HTML page
-                                                                                          cout << "[Got request from web browser for niceButton6]: pressed\n";
-                                                                                          return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
-                                                                                      }
+                        if (httpRequestStartsWith ("GET /example01.html "))         { // used by example 01: Dynamically generated HTML page
+                                                                                        return "<HTML>Example 01 - dynamic HTML page<br><br><hr />" + String (digitalRead (LED_BUILTIN) ? "Led is on." : "Led is off.") + "<hr /></HTML>";
+                                                                                    }
+                    else if (httpRequestStartsWith ("GET /example07.html "))        { // used by example 07
+                                                                                        cstring refreshCounter = httpConnection->getHttpRequestCookie ("refreshCounter");
+                                                                                        if (refreshCounter == "") refreshCounter = "0";
+                                                                                        refreshCounter = cstring (atoi (refreshCounter) + 1);
+                                                                                        httpConnection->setHttpReplyCookie ("refreshCounter", refreshCounter, time () + 60);  // set 1 minute valid cookie that will be send to browser in HTTP reply
+                                                                                        return "<HTML>Web cookies<br><br>This page has been refreshed " + String (refreshCounter) + " times. Click refresh to see more.</HTML>";
+                                                                                    }                                                                                  
+                    else if (httpRequestStartsWith ("GET /builtInLed "))            { // used by example 02, example 03, example 04, index.html: REST function for static HTML page
+                                                                                        getBuiltInLed:
+                                                                                            return "{\"id\":\"" + String (HOSTNAME) + "\",\"builtInLed\":\"" + String (digitalRead (LED_BUILTIN) ? "on" : "off") + "\"}\r\n";
+                                                                                    }                                                                    
+                    else if (httpRequestStartsWith ("PUT /builtInLed/on "))         { // used by example 03, example 04: REST function for static HTML page
+                                                                                        digitalWrite (LED_BUILTIN, HIGH);
+                                                                                        goto getBuiltInLed;
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /builtInLed/off "))        { // used by example 03, example 04, index.html: REST function for static HTML page
+                                                                                        digitalWrite (LED_BUILTIN, LOW);
+                                                                                        goto getBuiltInLed;
+                                                                                    }
+                    else if (httpRequestStartsWith ("GET /state "))                 { // used by index.html: REST function for static HTML page
+                                                                                        time_t t = getUptime ();       // t holds seconds
+                                                                                        int seconds = t % 60; t /= 60; // t now holds minutes
+                                                                                        int minutes = t % 60; t /= 60; // t now holds hours
+                                                                                        int hours = t % 24;   t /= 24; // t now holds days
+                                                                                        char upTime [25]; 
+                                                                                        *upTime = 0;
+                                                                                        if (t) 
+                                                                                        sprintf (upTime, "%lu days, ", t);
+                                                                                        sprintf (upTime + strlen (upTime), "%02i:%02i:%02i", hours, minutes, seconds);
+
+                                                                                        return  "{\"id\":\"" HOSTNAME "\","
+                                                                                                "\"upTime\":\"" + String (upTime) + "\","
+                                                                                                "\"httpRequestCount\": " + httpRequestCount.toJson () + ","
+                                                                                                "\"freeHeap\": " + freeHeap.toJson () + ","
+                                                                                                "\"freeBlock\": " + freeBlock.toJson () + ""
+                                                                                                "}";
+                                                                                    }
+                    else if (httpRequestStartsWith ("GET /niceSwitch1 "))           { // used by example 05.html: REST function for static HTML page
+                                                                                        returnNiceSwitch1State:
+                                                                                            return "{\"id\":\"niceSwitch1\",\"value\":\"" + String (niceSwitch1) + "\"}";
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /niceSwitch1/"))           { // used by example 05.html: REST function for static HTML page
+                                                                                        *(httpRequest + 21) = 0;
+                                                                                        strcpy (niceSwitch1, strstr (httpRequest + 17, "true") ? "true": "false");
+                                                                                        goto returnNiceSwitch1State; // return success (or possible failure) back to the client
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /niceButton2/pressed "))   { // used by example 05.html: REST function for static HTML page
+                                                                                        return "{\"id\":\"niceButton2\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                                    }
+                    else if (httpRequestStartsWith ("GET /niceSlider3 "))           { // used by example 05.html: REST function for static HTML page
+                                                                                        returnNiceSlider3Value:
+                                                                                            return "{\"id\":\"niceSlider3\",\"value\":\"" + String (niceSlider3) + "\"}";
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /niceSlider3/"))           { // used by example 05.html: REST function for static HTML page
+                                                                                        niceSlider3 = atoi (httpRequest + 17);
+                                                                                        cout << "[Got request from web browser for niceSlider3]: " << niceSlider3 << endl;
+                                                                                        goto returnNiceSlider3Value; // return success (or possible failure) back to the client
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /niceButton4/pressed "))   { // used by example 05.html: REST function for static HTML page
+                                                                                        cout << "[Got request from web browser for niceButton4]: pressed\n";
+                                                                                        return "{\"id\":\"niceButton4\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                                    }
+                    else if (httpRequestStartsWith ("GET /niceRadio5 "))            { // used by example 05.html: REST function for static HTML page
+                                                                                        returnNiceRadio5Value:
+                                                                                            return "{\"id\":\"niceRadio5\",\"modulation\":\"" + String (niceRadio5) + "\"}";
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /niceRadio5/"))            { // used by example 05.html: REST function for static HTML page
+                                                                                        httpRequest [18] = 0;
+                                                                                        cout << httpRequest + 16 << endl;
+                                                                                        strcpy (niceRadio5, strstr (httpRequest + 16, "am") ? "am" : "fm");
+                                                                                        goto returnNiceRadio5Value; // return success (or possible failure) back to the client
+                                                                                    }
+                    else if (httpRequestStartsWith ("PUT /niceButton6/pressed "))   { // used by example 05.html: REST function for static HTML page
+                                                                                        cout << "[Got request from web browser for niceButton6]: pressed\n";
+                                                                                        return "{\"id\":\"niceButton6\",\"value\":\"pressed\"}"; // the client will actually not use this return value at all but we must return something
+                                                                                    }
 
                     // ----- USED FOR DEMONSTRATION OF WEB SESSION HANDLING, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
                     #ifdef USE_WEB_SESSIONS
@@ -335,6 +335,20 @@ String telnetCommandHandlerCallback (int argc, char *argv [], telnetServer_t::te
                         }
                     #endif
 
+                    // used to turn power saving mode off before OTA upgrade
+                    else if (argv0is ("power") && argv1is ("saving"))                   { 
+                                                                                            esp_wifi_set_ps (POVER_SAVING_MODE);
+                                                                                            if (POVER_SAVING_MODE == WIFI_PS_NONE)
+                                                                                                return "WiFi is set to no power saving mode";
+                                                                                            else
+                                                                                                return "WiFi is set to power saving mode";
+                                                                                        }
+                    else if (argv0is ("no") && argv1is ("power") && argv2is ("saving")) { 
+                                                                                            esp_wifi_set_ps (WIFI_PS_NONE);
+                                                                                            return "WiFi is set to no power saving mode";
+                                                                                        }
+
+
     return ""; // telnetCommand has not been handled by telnetCommandHandler - tell telnetServer to handle it internally by returning "" reply
 }
 
@@ -441,7 +455,22 @@ void setup () {
     // fileSystem.deleteFile ("/usr/share/zoneinfo");                         // contains timezone information           - deleting this file would cause creating default one
     // fileSystem.deleteFile ("/etc/ntp.conf");                               // contains ntp server names for time sync - deleting this file would cause creating default one
     // fileSystem.deleteFile ("/etc/crontab");                                // scontains cheduled tasks                - deleting this file would cause creating empty one
-    startCronDaemon (cronHandlerCallback);
+
+                    // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
+                    cronTab.insert ("* * * * * * gotTime");  // triggers only once - when ESP32 reads time from NTP servers for the first time
+                    cronTab.insert ("0 0 0 1 1 * newYear'sGreetingsToProgrammer");  // triggers at the beginning of each year
+                    cronTab.insert ("0 * * * * * onMinute");                        // triggers each minute at 0 seconds
+                    cronTab.insert ("0 0 * * * * onHour");                          // triggers each hour at 0:0
+                    //               | | | | | | |
+                    //               | | | | | | |___ cron command, this information will be passed to cronHandlerCallback when the time comes
+                    //               | | | | | |___ day of week (0 - 7 or *; Sunday=0 and also 7)
+                    //               | | | | |___ month (1 - 12 or *)
+                    //               | | | |___ day (1 - 31 or *)
+                    //               | | |___ hour (0 - 23 or *)
+                    //               | |___ minute (0 - 59 or *)
+                    //               |___ second (0 - 59 or *)
+
+    cronDaemon.start (cronHandlerCallback);
 
 
     // 4. Write the default user management files /etc/passwd and /etc/passwd it they don't exist yet (it only makes sense with UNIX_LIKE_USER_MANAGEMENT).
@@ -463,7 +492,7 @@ void setup () {
             #ifdef __DMESG__
                 dmesgQueue << "[httpServer] did not start";
             #endif
-            cout << "[httpServer] did not start\n";          
+            cout << "[httpServer] did not start" << endl;          
         }
     #endif
     #ifdef __FTP_SERVER__                                       // all the arguments are optional
@@ -476,7 +505,7 @@ void setup () {
             #ifdef __DMESG__
                 dmesgQueue << "[ftpServer] did not start";
             #endif
-            cout << "[ftpServer] did not start\n";                    
+            cout << "[ftpServer] did not start" << endl;                    
         }
     #endif
     #ifdef __TELNET_SERVER__                                             // all the arguments are optional
@@ -490,30 +519,60 @@ void setup () {
             #ifdef __DMESG__
                 dmesgQueue << "[telnetServer] did not start";
             #endif
-            cout << "[telnetServer] did not start\n";
+            cout << "[telnetServer] did not start" << endl;
         }
     #endif
 
 
                     // ----- USED FOR DEMONSTRATION ONLY, YOU MAY FREELY DELETE THE FOLLOWING CODE -----
-                    cronTabAdd ("* * * * * * gotTime");  // triggers only once - when ESP32 reads time from NTP servers for the first time
-                    cronTabAdd ("0 0 0 1 1 * newYear'sGreetingsToProgrammer");  // triggers at the beginning of each year
-                    cronTabAdd ("0 * * * * * onMinute");                        // triggers each minute at 0 seconds
-                    cronTabAdd ("0 0 * * * * onHour");                          // triggers each hour at 0:0
-                    //           | | | | | | |
-                    //           | | | | | | |___ cron command, this information will be passed to cronHandlerCallback when the time comes
-                    //           | | | | | |___ day of week (0 - 7 or *; Sunday=0 and also 7)
-                    //           | | | | |___ month (1 - 12 or *)
-                    //           | | | |___ day (1 - 31 or *)
-                    //           | | |___ hour (0 - 23 or *)
-                    //           | |___ minute (0 - 59 or *)
-                    //           |___ second (0 - 59 or *)
-
                     pinMode (LED_BUILTIN, OUTPUT | INPUT);
                     digitalWrite (LED_BUILTIN, LOW);
 
+
+    #ifdef USE_OTA
+        ArduinoOTA
+            .onStart ([] () {
+                String type;
+                if (ArduinoOTA.getCommand () == U_FLASH) {
+                    type = "sketch";
+                } else {  // U_SPIFFS
+                    type = "filesystem";
+                }
+
+                // NOTE: if updating SPIFFS this would be the place to unmount SPIFFS using SPIFFS.end()
+                Serial.println ("Start updating " + type);
+            })
+            .onEnd ([] () {
+                Serial.println ("\nEnd");
+            })
+            .onProgress ([] (unsigned int progress, unsigned int total) {
+                Serial.printf ("Progress: %u%%\r", (progress / (total / 100)));
+            })
+            .onError ([] (ota_error_t error) {
+                Serial.printf ("Error[%u]: ", error);
+                if (error == OTA_AUTH_ERROR) {
+                    Serial.println ("Auth Failed");
+                } else if (error == OTA_BEGIN_ERROR) {
+                    Serial.println ("Begin Failed");
+                } else if (error == OTA_CONNECT_ERROR) {
+                    Serial.println ("Connect Failed");
+                } else if (error == OTA_RECEIVE_ERROR) {
+                    Serial.println ("Receive Failed");
+                } else if (error == OTA_END_ERROR) {
+                    Serial.println ("End Failed");
+                }
+            });
+
+        ArduinoOTA.begin ();
+
+        Serial.println ("Ready");
+        Serial.print ("IP address: ");
+        Serial.println (WiFi.localIP ());
+    #endif
 }
 
 void loop () {
-
+    #ifdef USE_OTA
+        ArduinoOTA.handle ();
+    #endif
 }
