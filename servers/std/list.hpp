@@ -6,7 +6,7 @@
  *  In order to save as much memory as possible, list is implemented with minimal functionality. The elements are single - linked, so same
  *  functions, like pop_back for example can not be efficiently implemented.
  * 
- *  November 26, 2024, Bojan Jurca, with great help of Microsoft Copilot regarding templates 
+ *  May 22, 2025, Bojan Jurca, with great help of Microsoft Copilot regarding templates 
  * 
  */
 
@@ -74,12 +74,31 @@
                     *     list<int> E ( { 500, 600 } );
                     */
             
-                    list (std::initializer_list<listType> il) {
+                    list (const std::initializer_list<listType>& il) {
                         for (auto element: il)
                             if (push_back (element)) // error
                                 break;
                     }
             #endif
+            // #else
+                // constructor accepting the array by reference, since AVR boards do not support initializer lists (thanks for this solution to Microsot Copilot)
+                template <int N>
+                list (const listType (&array) [N]) {
+                    for (int i = 0; i < N; ++i)
+                        if (push_back (array [i])) // error
+                            break;
+                }
+
+                /*
+                // list (const list& l) {} // not used, but generates compile-time error if not declared                    
+
+                // helper function for easier initialization (AVR boards)
+                template <int N>
+                list<listType> initializer_list (const listType (&array) [N]) {
+                    return list<listType> (array);
+                } 
+                */               
+            // #endif
       
                   
            /*
@@ -109,12 +128,13 @@
             * Clears all the elements from the list.
             */
 
-            void clear () {            
+
+            void clear () { 
                 node_t *p = __front__;
                 while (p) {
                     node_t *q = p->next;
 
-                    #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno                          
+                    #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                         p->~node_t ();
                     #endif
                     free (p);
@@ -122,6 +142,8 @@
                     p = q;
                 }
                 __front__ = NULL;
+                __size__ = 0;
+                clearErrorFlags ();
             } 
 
 
@@ -152,7 +174,7 @@
             *  Without properly handling it, = operator would probably just copy one instance over another which would result in crash when instances will be distroyed.
             */
       
-            list* operator = (list other) {
+            list* operator = (const list& other) {
                 this->clear (); // clear existing elements if needed
 
                 // copy other's elements
@@ -172,7 +194,7 @@
             *    - could not allocate enough memory for requested storage
             */
     
-            signed char push_back (listType element) {
+            signed char push_back (const listType& element) {
                 // allocate new memory for element
                 #if LIST_MEMORY_TYPE == PSRAM_MEM
                     node_t *newNode = (node_t *) ps_malloc (sizeof (node_t));
@@ -187,11 +209,9 @@
                     return err_bad_alloc;
                 }
 
+                memset (newNode, 0, sizeof (node_t));
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     new (newNode) node_t; 
-                #else                 
-                    // we can skip this step but won't be able to use objects as list elements then
-                    memset (newNode, 0, sizeof (node_t));
                 #endif
 
                 // add the new element to the end
@@ -217,7 +237,7 @@
             *    - could not allocate enough memory for requested storage
             */
               
-            signed char push_front (listType element) {
+            signed char push_front (const listType& element) {
                 // allocate new memory for element
                 #if LIST_MEMORY_TYPE == PSRAM_MEM
                     node_t *newNode = (node_t *) ps_malloc (sizeof (node_t));
@@ -232,11 +252,9 @@
                     return err_bad_alloc;
                 }
 
+                memset (newNode, 0, sizeof (node_t));
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     new (newNode) node_t; 
-                #else                 
-                    // we can skip this step but won't be able to use objects as list elements then
-                    memset (newNode, 0, sizeof (node_t));
                 #endif
 
                 // add the new element to the beginning
@@ -355,9 +373,8 @@
 
             };
 
-            iterator begin () { return iterator (__front__); }  // first element
-            iterator end () { return iterator (NULL); }         // past the last element
-
+            iterator begin () { return iterator (__front__); }              // first element
+            iterator end () { return iterator (NULL); }                     // past the last element
 
 
            /*
@@ -393,6 +410,15 @@
                 other.__size__ ++;
             }
             */
+
+            // print list to ostream
+            friend ostream& operator << (ostream& os, list& l) {
+                os << "FRONT→";
+                for (auto e : l)
+                    os << e << "→";
+                os << "NULL";
+                return os;
+            }
 
 
       private:
@@ -483,6 +509,33 @@
                         }
                     }
             #endif
+            // #else
+                // constructor accepting the array by reference, since AVR boards do not support initializer lists (thanks for this solution to Microsot Copilot)
+                template <int N>
+                list (const String (&array) [N]) {
+                    for (int i = 0; i < N; ++i) {
+                        if (!array [i]) {                             // ... check if parameter construction is valid
+                            #ifdef __THROW_LIST_EXCEPTIONS__
+                                throw err_bad_alloc;
+                            #endif
+                            __errorFlags__ |= err_bad_alloc;
+                        }
+
+                        if (push_back (array [i])) // error
+                            break;
+                    }
+                }
+
+                /*
+                // list (const list& l) {} 
+
+                // helper function for easier initialization (AVR boards)
+                template <int N>
+                list<String> initializer_list (const String (&array) [N]) {
+                    return list<String> (array);
+                } 
+                */                        
+            // #endif
       
                   
            /*
@@ -517,14 +570,20 @@
                 while (p) {
                     node_t *q = p->next;
 
+                    /*
                     #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                         p->~node_t ();
                     #endif
                     free (p);
+                    */
+                    delete p; // internally calls destructor and free
 
                     p = q;
                 }
                 __front__ = NULL;
+
+                __size__ = 0;
+                clearErrorFlags ();
             } 
 
 
@@ -614,11 +673,9 @@
                     return err_bad_alloc;
                 }
 
+                memset (newNode, 0, sizeof (node_t));
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     new (newNode) node_t; 
-                #else                 
-                    // we can skip this step but won't be able to use objects as list elements then
-                    memset (newNode, 0, sizeof (node_t));
                 #endif
 
                 // add the new element to the end
@@ -667,11 +724,9 @@
                     return err_bad_alloc;
                 }
 
+                memset (newNode, 0, sizeof (node_t));
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     new (newNode) node_t; 
-                #else                 
-                    // we can skip this step but won't be able to use objects as list elements then
-                    memset (newNode, 0, sizeof (node_t));
                 #endif
 
                 // add the new element to the beginning
@@ -705,10 +760,14 @@
                 __size__ --;
         
                 // free the space occupied by the deleted element
+                /*
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     tmp->~node_t ();
                 #endif
                 free (tmp);
+                */
+                delete tmp; // internally calls destructor and free
+
                 return err_ok;
             }
 
@@ -787,9 +846,8 @@
 
             };
 
-            iterator begin () { return iterator (__front__); }          // first element
-            iterator end () { return iterator (NULL); }                 // past the last element
-
+            iterator begin () { return iterator (__front__); }              // first element
+            iterator end () { return iterator (NULL); }                     // past the last element
 
 
            /*
@@ -826,6 +884,15 @@
             }
             */
 
+            // print list to ostream
+            friend ostream& operator << (ostream& os, list& l) {
+                os << "FRONT→";
+                for (auto e : l)
+                    os << e << "→";
+                os << "NULL";
+                return os;
+            }
+
       private:
 
             node_t *__front__ = NULL;         // points to the first list node, initially the list has no elements
@@ -841,5 +908,16 @@
             }
 
     };
+
+
+    /*
+    #ifdef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
+        // Helper function to create aray from an initializer list
+        template<typename T, size_t N>
+        list<T> initializer_list (const T (&arr) [N]) {
+            return list<T> (arr);
+        }
+    #endif
+    */
 
 #endif

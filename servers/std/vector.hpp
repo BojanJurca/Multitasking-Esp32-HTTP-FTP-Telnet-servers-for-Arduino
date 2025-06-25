@@ -21,7 +21,7 @@
  *                              | __front__           __back__          |
  *                              |<-------------- __capacity__ --------->|  
  *
- *  October 10, 2024, Bojan Jurca
+ *  May 22, 2025, Bojan Jurca
  * 
  */
 
@@ -70,9 +70,22 @@
             */
             
             vector () {}
+            /*
+            vector (const vector& other) {
+                signed char e = this->reserve (other.size ()); // prevent resizing __elements__ for each element beeing pushed back
+                if (e) { // != OK
+                    #ifdef __THROW_VECTOR_QUEUE_EXCEPTIONS__
+                        throw e;
+                    #endif                      
+                    return; 
+                }
 
-            // vector (int increment = 1) { __increment__ = increment < 1 ? 1 : increment; }
-
+                // copy other's elements - storage will not get resized meanwhile
+                for (auto element: other)
+                    if (this->push_back (element)) // error
+                        break;
+            }
+            */
 
             #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                    /*
@@ -82,7 +95,7 @@
                     *     vector<int> E ( { 500, 600 } );
                     */
             
-                    vector (std::initializer_list<vectorType> il) {
+                    vector (const std::initializer_list<vectorType>& il) {
                         if (reserve (il.size ())) { // != OK
                             return;
                         }
@@ -92,6 +105,35 @@
                                 break;
                     }
             #endif
+            // #else
+                   /*
+                    *  Constructor of vector from array (for AVR) boards allows the following kinds of creation of vectors:
+                    *  
+                    *     vector<int> E ( { 500, 600 } );
+                    */
+
+                    template <int N>
+                    vector (const vectorType (&array) [N]) {
+                        signed char e = reserve (N); // prevent resizing __elements__ for each element beeing pushed back
+                        if (e) { // != OK
+                            #ifdef __THROW_VECTOR_QUEUE_EXCEPTIONS__
+                                throw e;
+                            #endif                      
+                        }
+
+                        for (int i = 0; i < N; ++i)
+                            if (push_back (array [i])) // error
+                                break;
+                    }
+
+                /*
+                // helper function for easier initialization (AVR boards)
+                template <int N>
+                vector<vectorType> initializer_list (const vectorType (&array) [N]) {
+                    return vector<vectorType> (array);
+                }
+                */
+            // #endif
 
 
            /*
@@ -103,6 +145,8 @@
                     #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                         for (int i = 0; i < __capacity__; i++)
                             __elements__ [i].~vectorType ();
+                    #else
+                        // objects not supported for AVR boards 
                     #endif
                     free (__elements__);
                 }
@@ -166,6 +210,8 @@
                 __reservation__ = 0; // also clear the reservation if it was made
                 if (__elements__ != NULL) 
                     __changeCapacity__ (0); 
+
+                clearErrorFlags ();
             } // there is no reason why __changeCapacity__ would fail here
 
 
@@ -217,14 +263,14 @@
             *  
             *  Calling program should check errorFlags () after constructor is beeing called for possible errors
             */
-      
+
             vector (vector& other) {
-                signed char e = this->reserve (other.size ());
+                signed char e = this->reserve (other.size ()); // prevent resizing __elements__ for each element beeing pushed back
                 if (e) { // != OK
                     #ifdef __THROW_VECTOR_QUEUE_EXCEPTIONS__
                         throw e;
                     #endif                      
-                    return; // prevent resizing __elements__ for each element beeing pushed back
+                    return; 
                 }
 
                 // copy other's elements - storage will not get resized meanwhile
@@ -243,7 +289,7 @@
             *  Without properly handling it, = operator would probably just copy one instance over another which would result in crash when instances will be distroyed.
             */
       
-            vector* operator = (vector other) {
+            vector* operator = (vector& other) {
                 this->clear (); // clear existing elements if needed
                 signed char e = this->reserve (other.size ());
                 if (e) { // != OK
@@ -266,7 +312,7 @@
             *  Serial.println (F == E ? "vectors are equal" : "vectors are different");
             */
       
-            bool operator == (vector& other) {
+            bool operator == (const vector& other) {
                 if (this->__size__ != other.size ()) return false;
                 int e = this->__front__;
                 for (int i = 0; i < this->__size__; i++) {
@@ -287,7 +333,7 @@
             *    - could not allocate enough memory for requested storage
             */
     
-            signed char push_back (vectorType element) {
+            signed char push_back (const vectorType& element) {
                 // do we have to resize __elements__ first?
                 if (__size__ == __capacity__) {
                     signed char e = __changeCapacity__ (__capacity__ + __increment__);
@@ -310,7 +356,7 @@
             * push_front (unlike push_back) is not a STL C++ vector member function
             */
               
-            signed char push_front (vectorType element) {
+            signed char push_front (const vectorType& element) {
                 // do we have to resize __elements__ first?
                 if (__size__ == __capacity__) {
                     signed char e = __changeCapacity__ (__capacity__ + __increment__);
@@ -465,8 +511,8 @@
 
             };
 
-            iterator begin () { return iterator (this, 0); }            // first element
-            iterator end () { return iterator (this, this->size ()); }  // past the last element
+            iterator begin () { return iterator (this, 0); }                        // first element
+            iterator end () { return iterator (this, this->size ()); }              // past the last element
 
 
            /*
@@ -536,7 +582,7 @@
             *    - could not allocate enough memory for requested storage
             */
 
-            signed char insert (iterator position, vectorType element) {
+            signed char insert (iterator position, const vectorType& element) {
                 if (position == end ())
                     return push_back (element);
 
@@ -586,6 +632,20 @@
                 }
             }
 
+            // print vector to ostream
+            friend ostream& operator << (ostream& os, vector& v) {
+                bool first = true;
+                os << "[";
+                for (auto e : v) {
+                    if (!first)
+                        os << ",";
+                    first = false;
+                    os << e;
+                }
+                os << "]";
+                return os;
+            }
+
 
       private:
 
@@ -612,6 +672,8 @@
                         #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                             for (int i = 0; i < __capacity__; i++)
                                 __elements__ [i].~vectorType ();
+                        #else
+                            // objects not supported for AVR boards
                         #endif
                         free (__elements__);
                     }
@@ -639,11 +701,9 @@
                     return err_bad_alloc;
                 }
 
+                memset (newElements, 0, sizeof (vectorType) * newCapacity);
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     new (newElements) vectorType [newCapacity]; 
-                #else                 
-                    // we can skip this step but won't be able to use objects as vector elements then
-                    memset (newElements, 0, sizeof (vectorType) * newCapacity);
                 #endif
 
                 // copy existing elements to the new buffer
@@ -668,6 +728,8 @@
                     #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                         for (int i = 0; i < __capacity__; i++)
                             __elements__ [i].~vectorType ();
+                    #else
+                        // objects not supported for AVR boards
                     #endif
                     free (__elements__);
                 }
@@ -729,18 +791,15 @@
             
             vector () {}
 
-            // vector (int increment = 1) { __increment__ = increment < 1 ? 1 : increment; }
-
-
             #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
-                /*
+                   /*
                     *  Constructor of vector from brace enclosed initializer list allows the following kinds of creation of vectors: 
                     *  
                     *     vector<String> D = { "200", "300", "400" };
                     *     vector<String> E ( { "500", "600" } );
                     */
             
-                    vector (std::initializer_list<String> il) {
+                    vector (const std::initializer_list<String>& il) {
                         if (reserve (il.size ())) { // != OK
                             return;
                         }
@@ -758,6 +817,43 @@
                         }
                     }
             #endif
+            // #else
+                   /*
+                    *  Constructor of vector from array (for AVR) boards allows the following kinds of creation of vectors:
+                    *  
+                    *     vector<int> E ( { "500", "600" } );
+                    */
+                    
+                    template <int N>
+                    vector (const String (&array) [N]) {
+                        signed char e = reserve (N); // prevent resizing __elements__ for each element beeing pushed back
+                        if (e) { // != OK
+                            #ifdef __THROW_VECTOR_QUEUE_EXCEPTIONS__
+                                throw e;
+                            #endif                      
+                        }
+
+                        for (int i = 0; i < N; ++i) {
+                            if (!array [i]) {                             // ... check if parameter construction is valid
+                                #ifdef __THROW_LIST_EXCEPTIONS__
+                                    throw err_bad_alloc;
+                                #endif
+                                __errorFlags__ |= err_bad_alloc;
+                            }
+
+                            if (push_back (array [i])) // error
+                                break;
+                        }
+                    }
+
+                /*
+                // helper function for easier initialization (AVR boards)
+                template <int N>
+                vector<String> initializer_list (const String (&array) [N]) {
+                    return vector<String> (array);
+                } 
+                */               
+            // #endif
 
 
            /*
@@ -766,10 +862,8 @@
             
             ~vector () {
                 if (__elements__ != NULL) {
-                    #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
-                        for (int i = 0; i < __capacity__; i++)
-                            __elements__ [i].~String ();
-                    #endif
+                    for (int i = 0; i < __capacity__; i++)
+                        __elements__ [i].~String ();
                     free (__elements__);
                 }
             }
@@ -831,6 +925,8 @@
             void clear () { 
                 __reservation__ = 0; // also clear the reservation if it was made
                 if (__elements__ != NULL) __changeCapacity__ (0); 
+
+                clearErrorFlags ();
             } // there is no reason why __changeCapacity__ would fail here
 
 
@@ -884,26 +980,7 @@
             */
       
             vector (vector& other) {
-                signed char e = this->reserve (other.size ());
-                if (e) { // != OK
-                    #ifdef __THROW_VECTOR_QUEUE_EXCEPTIONS__
-                        throw e;
-                    #endif                      
-                    return; // prevent resizing __elements__ for each element beeing pushed back
-                }
-
-                // copy other's elements - storage will not get resized meanwhile
-                for (String element: other) {
-                    if (!element) {                             // ... check if parameter construction is valid
-                        #ifdef __THROW_LIST_EXCEPTIONS__
-                            throw err_bad_alloc;
-                        #endif
-                        __errorFlags__ |= err_bad_alloc;       // report error if it is not
-                        break;
-                    }
-                    if (this->push_back (element)) // error
-                        break;
-                }
+                operator = (other);
             }
 
 
@@ -916,7 +993,7 @@
             *  Without properly handling it, = operator would probably just copy one instance over another which would result in crash when instances will be destroyed.
             */
       
-            vector* operator = (vector other) {
+            vector* operator = (vector& other) {
                 this->clear (); // clear existing elements if needed
                 signed char e = this->reserve (other.size ());
                 if (e) { // != OK
@@ -1161,8 +1238,8 @@
                     
             };      
       
-            iterator begin () { return iterator (this, 0); }  
-            iterator end () { return iterator (this, this->size ()); }
+            iterator begin () { return iterator (this, 0); }                        // first element
+            iterator end () { return iterator (this, this->size ()); }              // past the last element
 
 
            /*
@@ -1290,6 +1367,20 @@
                 }
             }
 
+            // print vector to ostream
+            friend ostream& operator << (ostream& os, vector& v) {
+                bool first = true;
+                os << "[";
+                for (auto e : v) {
+                    if (!first)
+                        os << ",";
+                    first = false;
+                    os << e;
+                }
+                os << "]";
+                return os;
+            }
+
 
       private:
 
@@ -1313,10 +1404,8 @@
                 if (newCapacity == 0) {
                     // delete old buffer
                     if (__elements__ != NULL) {
-                        #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
-                            for (int i = 0; i < __capacity__; i++)
-                                __elements__ [i].~String ();
-                        #endif
+                        for (int i = 0; i < __capacity__; i++)
+                            __elements__ [i].~String ();
                         free (__elements__);
                     }
 
@@ -1342,11 +1431,10 @@
                     return err_bad_alloc;
                 }
 
+                memset (newElements, 0, sizeof (String) * newCapacity);
                 #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
                     new (newElements) String [newCapacity];
                 #else
-                    // if this is not supported by older boards, we can use the following instead:
-                    memset (newElements, 0, sizeof (String) * newCapacity); // prevent caling String destructors at the following assignments
                     for (int i = 0; i < newCapacity; i++) newElements [i] = String (); // assign empty String
                 #endif
 
@@ -1371,10 +1459,8 @@
                 
                 // delete the old elements' buffer   
                 if (__elements__ != NULL) {
-                    #ifndef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
-                        for (int i = 0; i < __capacity__; i++)
-                            __elements__ [i].~String ();
-                    #endif
+                    for (int i = 0; i < __capacity__; i++)
+                        __elements__ [i].~String ();
                     free (__elements__);
                 }
 
@@ -1395,5 +1481,16 @@
             }
 
     };
+
+
+    /*
+    #ifdef ARDUINO_ARCH_AVR // Assuming Arduino Mega or Uno
+        // Helper function to create aray from an initializer list
+        template<typename T, size_t N>
+        vector<T> initializer_list (const T (&arr) [N]) {
+            return vector<T> (arr);
+        }
+    #endif
+    */
 
 #endif
