@@ -1,4 +1,7 @@
+<!DOCTYPE html>
+<html lang='en'>
 <html>
+
 	<head>
 		<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
 		<link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
@@ -20,7 +23,6 @@
 				text-align:center;
 			}
     
-  
 			/* button */
 			.button {padding: 10px 15px; font-size: 26px;text-align: center; cursor: pointer; outline: none; color: white; border: none; border-radius: 12px; box-shadow: 1px 1px #ccc; position: relative; top: 0px; height: 48px}
 			button:disabled {background-color: #aaa}
@@ -111,12 +113,6 @@
 				background-color:rgb(200 0 0 / 0.90);
 				border: solid rgb(200 0 0 / 0.90) 0px;
 				border-radius: 12px;
-				/*
-				position: absolute;
-				left: 50%;
-				top: 50%;
-				transform: translate(-50%, -50%);
-				*/
 			}
 
 		</style>
@@ -213,27 +209,27 @@
 
 </body>
 
-	<script type='text/javascript'>
+<script type='text/javascript'>
 
-		function tryToLogin () {
+	function tryToLogin () {
 
-			if (!document.getElementById ('userName').reportValidity ()) return;			
-			if (!document.getElementById ('userPassword').reportValidity ()) return;
+		if (!document.getElementById ('userName').reportValidity ()) return;			
+		if (!document.getElementById ('userPassword').reportValidity ()) return;
 
-			// try to get session token into a cookie
-			var client = new httpClient ();
-			var clientRequest = 'login' + '/' + document.getElementById ('userName').value + '%20' + document.getElementById ('userPassword').value;
-			client.request 	(clientRequest, 'GET', function (serverReply) 	{
-												if (serverReply == "loggedIn") {
-													alert (document.cookie); // success, got sessionToken cookie
-													window.location.replace ("/protectedPage.html");
-												} else {
-													alert (serverReply); // report error
-												}
-									  		});
+		// try to get session token into a cookie
+		var client = new httpClient ();
+		var clientRequest = 'login' + '/' + document.getElementById ('userName').value + '%20' + document.getElementById ('userPassword').value;
+		client.request 	(clientRequest, 'GET', function (serverReply) 	{
+											if (serverReply == "loggedIn") {
+												alert (document.cookie); // success, got sessionToken cookie
+												window.location.replace ("/protectedPage.html");
+											} else {
+												alert (serverReply); // report error
+											}
+										});
 
-		}
+	}
 
-	</script>
+</script>
 
 </html>

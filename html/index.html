@@ -5,7 +5,8 @@
 
 	<meta charset='UTF-8'>
 	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
-	
+	<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+
 	<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
 	<link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
 	<link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
@@ -46,12 +47,6 @@
 			background-color:rgb(200 0 0 / 0.90);
 			border: solid rgb(200 0 0 / 0.90) 0px;
 			border-radius: 12px;
-			/*
-			position: absolute;
-			left: 50%;
-			top: 50%;
-			transform: translate(-50%, -50%);
-			*/
   		}
 
 	</style>
@@ -205,30 +200,19 @@
 			});
 		}
 
-		setTimeout (function () { // refresh up time with latest information from ESP each second
-			setInterval (function () {
-				let client = new httpClient ();
-				client.request ('/upTime','GET', function (json) {
-					document.getElementById ('upTime').innerText = (JSON.parse (json).upTime);
-				});
-			}, 1000);
-		}, 100);
+		setInterval (function () {
+			refresh ();
+		}, 1000);
 
-		// deprecated: refresh 3 graphs at load
-		// client.request ('/freeHeapGraph', 'GET', function (json) {document.getElementById ('freeHeap').innerText = lineGraph (JSON.parse (json), 'freeHeapGraph', '#0961aa') + ' KB';});
-		// client.request ('/freeBlockGraph', 'GET', function (json) {document.getElementById ('freeBlock').innerText = lineGraph (JSON.parse (json), 'freeBlockGraph', '#0961aa') + ' KB';});
-		// client.request ('/httpRequestCountGraph', 'GET', function (json) {document.getElementById ('httpRequestCount').innerText = lineGraph (JSON.parse (json), 'httpRequestCountGraph', '#2597f4') + ' / min';});
-
-		function refreshAllGraphs () { // read data from ESP and refresh GUI
-			let client = new httpClient ();
-			client.request ('/allGraphs', 'GET', function (json) {
+		function refresh () { 
+			client.request ('/state', 'GET', function (json) {
 				let obj = JSON.parse (json);
+				document.getElementById ('upTime').innerText = obj.upTime;
 				document.getElementById ('httpRequestCount').innerText = lineGraph (obj.httpRequestCount, 'httpRequestCountGraph','#2597f4', 5) + ' / min';
 				document.getElementById ('freeHeap').innerText = lineGraph (obj.freeHeap, 'freeHeapGraph','#0961aa', 5) + ' KB';
 				document.getElementById ('freeBlock').innerText = lineGraph (obj.freeBlock, 'freeBlockGraph','#0961aa', 5) + ' KB';
 			});
 		}
-
 
 		function lineGraph (obj, contextId, graphColour, scaleModule) {
 			// var obj=JSON.parse (json);
