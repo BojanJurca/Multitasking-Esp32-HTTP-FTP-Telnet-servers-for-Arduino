@@ -8,7 +8,7 @@
 
       - Use dmesg telnet command to display messages in the dmesg message queue.
 
-    October 23, 2024, Bojan Jurca
+    May 22, 2025, Bojan Jurca
     
 */
 
@@ -29,7 +29,7 @@
         #define DMESG_MAX_MESSAGE_LENGTH 82     // max length of each message
     #endif
     #ifndef DMESG_CIRCULAR_QUEUE_LENGTH
-        #define DMESG_CIRCULAR_QUEUE_LENGTH 100 // how may massages we keep on circular queue
+        #define DMESG_CIRCULAR_QUEUE_LENGTH 48 // how may massages we keep on circular queue
     #endif
 
 
@@ -48,18 +48,25 @@
         dmesgQueueEntry_t& operator << (const char *value) {
             this->message += value;
             return *this;
-        }             
+        }
 
         dmesgQueueEntry_t& operator << (const String& value) {
             this->message += (const char *) value.c_str ();
             return *this;
-        }             
+        }
 
         template<size_t N>
         dmesgQueueEntry_t& operator << (const Cstring<N>& value) {
             this->message += (char *) &value;
             return *this;
-        }             
+        }
+
+        /*
+        bool operator == (const dmesgQueueEntry_t& other) {
+            return this->milliseconds == other.milliseconds && this->message == other.message;
+        }
+        */
+
     };
 
 
@@ -70,15 +77,59 @@
 
             // constructor - insert the first entries
             dmesgQueue_t () : threadSafeCircularQueue<dmesgQueueEntry_t, maxSize> () { 
+                #if CONFIG_IDF_TARGET_ESP32
+                        #define ESP32TYPE "ESP32"
+                    #elif CONFIG_IDF_TARGET_ESP32S2
+                        #define ESP32TYPE "ESP32-S2"
+                    #elif CONFIG_IDF_TARGET_ESP32S3
+                        #define ESP32TYPE "ESP32-S3"
+                    #elif CONFIG_IDF_TARGET_ESP32C2
+                        #define ESP32TYPE "ESP32-C2"
+                    #elif CONFIG_IDF_TARGET_ESP32C3
+                        #define ESP32TYPE "ESP32-C3"
+                    #elif CONFIG_IDF_TARGET_ESP32C6
+                        #define ESP32TYPE "ESP32-C6"
+                    #elif CONFIG_IDF_TARGET_ESP32H2
+                        #define ESP32TYPE "ESP32-H2"
+                    #else
+                        #define ESP32TYPE "ESP32-other"
+                    #endif
+
+                /* CPU frequency is not reported correctly at startup
+                #ifdef HOSTNAME
+                    this->operator << ("[" ESP32TYPE "] " HOSTNAME " runing at: ") << (int) ESP.getCpuFreqMHz () << + " MHz";
+                #else
+                    this->operator << ("[" ESP32TYPE "] runing at: ") << (int) ESP.getCpuFreqMHz () << + " MHz";
+                #endif
+                */
 
                 #if CONFIG_FREERTOS_UNICORE // CONFIG_FREERTOS_UNICORE == 1 => 1 core ESP32
-                    this->operator << ("[ESP32] CPU0 reset reason: ") << __resetReason__ (rtc_get_reset_reason (0));
+                    this->operator << ("[" ESP32TYPE "] CPU0 reset reason: ") << __resetReason__ (rtc_get_reset_reason (0));
                 #else // CONFIG_FREERTOS_UNICORE == 0 => 2 core ESP32
-                    this->operator << ("[ESP32] CPU0 reset reason: ") << __resetReason__ (rtc_get_reset_reason (0));
-                    this->operator << ("[ESP32] CPU1 reset reason: ") << __resetReason__ (rtc_get_reset_reason (1));
+                    this->operator << ("[" ESP32TYPE "] CPU0 reset reason: ") << __resetReason__ (rtc_get_reset_reason (0));
+                    this->operator << ("[" ESP32TYPE "] CPU1 reset reason: ") << __resetReason__ (rtc_get_reset_reason (1));
                 #endif            
         
-                this->operator << ("[ESP32] wakeup reason: ") << __wakeupReason__ ();
+                this->operator << ("[" ESP32TYPE "] wakeup reason: ") << __wakeupReason__ ();
+
+                this->operator << ("[" ESP32TYPE "] free heap at startup: ") << esp_get_free_heap_size ();
+                if (heap_caps_get_free_size (MALLOC_CAP_SPIRAM) == 0 && psramInit ())
+                    this->operator << ("[" ESP32TYPE "] free PSRAM at startup: ") << heap_caps_get_free_size (MALLOC_CAP_SPIRAM);
+                else
+                    this->operator << ("[" ESP32TYPE "] PSRAM not installed");
+
+                #ifdef __LOCALE_HPP__
+                    if (__locale_name__)
+                        this->operator << ("[locale] set to ") << __locale_name__;
+                    else
+                        this->operator << ("[locale] not set, using ASCII");
+                #endif
+
+                time_t t = time (NULL);
+                if (t > 1748500189)
+                    this->operator << ("[locale] internal RTC: ") << t;
+                else
+                    this->operator << ("[time] internal RTC time unknown");
             }
 
             dmesgQueueEntry_t& operator << (const char *value) {
@@ -162,6 +213,7 @@
                 return r;
             }
 
+
         private:
 
             // returns reset reason (this may help with debugging)
@@ -205,5 +257,6 @@
 
     // create a working instance
     dmesgQueue_t<DMESG_CIRCULAR_QUEUE_LENGTH> dmesgQueue; 
+
 
 #endif

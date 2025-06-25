@@ -13,7 +13,7 @@
       /etc/dhcpcd.conf                          - modify the code below with your access point IP addresses
       /etc/hostapd/hostapd.conf                 - modify the code below with your access point SSID and password
 
-    December 25, 2024, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
 */
 
@@ -219,6 +219,22 @@
             int __ftpPort__ = 0;
 
             void registerPortsWithMDNS () {
+
+                #ifdef USE_mDNS
+                    // set up mDNS
+                    if (MDNS.begin (HOSTNAME)) { 
+                        #ifdef __DMESG__
+                            dmesgQueue << (const char *) "[netwk][mDNS] started for " << HOSTNAME << ", free heap left: " << esp_get_free_heap_size ();
+                        #endif
+                        cout << (const char *) "[netwk][mDNS] started for " << HOSTNAME << endl;
+                    } else {
+                        #ifdef __DMESG__
+                            dmesgQueue << (const char *) "[netwk][mDNS] could not start mDNS for " << HOSTNAME;
+                        #endif
+                        cout << (const char *) "[netwk][mDNS] could not start mDNS for " << HOSTNAME << endl;
+                    }
+                #endif
+
                 if (__telnetPort__)
                     MDNS.addService ("telnet", "tcp", __telnetPort__);
                 if (__httpPort__)
@@ -306,271 +322,271 @@
     
         #ifdef __FILE_SYSTEM__
             if (fileSystem.mounted ()) { 
-              // read interfaces configuration from /network/interfaces, create a new one if it doesn't exist
-              if (!fileSystem.isFile ("/network/interfaces")) {
-                  // create directory structure
-                  if (!fileSystem.isDirectory ("/network")) { fileSystem.makeDirectory ("/network"); }
-                  cout << F ("[netwk] /network/interfaces does not exist, creating default one ... ");
-                  bool created = false;
-                  File f = fileSystem.open ("/network/interfaces", "w");          
-                  if (f) {
-                      #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
-                          String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
-                                                      "# get IPv4 address from DHCP\r\n"
-                                                      "#  iface STA inet dhcp\r\n"         
-                                                      "\r\n"
-                                                      "# use static IPv4 address\r\n"                   
-                                                      "   iface STA inet static\r\n"
-                                                      "      address " DEFAULT_STA_IP "\r\n" 
-                                                      "      netmask " DEFAULT_STA_SUBNET_MASK "\r\n" 
-                                                      "      gateway " DEFAULT_STA_GATEWAY "\r\n"
-                                                      "      dns1 " DEFAULT_STA_DNS_1 "\r\n"
-                                                      "      dns2 " DEFAULT_STA_DNS_2 "\r\n"
-                                                      "\r\n"
-                                                      "# get IPv6 address from DHCP\r\n"
-                                                      "#   iface STA inet6 dhcp\r\n"                  
-                                                      "\r\n"
-                                                      #ifdef DEFAULT_STA_IPv6
-                                                          "# use static IPv6 address\r\n"
-                                                          "   iface STA inet6 static\r\n"
-                                                          "      address " DEFAULT_STA_IPv6 "\r\n"
-                                                      #else
-                                                          "# use static IPv6 address (example below)\r\n"
-                                                          "#   iface STA inet6 static\r\n"
-                                                          "#      address \r\n"
-                                                      #endif
+                // read interfaces configuration from /network/interfaces, create a new one if it doesn't exist
+                if (!fileSystem.isFile ("/network/interfaces")) {
+                    // create directory structure
+                    if (!fileSystem.isDirectory ("/network")) { fileSystem.makeDirectory ("/network"); }
+                    cout << F ("[netwk] /network/interfaces does not exist, creating default one ... ");
+                    bool created = false;
+                    File f = fileSystem.open ("/network/interfaces", "w");          
+                    if (f) {
+                        #if defined DEFAULT_STA_IP && defined DEFAULT_STA_SUBNET_MASK && defined DEFAULT_STA_GATEWAY && defined DEFAULT_STA_DNS_1 && defined DEFAULT_STA_DNS_2
+                            String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
+                                                        "# get IPv4 address from DHCP\r\n"
+                                                        "#  iface STA inet dhcp\r\n"         
+                                                        "\r\n"
+                                                        "# use static IPv4 address\r\n"                   
+                                                        "   iface STA inet static\r\n"
+                                                        "      address " DEFAULT_STA_IP "\r\n" 
+                                                        "      netmask " DEFAULT_STA_SUBNET_MASK "\r\n" 
+                                                        "      gateway " DEFAULT_STA_GATEWAY "\r\n"
+                                                        "      dns1 " DEFAULT_STA_DNS_1 "\r\n"
+                                                        "      dns2 " DEFAULT_STA_DNS_2 "\r\n"
+                                                        "\r\n"
+                                                        "# get IPv6 address from DHCP\r\n"
+                                                        "#   iface STA inet6 dhcp\r\n"                  
+                                                        "\r\n"
+                                                        #ifdef DEFAULT_STA_IPv6
+                                                            "# use static IPv6 address\r\n"
+                                                            "   iface STA inet6 static\r\n"
+                                                            "      address " DEFAULT_STA_IPv6 "\r\n"
+                                                        #else
+                                                            "# use static IPv6 address (example below)\r\n"
+                                                            "#   iface STA inet6 static\r\n"
+                                                            "#      address \r\n"
+                                                        #endif
+                                                        );
+                        #else
+                            String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
+                                                        "# get IPv4 address from DHCP\r\n"
+                                                        "   iface STA inet dhcp\r\n"
+                                                        "\r\n"
+                                                        "# use static IPv4 address (example below)\r\n"   
+                                                        "#  iface STA inet static\r\n"
+                                                        #ifdef DEFAULT_STA_IP
+                                                        "#     address " DEFAULT_STA_IP "\r\n"
+                                                        #else
+                                                        "#     address \r\n"
+                                                        #endif
+                                                        #ifdef DEFAULT_STA_SUBNET_MASK
+                                                        "#     netmask " DEFAULT_STA_SUBNET_MASK "\r\n"
+                                                        #else
+                                                        "#     netmask 255.255.255.0\r\n"
+                                                        #endif
+                                                        #ifdef DEFAULT_STA_GATEWAY
+                                                        "#     gateway " DEFAULT_STA_GATEWAY "\r\n"
+                                                        #else
+                                                        "#     gateway <your router's IPv4 address>\r\n"
+                                                        #endif
+                                                        #ifdef DEFAULT_STA_DNS_1
+                                                        "#     dns1 " DEFAULT_STA_DNS_1 "\r\n"
+                                                        #else
+                                                        "#     dns1 \r\n"
+                                                        #endif
+                                                        #ifdef DEFAULT_STA_DNS_2
+                                                        "#     dns2 " DEFAULT_STA_DNS_2 "\r\n"
+                                                        #else
+                                                        "#     dns2 \r\n"
+                                                        #endif
+                                                        "\r\n"
+                                                        "# get IPv6 address from DHCP\r\n"
+                                                        "#   iface STA inet6 dhcp\r\n"                  
+                                                        "\r\n"
+                                                        #ifdef DEFAULT_STA_IPv6
+                                                            "# use static IPv6 address\r\n"
+                                                            "   iface STA inet6 static\r\n"
+                                                            "      address " DEFAULT_STA_IPv6 "\r\n"
+                                                        #else
+                                                            "# use static IPv6 address (example below)\r\n"
+                                                            "#   iface STA inet6 static\r\n"
+                                                            "#      address \r\n"
+                                                        #endif
+                                                        );
+                        #endif
+                        created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());                                
+                        f.close ();
+                        fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                    }
+                    cout <<  (created ? (const char *) "created" : (const char *) "error") << endl;
+                }
+                {
+                    cout << F ("[netwk] reading /network/interfaces ... ");
+                    // /network/interfaces STA(tion) configuration - parse configuration file if it exists
+                    char buffer [MAX_INTERFACES_SIZE] = "\n";
+                    if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/network/interfaces")) {
+                        strcat (buffer, "\n");
+                        cout << endl;
+
+                        char *p4 = stristr (buffer, "\niface STA inet static");
+                        char *p6 = stristr (buffer, "\niface STA inet6 static");
+
+                        if (p4) {
+
+                            // static IPv4 configuration
+                            *staIPv4 = *staSubnetMask = *staGateway = *staDns1 = *staDns2 = 0;
+                            char *p;                    
+
+                            if ((p = stristr (p4, "\naddress")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", staIPv4);
+                            if ((p = stristr (p4, "\nnetmask")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", staSubnetMask);
+                            if ((p = stristr (p4, "\ngateway")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", staGateway);
+                            if ((p = stristr (p4, "\ndns1"))    && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 5, "%*[ =]%16[0-9.]", staDns1);
+                            if ((p = stristr (p4, "\ndns2"))    && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 5, "%*[ =]%16[0-9.]", staDns2);
+                            // DEBUG: cout << F ("[netwk] using static IPv4") << endl;
+
+                        } else {
+
+                            // IPv4 configuration with DHCP
+                            // DEBUG: cout << F ("[netwk] using IPv4 DHCP") << endl;
+
+                        }
+
+                        if (stristr (buffer, "iface STA inet6 dhcp")) {
+                            
+                            // IPv6 configuration with DHCP - let's just flag the address with space - this will tell us later to enable IPv6
+                            staIPv6 [0] = ' ';
+                            // DEBUG: cout << F ("[netwk] using IPv6 DHCP") << endl;
+
+                        }
+
+                        if (p6) {
+                            // static IPv6 configuration
+                            *staIPv6 = 0;
+                            char *p;
+                            if ((p = stristr (p6, "\naddress")) && (!p4 || p6 < p4 && p < p4 || p6 > p4 && p > p4)) sscanf (p + 8, "%*[ =]%39[0-9A-Fa-f:]", staIPv6);
+                            // DEBUG: cout << F ("[netwk] using static IPv6") << endl;
+
+                        } 
+
+                    } else {
+                        cout << ((const char *) "error") << endl;
+                    } 
+                }
+
+
+                // read STAtion credentials from /etc/wpa_supplicant/wpa_supplicant.conf, create a new one if it doesn't exist
+                if (!fileSystem.isFile ("/etc/wpa_supplicant/wpa_supplicant.conf")) {
+                    // create directory structure
+                    if (!fileSystem.isDirectory ("/etc/wpa_supplicant")) { fileSystem.makeDirectory ("/etc"); fileSystem.makeDirectory ("/etc/wpa_supplicant"); }
+                    cout << F ("[netwk] /etc/wpa_supplicant/wpa_supplicant.conf does not exist, creating default one ... ");
+                    bool created = false;
+                    File f = fileSystem.open ("/etc/wpa_supplicant/wpa_supplicant.conf", "w");          
+                    if (f) {
+                        String defaultContent = F ("# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
+                                                    #ifdef DEFAULT_STA_SSID
+                                                        "   ssid " DEFAULT_STA_SSID "\r\n"
+                                                    #else
+                                                        "   ssid \r\n"
+                                                    #endif
+                                                    #ifdef DEFAULT_STA_PASSWORD
+                                                        "   psk " DEFAULT_STA_PASSWORD "\r\n"
+                                                    #else
+                                                        "   psk \r\n"
+                                                    #endif           
                                                     );
-                      #else
-                          String defaultContent = F ("# WiFi STA(tion) configuration - reboot for changes to take effect\r\n\r\n"
-                                                     "# get IPv4 address from DHCP\r\n"
-                                                     "   iface STA inet dhcp\r\n"
-                                                     "\r\n"
-                                                     "# use static IPv4 address (example below)\r\n"   
-                                                     "#  iface STA inet static\r\n"
-                                                     #ifdef DEFAULT_STA_IP
-                                                       "#     address " DEFAULT_STA_IP "\r\n"
-                                                     #else
-                                                       "#     address \r\n"
-                                                     #endif
-                                                     #ifdef DEFAULT_STA_SUBNET_MASK
-                                                       "#     netmask " DEFAULT_STA_SUBNET_MASK "\r\n"
-                                                     #else
-                                                       "#     netmask 255.255.255.0\r\n"
-                                                     #endif
-                                                     #ifdef DEFAULT_STA_GATEWAY
-                                                       "#     gateway " DEFAULT_STA_GATEWAY "\r\n"
-                                                     #else
-                                                       "#     gateway <your router's IPv4 address>\r\n"
-                                                     #endif
-                                                     #ifdef DEFAULT_STA_DNS_1
-                                                       "#     dns1 " DEFAULT_STA_DNS_1 "\r\n"
-                                                     #else
-                                                       "#     dns1 \r\n"
-                                                     #endif
-                                                     #ifdef DEFAULT_STA_DNS_2
-                                                       "#     dns2 " DEFAULT_STA_DNS_2 "\r\n"
-                                                     #else
-                                                       "#     dns2 \r\n"
-                                                     #endif
-                                                      "\r\n"
-                                                      "# get IPv6 address from DHCP\r\n"
-                                                      "#   iface STA inet6 dhcp\r\n"                  
-                                                      "\r\n"
-                                                      #ifdef DEFAULT_STA_IPv6
-                                                          "# use static IPv6 address\r\n"
-                                                          "   iface STA inet6 static\r\n"
-                                                          "      address " DEFAULT_STA_IPv6 "\r\n"
-                                                      #else
-                                                          "# use static IPv6 address (example below)\r\n"
-                                                          "#   iface STA inet6 static\r\n"
-                                                          "#      address \r\n"
-                                                      #endif
+                        created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
+                        f.close ();
+                        fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                    }
+                    cout << (created ? (const char *) "created" : (const char *) "error") << endl;
+                }
+                {              
+                    cout << F ("[netwk] reading /etc/wpa_supplicant/wpa_supplicant.conf ... ");
+                    // /etc/wpa_supplicant/wpa_supplicant.conf STA(tion) credentials - parse configuration file if it exists
+                    char buffer [MAX_WPA_SUPPLICANT_SIZE] = "\n";
+                    if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/wpa_supplicant/wpa_supplicant.conf")) {
+                        strcat (buffer, "\n");                
+                        cout << endl;
+
+                        *staSSID = *staPassword = 0;
+                        char *p;                    
+                        if ((p = stristr (buffer, "\nssid"))) sscanf (p + 5, "%*[ =]%33[^\n]", staSSID); // sscanf (p + 5, "%*[ =]%33[!-~]", staSSID);
+                        for (int i = strlen (staSSID) - 1; i && staSSID [i] <= ' '; i--) staSSID [i] = 0; // right-trim
+                        if ((p = stristr (buffer, "\npsk"))) sscanf (p + 4, "%*[ =]%63[^\n]", staPassword); // sscanf (p + 4, "%*[ =]%63[!-~]", staPassword);
+                        for (int i = strlen (staPassword) - 1; i && staPassword [i] <= ' '; i--) staPassword [i] = 0; // right-trim
+
+                    } else {
+                        cout << (const char *) "error" << endl;
+                    }
+                }
+
+
+                // read A(ccess) P(oint) configuration from /etc/dhcpcd.conf, create a new one if it doesn't exist
+                if (!fileSystem.isFile ("/etc/dhcpcd.conf")) {
+                    // create directory structure
+                    if (!fileSystem.isDirectory ("/etc")) fileSystem.makeDirectory ("/etc");
+                    cout << F ("[netwk] /etc/dhcpcd.conf does not exist, creating default one ... ");
+                    bool created = false;
+                    File f = fileSystem.open ("/etc/dhcpcd.conf", "w");          
+                    if (f) {
+                        String defaultContent = F ("# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
+                                                    "\r\n"
+                                                    "# use static IPv4 address (example below)\r\n"
+                                                    #ifdef DEFAULT_AP_IP
+                                                        "   static ip_address " DEFAULT_AP_IP "\r\n"
+                                                    #else
+                                                        "   static ip_address \r\n"
+                                                    #endif
+                                                    #ifdef DEFAULT_AP_SUBNET_MASK
+                                                        "   netmask " DEFAULT_AP_SUBNET_MASK "\r\n"
+                                                    #else
+                                                        "   netmask \r\n"
+                                                    #endif
+                                                    #ifdef DEFAULT_AP_IP
+                                                        "   gateway " DEFAULT_AP_IP "\r\n"
+                                                    #else
+                                                        "   gateway \r\n"
+                                                    #endif
+                                                    "\r\n"
+                                                    "# use static IPv6 address (example below)\r\n"
+                                                    #ifdef DEFAULT_AP_IPv6
+                                                        "   static ip6_address " DEFAULT_AP_IPv6 "\r\n"
+                                                    #else
+                                                        "#   static ip6_address \r\n"
+                                                    #endif
                                                     );
-                      #endif
-                      created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());                                
-                      f.close ();
-                      __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                  }
-                  cout <<  (created ? (const char *) "created" : (const char *) "error") << endl;
-              }
-              {
-                  cout << F ("[netwk] reading /network/interfaces ... ");
-                  // /network/interfaces STA(tion) configuration - parse configuration file if it exists
-                  char buffer [MAX_INTERFACES_SIZE] = "\n";
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/network/interfaces")) {
-                      strcat (buffer, "\n");
-                      cout << endl;
+                        created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
+                        f.close ();
+                        fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                    }
+                    cout << (created ? (const char *) "created" : (const char *) "error") << endl;
+                }
+                {              
+                    cout << F ("[netwk] reading /etc/dhcpcd.conf ... ");
+                    // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration - parse configuration file if it exists
+                    char buffer [MAX_DHCPCD_SIZE] = "\n";
+                    if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/dhcpcd.conf")) {
+                        strcat (buffer, "\n");
+                        cout << endl;
 
-                      char *p4 = stristr (buffer, "\niface STA inet static");
-                      char *p6 = stristr (buffer, "\niface STA inet6 static");
+                        char *p4 = stristr (buffer, "\nstatic ip_address");
+                        char *p6 = stristr (buffer, "\nstatic ip6_address");
 
-                      if (p4) {
+                        if (p4) {
 
-                          // static IPv4 configuration
-                          *staIPv4 = *staSubnetMask = *staGateway = *staDns1 = *staDns2 = 0;
-                          char *p;                    
+                            // static IPv4 configuration
+                            *apIP = *apSubnetMask = *apGateway = 0;
+                            char *p;                    
+                                                                                                                    sscanf (p4 + 18, "%*[ =]%16[0-9.]", apIP);
+                            if ((p = stristr (p4, "\nnetmask")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", apSubnetMask);
+                            if ((p = stristr (p4, "\ngateway")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", apGateway);
 
-                          if ((p = stristr (p4, "\naddress")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", staIPv4);
-                          if ((p = stristr (p4, "\nnetmask")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", staSubnetMask);
-                          if ((p = stristr (p4, "\ngateway")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", staGateway);
-                          if ((p = stristr (p4, "\ndns1"))    && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 5, "%*[ =]%16[0-9.]", staDns1);
-                          if ((p = stristr (p4, "\ndns2"))    && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 5, "%*[ =]%16[0-9.]", staDns2);
-                          // DEBUG: cout << F ("[netwk] using static IPv4") << endl;
+                        }
 
-                      } else {
+                        if (p6) {
 
-                          // IPv4 configuration with DHCP
-                          // DEBUG: cout << F ("[netwk] using IPv4 DHCP") << endl;
+                            // static IPv6 configuration
+                            sscanf (p6 + 19, "%*[ =]%39[0-9A-Fa-f:]", apIPv6);
 
-                      }
+                        }
 
-                      if (stristr (buffer, "iface STA inet6 dhcp")) {
-                          
-                          // IPv6 configuration with DHCP - let's just flag the address with space - this will tell us later to enable IPv6
-                          staIPv6 [0] = ' ';
-                          // DEBUG: cout << F ("[netwk] using IPv6 DHCP") << endl;
-
-                      }
-
-                      if (p6) {
-                          // static IPv6 configuration
-                          *staIPv6 = 0;
-                          char *p;
-                          if ((p = stristr (p6, "\naddress")) && (!p4 || p6 < p4 && p < p4 || p6 > p4 && p > p4)) sscanf (p + 8, "%*[ =]%39[0-9A-Fa-f:]", staIPv6);
-                          // DEBUG: cout << F ("[netwk] using static IPv6") << endl;
-
-                      } 
-
-                  } else {
-                      cout << ((const char *) "error") << endl;
-                  } 
-              }
+                    } else {
+                        cout << (const char *) "error" << endl;
+                    }
+                }
 
 
-              // read STAtion credentials from /etc/wpa_supplicant/wpa_supplicant.conf, create a new one if it doesn't exist
-              if (!fileSystem.isFile ("/etc/wpa_supplicant/wpa_supplicant.conf")) {
-                  // create directory structure
-                  if (!fileSystem.isDirectory ("/etc/wpa_supplicant")) { fileSystem.makeDirectory ("/etc"); fileSystem.makeDirectory ("/etc/wpa_supplicant"); }
-                  cout << F ("[netwk] /etc/wpa_supplicant/wpa_supplicant.conf does not exist, creating default one ... ");
-                  bool created = false;
-                  File f = fileSystem.open ("/etc/wpa_supplicant/wpa_supplicant.conf", "w");          
-                  if (f) {
-                      String defaultContent = F ("# WiFi STA (station) credentials - reboot for changes to take effect\r\n\r\n"
-                                                  #ifdef DEFAULT_STA_SSID
-                                                    "   ssid " DEFAULT_STA_SSID "\r\n"
-                                                  #else
-                                                    "   ssid \r\n"
-                                                  #endif
-                                                  #ifdef DEFAULT_STA_PASSWORD
-                                                    "   psk " DEFAULT_STA_PASSWORD "\r\n"
-                                                  #else
-                                                    "   psk \r\n"
-                                                  #endif           
-                                                );
-                    created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
-                    f.close ();
-                    __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                  }
-                  cout << (created ? (const char *) "created" : (const char *) "error") << endl;
-              }
-              {              
-                  cout << F ("[netwk] reading /etc/wpa_supplicant/wpa_supplicant.conf ... ");
-                  // /etc/wpa_supplicant/wpa_supplicant.conf STA(tion) credentials - parse configuration file if it exists
-                  char buffer [MAX_WPA_SUPPLICANT_SIZE] = "\n";
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/wpa_supplicant/wpa_supplicant.conf")) {
-                      strcat (buffer, "\n");                
-                      cout << endl;
-
-                      *staSSID = *staPassword = 0;
-                      char *p;                    
-                      if ((p = stristr (buffer, "\nssid"))) sscanf (p + 5, "%*[ =]%33[^\n]", staSSID); // sscanf (p + 5, "%*[ =]%33[!-~]", staSSID);
-                      for (int i = strlen (staSSID) - 1; i && staSSID [i] <= ' '; i--) staSSID [i] = 0; // right-trim
-                      if ((p = stristr (buffer, "\npsk"))) sscanf (p + 4, "%*[ =]%63[^\n]", staPassword); // sscanf (p + 4, "%*[ =]%63[!-~]", staPassword);
-                      for (int i = strlen (staPassword) - 1; i && staPassword [i] <= ' '; i--) staPassword [i] = 0; // right-trim
-
-                  } else {
-                      cout << (const char *) "error" << endl;
-                  }
-              }
-
-
-              // read A(ccess) P(oint) configuration from /etc/dhcpcd.conf, create a new one if it doesn't exist
-              if (!fileSystem.isFile ("/etc/dhcpcd.conf")) {
-                  // create directory structure
-                  if (!fileSystem.isDirectory ("/etc")) fileSystem.makeDirectory ("/etc");
-                  cout << F ("[netwk] /etc/dhcpcd.conf does not exist, creating default one ... ");
-                  bool created = false;
-                  File f = fileSystem.open ("/etc/dhcpcd.conf", "w");          
-                  if (f) {
-                      String defaultContent = F ("# WiFi AP configuration - reboot for changes to take effect\r\n\r\n"
-                                                 "\r\n"
-                                                 "# use static IPv4 address (example below)\r\n"
-                                                 #ifdef DEFAULT_AP_IP
-                                                    "   static ip_address " DEFAULT_AP_IP "\r\n"
-                                                 #else
-                                                    "   static ip_address \r\n"
-                                                 #endif
-                                                 #ifdef DEFAULT_AP_SUBNET_MASK
-                                                    "   netmask " DEFAULT_AP_SUBNET_MASK "\r\n"
-                                                 #else
-                                                    "   netmask \r\n"
-                                                 #endif
-                                                 #ifdef DEFAULT_AP_IP
-                                                    "   gateway " DEFAULT_AP_IP "\r\n"
-                                                 #else
-                                                    "   gateway \r\n"
-                                                 #endif
-                                                 "\r\n"
-                                                 "# use static IPv6 address (example below)\r\n"
-                                                 #ifdef DEFAULT_AP_IPv6
-                                                     "   static ip6_address " DEFAULT_AP_IPv6 "\r\n"
-                                                 #else
-                                                     "#   static ip6_address \r\n"
-                                                 #endif
-                                                );
-                    created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
-                    f.close ();
-                    __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-                  }
-                  cout << (created ? (const char *) "created" : (const char *) "error") << endl;
-              }
-              {              
-                  cout << F ("[netwk] reading /etc/dhcpcd.conf ... ");
-                  // /etc/dhcpcd.conf contains A(ccess) P(oint) configuration - parse configuration file if it exists
-                  char buffer [MAX_DHCPCD_SIZE] = "\n";
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/dhcpcd.conf")) {
-                      strcat (buffer, "\n");
-                      cout << endl;
-
-                      char *p4 = stristr (buffer, "\nstatic ip_address");
-                      char *p6 = stristr (buffer, "\nstatic ip6_address");
-
-                      if (p4) {
-
-                          // static IPv4 configuration
-                          *apIP = *apSubnetMask = *apGateway = 0;
-                          char *p;                    
-                                                                                                                  sscanf (p4 + 18, "%*[ =]%16[0-9.]", apIP);
-                          if ((p = stristr (p4, "\nnetmask")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", apSubnetMask);
-                          if ((p = stristr (p4, "\ngateway")) && (!p6 || p4 < p6 && p < p6 || p4 > p6 && p > p6)) sscanf (p + 8, "%*[ =]%16[0-9.]", apGateway);
-
-                      }
-
-                      if (p6) {
-
-                          // static IPv6 configuration
-                          sscanf (p6 + 19, "%*[ =]%39[0-9A-Fa-f:]", apIPv6);
-
-                      }
-
-                  } else {
-                      cout << (const char *) "error" << endl;
-                  }
-              }
-
-
-              // read A(ccess) P(oint) credentials from /etc/hostapd/hostapd.conf, create a new one if it doesn't exist
-              if (!fileSystem.isFile ("/etc/hostapd/hostapd.conf")) {
+                // read A(ccess) P(oint) credentials from /etc/hostapd/hostapd.conf, create a new one if it doesn't exist
+                if (!fileSystem.isFile ("/etc/hostapd/hostapd.conf")) {
                   // create directory structure
                   if (!fileSystem.isDirectory ("/etc/hostapd")) { fileSystem.makeDirectory ("/etc"); fileSystem.makeDirectory ("/etc/hostapd"); }
                   cout << F ("[netwk] /etc/hostapd/hostapd.conf does not exist, creating default one ... ");
@@ -593,7 +609,7 @@
                         created = (f.printf (defaultContent.c_str()) == defaultContent.length ());
                         f.close ();
 
-                        __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                        fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
                     }
                     cout << (created ? (const char *) "created" : (const char *) "error") << endl; 
                 }
@@ -642,7 +658,7 @@
                     break;
                 case ARDUINO_EVENT_WIFI_STA_CONNECTED:
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[netwk][STA] connected to " << WiFi.SSID ().c_str ();
+                        dmesgQueue << (const char *) "[netwk][STA] connected to " << WiFi.SSID ().c_str () << ", free heap left: " << esp_get_free_heap_size ();
                     #endif
                     cout << (const char *) "[netwk][STA] connected to " << WiFi.SSID ().c_str () << endl;
 
@@ -910,21 +926,6 @@
                 cout << (const char *) "[netwk][AP] could not assign static IPv6 address: " << apIPv6 << endl;
             }
         }
-
-        #ifdef USE_mDNS
-            // set up mDNS
-            if (MDNS.begin (HOSTNAME)) { 
-                #ifdef __DMESG__
-                    dmesgQueue << (const char *) "[netwk][mDNS] started for " << HOSTNAME;
-                #endif
-                cout << (const char *) "[netwk][mDNS] started for " << HOSTNAME << endl;
-            } else {
-                #ifdef __DMESG__
-                    dmesgQueue << (const char *) "[netwk][mDNS] could not start mDNS for " << HOSTNAME;
-                #endif
-                cout << (const char *) "[netwk][mDNS] could not start mDNS for " << HOSTNAME << endl;
-            }
-        #endif
 
         // power saving?
         esp_wifi_set_ps (POVER_SAVING_MODE); // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html

@@ -4,7 +4,7 @@
 
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
 
     Classes implemented/used in this module:
@@ -107,12 +107,11 @@
 
     // TUNNING PARAMETERS
 
-    #define TELNET_CONNECTION_STACK_SIZE (9 * 1024 + 128)       // each TCP connection
+    #define TELNET_CONNECTION_STACK_SIZE (9 * 1024 + 128)       // a good first estimate how to set this parameter would be to always leave at least 1 KB of each telnetConnection stack unused
     #define TELNET_CONNECTION_TIME_OUT 300                      // 300 s = 5 min, 0 for infinite
     #define TELNET_CMDLINE_BUFFER_SIZE 128                      // reading and temporary keeping telnet command lines
     #define TELNET_SESSION_MAX_ARGC 24                          // max number of arguments in command line
     // #define SWITHC_DEL_AND_BACKSPACE                            // uncomment this line to swithc the meaning of these keys - this would be suitable for Putty and Linux Telnet clients
-    #define telnetServiceUnavailableReply (const char *) "Telnet service is currently unavailable.\r\n"
 
     #ifndef HOSTNAME
         #ifdef SHOW_COMPILE_TIME_INFORMATION
@@ -469,7 +468,7 @@
                                 #endif
                                 __prompt__ = '#';
                                 #ifdef __DMESG__
-                                    dmesgQueue << "[telnetConn] user logged in: " << __userName__;
+                                    dmesgQueue << "[telnetConn] " << __userName__ << " logged in";
                                 #endif
 
                             #else
@@ -499,14 +498,14 @@
 
                                 // prepare Telnet session defaults
                                 #ifdef __FILE_SYSTEM__
-                                    xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                                    xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
                                         userManagement.getHomeDirectory (__homeDir__, sizeof (__homeDir__), __userName__);
-                                    xSemaphoreGive (__tcpServerSemaphore__);
+                                    xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                     strcpy (__workingDir__, __homeDir__);
                                 #endif
                                 __prompt__ = strcmp (__userName__, "root") ? '$' : '#';
                                 #ifdef __DMESG__
-                                    dmesgQueue << "[telnetConn] user logged in: " << __userName__;
+                                    dmesgQueue << "[telnetConn] " << __userName__ << " logged in";
                                 #endif
 
                             #endif
@@ -634,7 +633,7 @@
 
                             #ifdef __DMESG__
                                 if (__prompt__) 
-                                    dmesgQueue << "[telnetConn] user logged out: " << __userName__; // if prompt is set, we know that login was successful
+                                    dmesgQueue << "[telnetConn] " << __userName__ << " logged out"; // if prompt is set, we know that login was successful
                             #endif
 
                         // ----- this is where Telnet connection ends, the socket will be closed upon return -----
@@ -1229,32 +1228,32 @@
                         }
 
                         const char *__cronTab__ () {
-                            xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
-                                if (!__cronTabEntries__) {
+                            cronTab.lock ();
+                                if (!cronTab.size ()) {
                                     sendString ("Crontab is empty");
                                 } else {
-                                    for (int i = 0; i < __cronTabEntries__; i ++) {
+                                    for (int i = 0; i < cronTab.size (); i ++) {
                                         cstring s;
                                         char c [27];
-                                        if (__cronEntry__ [i].second == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].second);      s += c; }
-                                        if (__cronEntry__ [i].minute == ANY)      s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].minute);      s += c; }
-                                        if (__cronEntry__ [i].hour == ANY)        s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].hour);        s += c; }
-                                        if (__cronEntry__ [i].day == ANY)         s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day);         s += c; }
-                                        if (__cronEntry__ [i].month == ANY)       s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].month);       s += c; }
-                                        if (__cronEntry__ [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", __cronEntry__ [i].day_of_week); s += c; }
-                                        if (__cronEntry__ [i].lastExecuted) {
+                                        if (cronTab [i].second == ANY)      s += " * "; else { sprintf (c, "%2i ", cronTab [i].second);      s += c; }
+                                        if (cronTab [i].minute == ANY)      s += " * "; else { sprintf (c, "%2i ", cronTab [i].minute);      s += c; }
+                                        if (cronTab [i].hour == ANY)        s += " * "; else { sprintf (c, "%2i ", cronTab [i].hour);        s += c; }
+                                        if (cronTab [i].day == ANY)         s += " * "; else { sprintf (c, "%2i ", cronTab [i].day);         s += c; }
+                                        if (cronTab [i].month == ANY)       s += " * "; else { sprintf (c, "%2i ", cronTab [i].month);       s += c; }
+                                        if (cronTab [i].day_of_week == ANY) s += " * "; else { sprintf (c, "%2i ", cronTab [i].day_of_week); s += c; }
+                                        if (cronTab [i].lastExecuted) {
                                                                                   // ascTime (localTime (__cronEntry__ [i].lastExecuted), c, sizeof (c));
-                                                                                  s += " "; s += __cronEntry__ [i].lastExecuted; s += " "; 
+                                                                                  s += " "; s += cronTab [i].lastExecuted; s += " "; 
                                                                             } else { 
                                                                                   s += " (not executed yet)  "; 
                                                                             }
-                                        if (__cronEntry__ [i].readFromFile)       s += " from /etc/crontab  "; else s += " entered from code  ";
-                                        s += __cronEntry__ [i].cronCommand;
+                                        if (cronTab [i].readFromFile)       s += " from /etc/crontab  "; else s += " entered from code  ";
+                                        s += cronTab [i].cronCommand;
                                                                                   s += "\r\n";
                                         if (sendString (s.c_str ()) <= 0) break;
                                     }
                                 }
-                            xSemaphoreGiveRecursive (__cronSemaphore__);
+                            cronTab.unlock ();
                             return "\r"; // different than "" to let the calling function know that the command has been processed
                         }
 
@@ -1333,7 +1332,8 @@
                         for (byte i = 0; i < macLength; i++) {
                             sprintf (c, "%02x", *(mac ++));
                             s += c;
-                            if (i < macLength - 1) s += ":";
+                            if (i < macLength - 1) 
+                                s += ":";
                         }
                         return s;
                     }
@@ -1521,8 +1521,8 @@
                                     do {
                                         ++ e;
                                     } while (e != dmesgQueue.end () && &*e != lastBack);
-                                    if (e == dmesgQueue.end ())
-                                        dmesgQueue.begin ();
+                                    if (e != dmesgQueue.end ())
+                                        ++ e;
 
                                     while (e != dmesgQueue.end ()) {
                                         s = "\r\n";
@@ -1531,7 +1531,12 @@
                                         if (trueTime && (*e).time > 1687461154) { // 2023/06/22 21:12:34, any valid time should be greater than this
                                             struct tm slt; 
                                             localtime_r (&(*e).time, &slt); 
-                                            strftime (c, sizeof (c), "[%y/%m/%d %H:%M:%S] ", &slt);
+                                            #ifndef __LOCALE_HPP__
+                                                strftime (c, sizeof (c), "[%Y/%m/%d %T] ", &slt);
+                                            #else
+                                                cstring f = "["; f += __locale_time__; f += "] ";
+                                                strftime (c, sizeof (c), f, &slt);
+                                            #endif
                                         } else {
                                             sprintf (c, "[%10lu] ", (*e).milliseconds);
                                         }
@@ -1655,7 +1660,7 @@
 
                         const char *__diskstat__ (unsigned long delaySeconds) {
                             // variables for delta calculation
-                            diskTraffic_t last__diskTraffic__ = {}; 
+                            fileSystem_t::diskTraffic_t last__diskTraffic__ = {}; 
 
                             char s [256];
 
@@ -1666,11 +1671,11 @@
                             if (sendString (s) <= 0) return "";
 
                             do {
-                                sprintf (s, "\r\n  %8lu        %8lu", __diskTraffic__.bytesRead, __diskTraffic__.bytesWritten);
+                                sprintf (s, "\r\n  %8lu        %8lu", fileSystem.diskTraffic.bytesRead, fileSystem.diskTraffic.bytesWritten);
                                 if (sendString (s) <= 0) return "";
 
                                 // update variables for delta calculation
-                                last__diskTraffic__ = __diskTraffic__;
+                                last__diskTraffic__ = fileSystem.diskTraffic;
 
                                 // wait for a key press
                                 unsigned long startMillis = millis ();
@@ -1763,7 +1768,7 @@
                             *buff = 0;
                             
                             File f;
-                            xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                            xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
                             if ((bool) (f = fileSystem.open (fp, "r"))) {
                                 int i = strlen (buff);
                                 while (f.available ()) {
@@ -1779,11 +1784,11 @@
                                     }
                                     if (i >= sizeof (buff) - 2) { 
 
-                                                                  __diskTraffic__.bytesRead += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                                                  fileSystem.diskTraffic.bytesRead += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                                                   if (sendBlock (buff, i) <= 0) { 
                                                                       f.close (); 
-                                                                      xSemaphoreGive (__tcpServerSemaphore__);
+                                                                      xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                                       return ""; 
                                                                   }
                                                                   i = 0; 
@@ -1791,29 +1796,29 @@
                                     }
                                     if (i)                      { 
 
-                                                                    __diskTraffic__.bytesRead += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                                                    fileSystem.diskTraffic.bytesRead += i; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                                                     if (sendBlock (buff, i) <= 0) { 
                                                                         f.close (); 
-                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                                         return ""; 
                                                                     }
                                                                 }
                               } else {
                                   f.close (); 
-                                  xSemaphoreGive (__tcpServerSemaphore__);
+                                  xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                   return cstring ("Can't read ") + fp;
                               }
                               f.close ();
-                              xSemaphoreGive (__tcpServerSemaphore__);
+                              xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                               return "\r"; // different than "" to let the calling function know that the command has been processed
                         }
 
                         cstring __catClientToFile__ (char *fileName) {
-                            if (!fileSystem.mounted ())                   return (const char *) "File system not mounted. You may have to format flash disk first";
+                            if (!fileSystem.mounted ())                     return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
-                            if (fp == "" || fileSystem.isDirectory (fp))  return "Invalid file name";
-                            if (!__userHasRightToAccessFile__ (fp))     return (const char *) "Access denyed";
+                            if (fp == "" || fileSystem.isDirectory (fp))    return "Invalid file name";
+                            if (!__userHasRightToAccessFile__ (fp))         return (const char *) "Access denyed";
 
                             File f;
                             if ((bool) (f = fileSystem.open (fp, "w"))) {
@@ -1831,7 +1836,7 @@
                                                   f.close (); return cstring ("Can't write ") + fp;
                                               } 
 
-                                              __diskTraffic__.bytesWritten += 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                              fileSystem.diskTraffic.bytesWritten += 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                               // echo
                                               if (sendString ("\r\n") <= 0) return "";
@@ -1841,7 +1846,7 @@
                                                   f.close (); return cstring ("Can't write ") + fp;
                                               } 
 
-                                              __diskTraffic__.bytesWritten += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                              fileSystem.diskTraffic.bytesWritten += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                               // echo
                                               if (sendBlock (&c, 1) <= 0) return "";
@@ -1859,7 +1864,7 @@
                             if (!fileSystem.mounted ())                     return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
                             if (fp == "")                                   return (const char *) "Invalid directory name";
-                            if (!__userHasRightToAccessDirectory__ (fp))  return (const char *) "Access denyed";
+                            if (!__userHasRightToAccessDirectory__ (fp))    return (const char *) "Access denyed";
                     
                             if (fileSystem.makeDirectory (fp))              return fp + " made";
                                                                             return cstring ("Can't make ") + fp;
@@ -1869,7 +1874,7 @@
                             if (!fileSystem.mounted ())                     return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
                             if (fp == "" || !fileSystem.isDirectory (fp))   return (const char *) "Invalid directory name";
-                            if (!__userHasRightToAccessDirectory__ (fp))  return (const char *) "Access denyed";
+                            if (!__userHasRightToAccessDirectory__ (fp))    return (const char *) "Access denyed";
                             if (fp == __homeDir__)                          return "You can't remove your home directory";
                             if (fp == __workingDir__)                       return "You can't remove your working directory";
                     
@@ -1881,7 +1886,7 @@
                             if (!fileSystem.mounted ())                     return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp = fileSystem.makeFullPath (directoryName, __workingDir__);
                             if (fp == "" || !fileSystem.isDirectory (fp))   return (const char *) "Invalid directory name";
-                            if (!__userHasRightToAccessDirectory__ (fp))  return (const char *) "Access denyed";
+                            if (!__userHasRightToAccessDirectory__ (fp))    return (const char *) "Access denyed";
                     
                             strcpy (__workingDir__, fp);                    return cstring ("Your working directory is ") + fp;
                         }
@@ -1899,10 +1904,10 @@
                             if (!fileSystem.mounted ())                 return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp1 = fileSystem.makeFullPath (srcFileName, __workingDir__);
                             if (fp1 == "")                              return "Invalid source file name";
-                            if (!__userHasRightToAccessFile__ (fp1))  return "Access to source file denyed";
+                            if (!__userHasRightToAccessFile__ (fp1))    return "Access to source file denyed";
                             cstring fp2 = fileSystem.makeFullPath (dstFileName, __workingDir__);
                             if (fp2 == "")                              return "Invalid destination file name";
-                            if (!__userHasRightToAccessFile__ (fp1))  return "Access destination file denyed";
+                            if (!__userHasRightToAccessFile__ (fp1))    return "Access destination file denyed";
 
                             File f1, f2;
                             cstring retVal = "File copied";
@@ -1917,11 +1922,11 @@
                                 int bytesReadThisTime = f1.read ((uint8_t *) buff, sizeof (buff));
                                 if (bytesReadThisTime == 0) break; // finished, success
                                 bytesReadTotal += bytesReadThisTime;
-                                __diskTraffic__.bytesRead += bytesReadThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                fileSystem.diskTraffic.bytesRead += bytesReadThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                 int bytesWrittenThisTime = f2.write ((uint8_t *) buff, bytesReadThisTime);
                                 bytesWrittenTotal += bytesWrittenThisTime;
-                                __diskTraffic__.bytesWritten += bytesWrittenThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                fileSystem.diskTraffic.bytesWritten += bytesWrittenThisTime; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                 if (bytesWrittenThisTime != bytesReadThisTime) { retVal = cstring ("Can't write ") + fp2; break; }
                             } while (true);
@@ -1931,25 +1936,25 @@
                         }
 
                         cstring __rm__ (char *fileName) {
-                            if (!fileSystem.mounted ())               return (const char *) "File system not mounted. You may have to format flash disk first";
+                            if (!fileSystem.mounted ())                 return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
-                            if (fp == "" || !fileSystem.isFile (fp))  return "Invalid file name";
-                            if (!__userHasRightToAccessFile__ (fp)) return (const char *) "Access denyed";
+                            if (fp == "" || !fileSystem.isFile (fp))    return "Invalid file name";
+                            if (!__userHasRightToAccessFile__ (fp))     return (const char *) "Access denyed";
 
-                            if (fileSystem.deleteFile (fp))           return fp + " deleted";
-                            else                                      return cstring ("Can't delete ") + fp;
+                            if (fileSystem.deleteFile (fp))             return fp + " deleted";
+                            else                                        return cstring ("Can't delete ") + fp;
                         }
 
                         // not really a vi but small and simple text editor
                         cstring __vi__ (char *fileName) {
                             // a good reference for telnet ESC codes: https://en.wikipedia.org/wiki/ANSI_escape_code
                             // and: https://docs.microsoft.com/en-us/windows/console/console-virtual-terminal-sequences
-                            if (!fileSystem.mounted ())               return (const char *) "File system not mounted. You may have to format flash disk first";
+                            if (!fileSystem.mounted ())                 return (const char *) "File system not mounted. You may have to format flash disk first";
 
-                            if (!fileSystem.mounted ())               return (const char *) "File system not mounted. You may have to format flash disk first";
+                            if (!fileSystem.mounted ())                 return (const char *) "File system not mounted. You may have to format flash disk first";
                             cstring fp = fileSystem.makeFullPath (fileName, __workingDir__);
-                            if (fp == "")                             return "Invalid file name";
-                            if (!__userHasRightToAccessFile__ (fp)) return (const char *) "Access denyed";
+                            if (fp == "")                               return "Invalid file name";
+                            if (!__userHasRightToAccessFile__ (fp))     return (const char *) "Access denyed";
                     
                             // 1. create a new file one if it doesn't exist (yet)
                             if (!fileSystem.isFile (fp)) {
@@ -1961,69 +1966,69 @@
                     
                             // 2. read the file content into internal vi data structure (lines of Strings)
                             #define MAX_LINES 9999 // there are 4 places reserved for line numbers on client screen, so MAX_LINES can go up to 9999
-                            #define LEAVE_FREE_HEAP 32 * 1024 // always keep at least 32 KB free to other processes so vi command doesn't block everything else from working
+                            #define LEAVE_FREE_HEAP 6 * 1024 // always keep at least 6 KB free to other processes so vi command doesn't block everything else from working
                             vector<String> lines; // vector of Arduino Strings
                             // lines.reserve (1000);
                             bool dirty = false;
                             {
-                                xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                                xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
                                 File f = fileSystem.open (fp, "r");
                                 if (f) {
                                     if (!f.isDirectory ()) {
                                         while (f.available ()) { 
                                             if (ESP.getFreeHeap () < LEAVE_FREE_HEAP) { // always leave at least 32 KB free for other things that may be running on ESP32
                                                 f.close (); 
-                                                xSemaphoreGive (__tcpServerSemaphore__);
+                                                xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                 return "Out of memory"; 
                                             }
                                             char c = (char) f.read ();
 
-                                            __diskTraffic__.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                            fileSystem.diskTraffic.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                             switch (c) {
                                                 case '\r':  break; // ignore
                                                 case '\n':  if (ESP.getFreeHeap () < LEAVE_FREE_HEAP || lines.push_back ("")) { // always leave at least 32 KB free for other things that may be running on ESP32
                                                               f.close (); 
-                                                              xSemaphoreGive (__tcpServerSemaphore__);
+                                                              xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                               return fp + " is too long. Out of memory"; 
                                                             }
                                                             if (lines.size () >= MAX_LINES) { 
                                                               f.close (); 
-                                                              xSemaphoreGive (__tcpServerSemaphore__); 
+                                                              xSemaphoreGiveRecursive (__tcpServerSemaphore__); 
                                                               return fp + " has too many lines for this simple text editor"; 
                                                             }
                                                             break; 
                                                 case '\t':  if (!lines.size ()) 
                                                                 if (lines.push_back ("")) {
                                                                     f.close ();
-                                                                    xSemaphoreGive (__tcpServerSemaphore__);
+                                                                    xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                                     return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
                                                                 }
                                                             if (!lines [lines.size () - 1].concat ("    ")) {
                                                                   f.close ();
-                                                                  xSemaphoreGive (__tcpServerSemaphore__);
+                                                                  xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                                   return "Out of memory"; // treat tab as 4 spaces, check success of concatenation
                                                             }
                                                             break;
                                                 default:    if (!lines.size ()) 
                                                                 if (lines.push_back ("")) {
                                                                     f.close ();
-                                                                    xSemaphoreGive (__tcpServerSemaphore__);
+                                                                    xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                                     return "Out of memory"; // vi editor (the code below) needs at least 1 (empty) line where text can be entered
                                                                 }
                                                             if (!lines [lines.size () - 1].concat (c)) {
                                                                 f.close ();
-                                                                xSemaphoreGive (__tcpServerSemaphore__);
+                                                                xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                                 return "Out of memory"; // check success of concatenation
                                                             }
                                                             break;
                                             }
                                         }
                                         f.close ();
-                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                     } else {
                                         f.close ();
-                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                         return "Can't edit a directory";
                                     }
                                 } else {
@@ -2036,7 +2041,6 @@
                             // 3. discard any already pending characters from client
                             while (peekChar ()) 
                                 recvChar ();
-
                             // 4. get information about client window size
                             if (__clientWindowWidth__) { // we know that client reports its window size, ask for latest information (the user might have resized the window since beginning of telnet session)
                                 if (sendString ((char *) IAC DO NAWS) <= 0) return "";
@@ -2044,18 +2048,13 @@
                             } else { // just assume the defaults and hope that the result will be OK
                               __clientWindowWidth__ = 80; 
                               __clientWindowHeight__ = 24;   
-                            }
+                            }                
                             // wait for client's response
                             {
                                 char c;
                                 while (peek (&c, 1) == 0)
                                     delay (10);
                             }
-                            /*
-                            delay (250);
-                            while (peekChar ()) 
-                                recvChar ();
-                            */
                             if (__clientWindowWidth__ < 44 || __clientWindowHeight__ < 5) return "Clinent telnet window is too small for vi";
 
                             // 5. edit 
@@ -2175,7 +2174,7 @@
                                           // save changes to fp
                                           {
                                               bool e = false;
-                                              xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
+                                              xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY); // Little FS is not very good at handling multiple files in multi-tasking environment
                                                   File f = fileSystem.open (fp, "w");
                                                   if (f) {
                                                       if (!f.isDirectory ()) {
@@ -2187,12 +2186,12 @@
                                                                   e = true; 
                                                                   break; 
                                                               }
-                                                              __diskTraffic__.bytesWritten += toWrite; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                                              fileSystem.diskTraffic.bytesWritten += toWrite; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
                                                           }
                                                       }
                                                       f.close ();
                                                   }
-                                              xSemaphoreGive (__tcpServerSemaphore__);
+                                              xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                               if (e) { message = " Could't save changes "; } else { message = " Changes saved "; dirty = false; }
                                           }
                                           break;
@@ -2397,8 +2396,9 @@
 
             telnetServer_t (String (*telnetCommandHandlerCallback) (int argc, char *argv [], telnetConnection_t *tcn) = NULL, // telnetCommandHandlerCallback function provided by calling program
                             int serverPort = 23,                                                                              // Telnet server port
-                            bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL                                  // a reference to callback function that will be celled when new connection arrives 
-                           ) : tcpServer_t (serverPort, firewallCallback) {
+                            bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL,                                 // a reference to callback function that will be celled when new connection arrives 
+                            bool runListenerInItsOwnTask = true                                                               // a calling program may repeatedly call accept itself to save some memory tat listener task would use
+                           ) : tcpServer_t (serverPort, firewallCallback, runListenerInItsOwnTask) {
                 // create a local copy of parameters for later use
                 __telnetCommandHandlerCallback__ = telnetCommandHandlerCallback;
 
@@ -2412,14 +2412,17 @@
             }
 
             tcpConnection_t *__createConnectionInstance__ (int connectionSocket, char *clientIP, char *serverIP) override {
+                #define telnetServiceUnavailableReply (const char *) "Telnet service is currently unavailable.\r\nFree heap: %u bytes\r\nFree heap in one piece: %u bytes\r\n"
 
                 telnetConnection_t *connection = new (std::nothrow) telnetConnection_t (connectionSocket, clientIP, serverIP, __telnetCommandHandlerCallback__);
 
                 if (!connection) {
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[telnetServer] can't create connection instance, out of memory?";
+                        dmesgQueue << (const char *) "[telnetServer] " << "can't create connection instance, out of memory";
                     #endif
-                    send (connectionSocket, telnetServiceUnavailableReply, strlen (telnetServiceUnavailableReply), 0);
+                    char s [128];
+                    sprintf (s, telnetServiceUnavailableReply, esp_get_free_heap_size (), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
+                    send (connectionSocket, s, strlen (s), 0);
                     close (connectionSocket); // normally tcpConnection would do this but if it is not created we have to do it here since the connection was not created
                     return NULL;
                 } 
@@ -2428,32 +2431,36 @@
                     #ifdef __DMESG__
                         dmesgQueue << "[telnetConn] setsockopt error: " << errno << strerror (errno);
                     #endif
-                    connection->sendString (telnetServiceUnavailableReply);
+                    char s [128];
+                    sprintf (s, telnetServiceUnavailableReply, esp_get_free_heap_size (), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
+                    connection->sendString (s);
                     delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
                     return NULL;
                 } 
 
                 if (pdPASS != xTaskCreate ([] (void *thisInstance) {
                                                                         telnetConnection_t* ths = (telnetConnection_t *) thisInstance; // get "this" pointer
-
-                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                        xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
                                                                             __runningTcpConnections__ ++;
-                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
 
                                                                         ths->__runConnectionTask__ ();
 
-                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                        xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
                                                                             __runningTcpConnections__ --;
-                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
 
                                                                         delete ths;
                                                                         vTaskDelete (NULL); // it is connection's responsibility to close itself
                                                                     }
                                             , "telnetConn", TELNET_CONNECTION_STACK_SIZE, connection, tskNORMAL_PRIORITY, NULL)) {
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[telnetServer] can't create connection task, out of memory?";
+                        dmesgQueue << (const char *) "[telnetServer] " << "can't create connection task, out of memory";
                     #endif
-                    connection->sendString (telnetServiceUnavailableReply);
+
+                    char s [128];
+                    sprintf (s, telnetServiceUnavailableReply, esp_get_free_heap_size (), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
+                    connection->sendString (s);
                     delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
                     return NULL;
                 }
@@ -2461,9 +2468,23 @@
                 return NULL; // success, but don't return connection, since it may already been closed and destructed by now
             }
 
+            // accept any connection, the client will get notified in __createConnectionInstance__ if there arn't enough resources
+            inline tcpConnection_t *accept () __attribute__((always_inline)) { return tcpServer_t::accept (); }
+            /*
+            tcpConnection_t *accept () { 
+                if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) > TELNET_CONNECTION_STACK_SIZE && esp_get_free_heap_size () > TELNET_CONNECTION_STACK_SIZE + sizeof (telnetConnection_t)) 
+                    return tcpServer_t::accept (); 
+                else // do no accept new connection if there is not enough memory left to handle it
+                    return NULL;
+            }
+            */
+
+
     };
+
 
     // declare static member outside of class definition
     UBaseType_t telnetServer_t::telnetConnection_t::__lastHighWaterMark__ = TELNET_CONNECTION_STACK_SIZE;
+
 
 #endif

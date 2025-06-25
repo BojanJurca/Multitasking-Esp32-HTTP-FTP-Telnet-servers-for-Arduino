@@ -4,7 +4,7 @@
 
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
 
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
     Classes implemented/used in this module:
 
@@ -58,9 +58,6 @@
 
     #ifndef __NETWK__
 
-        #define EAGAIN 11
-        #define ENAVAIL 119
-
         // missing gai_strerror function
         #include <lwip/netdb.h>
         const char *gai_strerror (int err) {
@@ -90,7 +87,6 @@
 
 
         public:
-
 
             tcpClient_t (const char *serverName, int serverPort, long connectionTimeout) : tcpConnection_t () {
 
@@ -230,5 +226,6 @@
             inline const char *errText () __attribute__((always_inline)) { return __errText__; }
 
     };
+
 
 #endif

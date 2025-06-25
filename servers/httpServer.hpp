@@ -4,7 +4,7 @@
   
     This file is part of Multitasking Esp32 HTTP FTP http servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-http-servers-for-Arduino
   
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
 
     Classes implemented/used in this module:
@@ -121,7 +121,7 @@
     // ----- TUNNING PARAMETERS -----
 
     #define HTTP_SERVER_HOME_DIRECTORY "/var/www/html/"         // home directory path should always end with '/'
-    #define HTTP_CONNECTION_STACK_SIZE (8 * 1024 + 256)         // TCP connections' stack size
+    #define HTTP_CONNECTION_STACK_SIZE (8 * 1024)               // a good first estimate how to set this parameter would be to always leave at least 1 KB of each httpConnection stack unused
     #define HTTP_BUFFER_SIZE 1440                               // reading and temporary keeping HTTP requests, buffer for constructing HTTP reply - 1440 is the largest payload that fits into one packet: MTU = 1500, 20 bytes are used for TCP header and 40 for IPv6 header (for IPv4 sligltly less, but we want a general solution)
     #define HTTP_CONNECTION_TIME_OUT 5                          // 5 s, 0 for infinite
     #define HTTP_REPLY_STATUS_MAX_LENGTH 32                     // only first 3 characters are important
@@ -143,7 +143,7 @@
 
     #define reply400 "HTTP/1.0 400 Bad request\r\nConnection: close\r\nContent-Length:34\r\n\r\nFormat of HTTP request is invalid."
     #define reply404 "HTTP/1.0 404 Not found\r\nConnection: close\r\nContent-Length:10\r\n\r\nNot found."
-    #define reply503 "HTTP/1.0 503 Service unavailable\r\nConnection: close\r\nContent-Length:39\r\n\r\nHTTP server is not available right now."
+    #define reply503 "HTTP/1.0 503 Service unavailable\r\nConnection: close\r\nRetry-After: 3\r\nContent-Length:40\r\n\r\nHTTP service is not available right now."
     #define reply507 "HTTP/1.0 507 Insuficient storage\r\nConnection: close\r\nContent-Length:41\r\n\r\nThe buffers of HTTP server are too small."
 
 
@@ -247,17 +247,21 @@
                     char *getHttpRequest () { return __httpRequestAndReplyBuffer__; }
 
                     cstring getHttpRequestHeaderField (const char *fieldName) { // HTTP header fields are in format \r\nfieldName: fieldValue\r\n
-                        char *p = stristr (__httpRequestAndReplyBuffer__, fieldName); 
+                        char *p = strstr (__httpRequestAndReplyBuffer__, fieldName);
                         if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == '\n' && *(p + strlen (fieldName)) == ':') { // p points to fieldName in HTTP request
-                            p += strlen (fieldName) + 1; while (*p == ' ') p++; // p points to field value in HTTP request
-                            cstring s; while (*p >= ' ') s += *(p ++);
+                            p += strlen (fieldName) + 1; 
+                            while (*p == ' ') 
+                                p++; // p points to field value in HTTP request
+                            cstring s; 
+                            while (*p >= ' ') 
+                                s += *(p ++);
                             return s;
                         }
                         return "";
                     }
 
                     cstring getHttpRequestCookie (const char *cookieName) { // cookies are passed from browser to http server in "cookie" HTTP header field
-                        char *p = stristr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
+                        char *p = strstr (__httpRequestAndReplyBuffer__, (char *) "\nCookie:"); // find cookie field name in HTTP header          
                         if (p) {
                             p = strstr (p, cookieName); // find cookie name in HTTP header
                             if (p && p != __httpRequestAndReplyBuffer__ && *(p - 1) == ' ' && *(p + strlen (cookieName)) == '=') {
@@ -502,6 +506,7 @@
                                                                     #ifdef __DMESG__
                                                                         dmesgQueue << "[webSocket] buffer too small";
                                                                     #endif
+                                                                    Serial.println ("[webSocket] buffer too small");
                                                                     return -1;
                                                                 }
                                                                 __recvFrameState__ = READING_PAYLOAD;
@@ -614,17 +619,18 @@
                                                             dmesgQueue << (const char *) "[httpConn] buffer too small for " << __httpRequestAndReplyBuffer__;
                                                         #endif
                                                         Serial.print ((const char *) "[httpConn] buffer too small for "); Serial.println (__httpRequestAndReplyBuffer__);
+                                                        tcpConnection_t::sendString (reply507);
                                                         return;
                                 default:                break; // continue
                             }
 
                             // connection: keep-alive?
-                            keepAlive = (stristr (__httpRequestAndReplyBuffer__, "CONNECTION: KEEP-ALIVE") != NULL);
+                            keepAlive = (strstr (__httpRequestAndReplyBuffer__, "Connection: keep-alive") != NULL);
 
                             // 2. is it a websocket request?
-                            if (stristr (__httpRequestAndReplyBuffer__, (char *) "UPGRADE: WEBSOCKET")) {
+                            if (strstr (__httpRequestAndReplyBuffer__, (char *) "Upgrade: websocket")) {
 
-                                // a. change timeout for WebSOcket
+                                // a. change timeout for WebSocket
                                 if (setTimeout (WEB_SESSION_TIME_OUT) < 0) {
                                     #ifdef __DMESG__
                                         dmesgQueue << (const char *) "[httpConn] setsockopt error: " << errno << " " << strerror (errno);
@@ -643,7 +649,7 @@
                                 __sendFrameBuffer__ = __recvFrameBuffer__ + HTTP_WS_FRAME_MAX_SIZE;
 
                                 // c. do the handshake with the browser so it would consider webSocket connection established
-                                char *i = stristr (__httpRequestAndReplyBuffer__, (char *) "SEC-WEBSOCKET-KEY: ");
+                                char *i = strstr (__httpRequestAndReplyBuffer__, (char *) "Sec-WebSocket-Key: ");
                                 if (i) {             
                                     i += 19;
                                     char *j = strstr (i, "\r\n");
@@ -717,7 +723,7 @@
                             if (httpReplyContent != "") {
 
                                 // if content-type was not provided with __httpRequestHandlerCallback__ try guessing what it is
-                                if (!stristr (__httpReplyHeader__, "CONTENT-TYPE")) { 
+                                if (!strstr (__httpReplyHeader__, "Content-Type")) { 
                                     if (stristr ((char *) httpReplyContent.c_str (), "<HTML")) {
                                         setHttpReplyHeaderField ("Content-Type", "text/html");
                                     } else if (strstr ((char *) httpReplyContent.c_str (), "{")) {
@@ -728,9 +734,11 @@
                                     }
                                 }
                                 if (__httpReplyHeader__.errorFlags ()) {
+
                                     #ifdef __DMESG__
-                                        dmesgQueue << (const char *) "[httpConn] buffer too small";
+                                        dmesgQueue << (const char *) "[httpConn] header reply buffer too small";
                                     #endif
+                                    Serial.print ((const char *) "[httpConn] reply header buffer too small\n");
                                     tcpConnection_t::sendString (reply507);
                                     return;
                                 }
@@ -755,6 +763,7 @@
                                 //    sendAll (ths->__connectionSocket__, reply507, HTTP_CONNECTION_TIME_OUT);
                                 //    goto endOfConnection;
                                 // }
+
                                 unsigned long contentBytesToSendThisTime = min ((unsigned long) httpReplyContent.length (), HTTP_BUFFER_SIZE - httpReplyHeaderLen);
                                 unsigned long contentBytesSentTotal = 0;
                                 memcpy (&__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], (char *) httpReplyContent.c_str (), contentBytesToSendThisTime);
@@ -775,6 +784,8 @@
                             }
 
                             // 4. if the request is a file name
+                            bool browserAcceptsGzip = (getHttpRequestHeaderField ("Accept-Encoding").indexOf ("gzip") >= 0);
+
                             #ifdef __FILE_SYSTEM__
                                 if (fileSystem.mounted ()) {
                                     if (strstr (__httpRequestAndReplyBuffer__.c_str (), "GET ") == __httpRequestAndReplyBuffer__.c_str ()) {
@@ -785,45 +796,61 @@
                                             cstring fileName (__httpRequestAndReplyBuffer__.c_str () + 4);
                                             if (fileName == "" || fileName == "/") fileName = "/index.html";
                                             fileName = cstring (HTTP_SERVER_HOME_DIRECTORY) + (fileName.c_str () + 1); // HTTP_SERVER_HOME_DIRECTORY always ends with /
-                                            // if Content-type was not provided during __httpRequestHandlerCallback__ try guessing what it is
-                                            if (!stristr ((char *) __httpReplyHeader__.c_str (), (char *) "CONTENT-TYPE")) { 
-                                                     if (fileName.endsWith (".bmp"))                                setHttpReplyHeaderField ("Content-Type", "image/bmp");
-                                                else if (fileName.endsWith (".css"))                                setHttpReplyHeaderField ("Content-Type", "text/css");
-                                                else if (fileName.endsWith (".csv"))                                setHttpReplyHeaderField ("Content-Type", "text/csv");
-                                                else if (fileName.endsWith (".gif"))                                setHttpReplyHeaderField ("Content-Type", "image/gif");
-                                                else if (fileName.endsWith (".htm") || fileName.endsWith (".html")) setHttpReplyHeaderField ("Content-Type", "text/html");
-                                                else if (fileName.endsWith (".jpg") || fileName.endsWith (".jpeg")) setHttpReplyHeaderField ("Content-Type", "image/jpeg");
-                                                else if (fileName.endsWith (".js"))                                 setHttpReplyHeaderField ("Content-Type", "text/javascript");
-                                                else if (fileName.endsWith (".json"))                               setHttpReplyHeaderField ("Content-Type", "application/json");
-                                                else if (fileName.endsWith (".mpeg"))                               setHttpReplyHeaderField ("Content-Type", "video/mpeg");
-                                                else if (fileName.endsWith (".pdf"))                                setHttpReplyHeaderField ("Content-Type", "application/pdf");
-                                                else if (fileName.endsWith (".png"))                                setHttpReplyHeaderField ("Content-Type", "image/png");
-                                                else if (fileName.endsWith (".tif") || fileName.endsWith (".tiff")) setHttpReplyHeaderField ("Content-Type", "image/tiff");
-                                                else if (fileName.endsWith (".txt"))                                setHttpReplyHeaderField ("Content-Type", "text/plain");
+                                            // if Content-type was not provided in __httpRequestHandlerCallback__ try guessing what it is
+                                            if (!strstr ((char *) __httpReplyHeader__.c_str (), (char *) "Content-Type")) { 
+                                                     if (fileName.endsWith (".bmp"))                                        setHttpReplyHeaderField ("Content-Type", "image/bmp");
+                                                else if (fileName.endsWith (".css"))                                        setHttpReplyHeaderField ("Content-Type", "text/css");
+                                                else if (fileName.endsWith (".csv"))                                        setHttpReplyHeaderField ("Content-Type", "text/csv");
+                                                else if (fileName.endsWith (".gif"))                                        setHttpReplyHeaderField ("Content-Type", "image/gif");
+                                                else if (fileName.endsWith (".htm") || fileName.endsWith (".html"))         setHttpReplyHeaderField ("Content-Type", "text/html");
+                                                else if (fileName.endsWith (".htm.gz") || fileName.endsWith (".html.gz"))   setHttpReplyHeaderField ("Content-Type", "text/html");
+                                                else if (fileName.endsWith (".jpg") || fileName.endsWith (".jpeg"))         setHttpReplyHeaderField ("Content-Type", "image/jpeg");
+                                                else if (fileName.endsWith (".js"))                                         setHttpReplyHeaderField ("Content-Type", "text/javascript");
+                                                else if (fileName.endsWith (".json"))                                       setHttpReplyHeaderField ("Content-Type", "application/json");
+                                                else if (fileName.endsWith (".mpeg"))                                       setHttpReplyHeaderField ("Content-Type", "video/mpeg");
+                                                else if (fileName.endsWith (".pdf"))                                        setHttpReplyHeaderField ("Content-Type", "application/pdf");
+                                                else if (fileName.endsWith (".png"))                                        setHttpReplyHeaderField ("Content-Type", "image/png");
+                                                else if (fileName.endsWith (".tif") || fileName.endsWith (".tiff"))         setHttpReplyHeaderField ("Content-Type", "image/tiff");
+                                                else if (fileName.endsWith (".txt"))                                        setHttpReplyHeaderField ("Content-Type", "text/plain");
                                                 // ... add more if needed but Contet-Type can often be omitted without problems ...
                                             }
 
                                             // serving files works better if served one at a time
-                                            if (HTTP_CONNECTION_TIME_OUT == 0) {
-                                                xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                            xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
+
+                                            File f;
+                                            // check if there is a compressed .gz file available
+                                            if (fileName.endsWith (".gz")) {
+                                                setHttpReplyHeaderField ("Content-Encoding", "gzip");
+                                                f = fileSystem.open (fileName, "r");
                                             } else {
-                                                if (xSemaphoreTake (__tcpServerSemaphore__, pdMS_TO_TICKS (HTTP_CONNECTION_TIME_OUT * 1000)) != pdTRUE) {
-                                                    tcpConnection_t::sendString (reply503);
-                                                    return;
+                                                // if the browser accepts gzip
+                                                if (browserAcceptsGzip) {
+                                                    f = fileSystem.open (fileName + ".gz", "r");
+                                                    if (f) {
+                                                        fileName += ".gz";
+                                                        setHttpReplyHeaderField ("Content-Encoding", "gzip");
+                                                    } else {
+                                                        // no, open uncompressed fileName
+                                                        f = fileSystem.open (fileName, "r");
+                                                    }
+                                                } else {
+                                                    // no, open uncompressed fileName
+                                                    f = fileSystem.open (fileName, "r");
                                                 }
                                             }
 
-                                            File f = fileSystem.open (fileName, "r");           
                                             if (f) {
-                                                if (!f.isDirectory ()) {
-                                                    __diskTraffic__.bytesRead += f.size (); // asume the whole file will be read - update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                                if (!f.isDirectory ()) {                                  
+                                                    fileSystem.diskTraffic.bytesRead += f.size (); // asume the whole file will be read - update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                                     if (__httpReplyHeader__.errorFlags ()) {
-                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                                         f.close ();
                                                         #ifdef __DMESG__
-                                                            dmesgQueue << "[httpConn] __httpReplyHeader__ too small for HTTP reply header";
+                                                            dmesgQueue << "[httpConn] reply header buffer too small";
                                                         #endif
+                                                        Serial.print ((const char *) "[httpConn] reply header buffer too small\n");
                                                         tcpConnection_t::sendString (reply507);
                                                         return;
                                                     }
@@ -852,11 +879,15 @@
 
                                                     int bytesToReadThisTime = min (httpReplyContentLen, HTTP_BUFFER_SIZE - httpReplyHeaderLen); 
                                                     int bytesReadThisTime = f.read ((uint8_t *) &__httpRequestAndReplyBuffer__ [httpReplyHeaderLen], bytesToReadThisTime);
+
                                                     __httpRequestAndReplyBuffer__ [HTTP_BUFFER_SIZE] = 0;
-                                                    if (!bytesToReadThisTime || tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime) <= 0) {
+                                                    if (tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, httpReplyHeaderLen + bytesReadThisTime) <= 0) {
                                                         f.close ();
-                                                        xSemaphoreGive (__tcpServerSemaphore__);
-                                                        tcpConnection_t::sendString (reply507);                                                   
+                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
+                                                        #ifdef __DMESG__
+                                                            dmesgQueue << (const char *) "[httpConn] send failed";
+                                                        #endif
+                                                        Serial.print ((const char *) "[httpConn] send failed");
                                                         return;
                                                     }
                                             
@@ -864,24 +895,39 @@
                                                     while (bytesSent < httpReplyContentLen) {
                                                         bytesToReadThisTime = min (httpReplyContentLen - bytesSent, (unsigned long) HTTP_BUFFER_SIZE);
                                                         bytesReadThisTime = f.read ((uint8_t *) &__httpRequestAndReplyBuffer__ [0], (unsigned long) bytesToReadThisTime);
-                                                        delay (2); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
-                                                        if (!bytesToReadThisTime || tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, bytesReadThisTime) <= 0) {
+
+                                                        delay (10); // WiFi STAtion sometimes disconnects at heavy load - maybe giving it some time would make things better? 
+                                                        if (!bytesReadThisTime) {
                                                             f.close ();
-                                                            xSemaphoreGive (__tcpServerSemaphore__);
-                                                            tcpConnection_t::sendString (reply507);                                                         
+                                                            xSemaphoreGiveRecursive (__tcpServerSemaphore__);
+                                                            #ifdef __DMESG__
+                                                                dmesgQueue << (const char *) "[httpConn] can't read " << fileName;
+                                                            #endif
+                                                            Serial.print ((const char *) "[httpConn] can't read "); Serial.print (bytesToReadThisTime); Serial.print (" bytes of "); Serial.println (fileName);
+                                                            return;
+                                                        }
+                                        
+                                                        if (tcpConnection_t::sendBlock (__httpRequestAndReplyBuffer__, bytesReadThisTime) <= 0) {
+                                                            f.close ();
+                                                            xSemaphoreGiveRecursive (__tcpServerSemaphore__);
+                                                            #ifdef __DMESG__
+                                                                dmesgQueue << (const char *) "[httpConn] can't send " << fileName;
+                                                            #endif
+                                                            Serial.print ((const char *) "[httpConn] can't send "); Serial.print (bytesReadThisTime); Serial.printf (" bytes of "); Serial.println (fileName);
                                                             return;
                                                         }
                                                         bytesSent += bytesReadThisTime; // already sent
                                                     }
                                                     // HTTP reply sent
                                                     f.close ();
-                                                    xSemaphoreGive (__tcpServerSemaphore__);                                                   
+                                                    xSemaphoreGiveRecursive (__tcpServerSemaphore__);                                                   
                                                     goto nextHttpRequest;
                                                 } // if file is a file
                                                 f.close ();
+
                                             } // if file is open
 
-                                            xSemaphoreGive (__tcpServerSemaphore__);
+                                            xSemaphoreGiveRecursive (__tcpServerSemaphore__);
                                         }
                                     }
                                 }
@@ -906,7 +952,7 @@
                             // if we are running out of ESP32's resources we won't try to keep the connection alive, this would slow down the server a bit but it would let still it handle requests from different clients
                             if (getSocket () >= LWIP_SOCKET_OFFSET + MEMP_NUM_NETCONN - 2)  // running out of sockets
                                 return;
-                            if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < HTTP_CONNECTION_STACK_SIZE) // there is not a memory block large enough evailable to start a new task that would handle the connection
+                            if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) < 2 * HTTP_CONNECTION_STACK_SIZE) // there is not a memory block large enough evailable to start 2 new tasks that would handle the connection
                                 return;
 
                             // restore default values of member variables for the next HTTP request on this connection                              
@@ -941,8 +987,9 @@
             httpServer_t (String (*httpRequestHandlerCallback) (char *httpRequest, httpConnection_t *hcn) = NULL, // httpRequestHandlerCallback function provided by calling program
                           void (*wsRequestHandlerCallback) (char *httpRequest, webSocket_t *webSck) = NULL,       // wsRequestHandlerCallback function provided by calling program
                           int serverPort = 80,                                                                    // HTTP server port
-                          bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL                          // a reference to callback function that will be celled when new connection arrives 
-                         ) : tcpServer_t (serverPort, firewallCallback) {
+                          bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL,                       // a reference to callback function that will be celled when new connection arrives 
+                          bool runListenerInItsOwnTask = true                                                     // a calling program may repeatedly call accept itself to save some memory tat listener task would use
+                         ) : tcpServer_t (serverPort, firewallCallback, runListenerInItsOwnTask) {
                 // create a local copy of parameters for later use
                 __httpRequestHandlerCallback__ = httpRequestHandlerCallback;
                 __wsRequestHandlerCallback__ = wsRequestHandlerCallback;
@@ -992,12 +1039,10 @@
             }
 
             tcpConnection_t *__createConnectionInstance__ (int connectionSocket, char *clientIP, char *serverIP) override {
-
                 webSocket_t *connection = new (std::nothrow) webSocket_t (connectionSocket, clientIP, serverIP, __httpRequestHandlerCallback__, __wsRequestHandlerCallback__);
-
                 if (!connection) {
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[httpServer] can't create connection instance, out of memory?";
+                        dmesgQueue << (const char *) "[httpServer] " << "can't create connection instance, out of memory";
                     #endif
                     send (connectionSocket, reply503, strlen (reply503), 0);
                     close (connectionSocket); // normally tcpConnection would do this but if it is not created we have to do it here since the connection was not created
@@ -1011,31 +1056,32 @@
                     send (connectionSocket, reply503, strlen (reply503), 0);
                     delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
                     return NULL;
-                } 
+                }
 
                 if (pdPASS != xTaskCreate ([] (void *thisInstance) {
                                                                         httpConnection_t* ths = (httpConnection_t *) thisInstance; // get "this" pointer
 
-                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                        xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
                                                                             __runningTcpConnections__ ++;
-                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
 
                                                                         // DEBUG: cout << "httpConnection task started: " << (unsigned long) xTaskGetCurrentTaskHandle << ", currently running: " << __runningTcpConnections__ << endl;
 
                                                                         ths->__runConnectionTask__ ();
 
-                                                                        xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                        xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
                                                                             __runningTcpConnections__ --;
-                                                                        xSemaphoreGive (__tcpServerSemaphore__);
+                                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
 
-                                                                        // DEBUG: cout << "httpConnection task ended: " << (unsigned long) xTaskGetCurrentTaskHandle << ", currently running: " << __runningTcpConnections__ << endl;
+                                                                        // DEBUG: cout << " GG httpConnection task ended: " << (unsigned long) xTaskGetCurrentTaskHandle << ", currently running: " << __runningTcpConnections__ << endl;
 
                                                                         delete ths;
                                                                         vTaskDelete (NULL); // it is connection's responsibility to close itself
                                                                     }
                                             , "httpConn", HTTP_CONNECTION_STACK_SIZE, connection, tskNORMAL_PRIORITY, NULL)) {
+
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[httpServer] create connection task, out of memory?";
+                        dmesgQueue << (const char *) "[httpServer] " << "can't create connection task, out of memory";
                     #endif
                     send (connectionSocket, reply503, strlen (reply503), 0);
                     delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
@@ -1044,6 +1090,27 @@
             
                 return NULL; // success, but don't return connection, since it may already been closed and destructed by now
             }
+
+
+            // accept any connection, the client will get notified in __createConnectionInstance__ if there arn't enough resources
+            inline tcpConnection_t *accept () __attribute__((always_inline)) { return tcpServer_t::accept (); }
+            /*
+            tcpConnection_t *accept () { 
+                if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) > HTTP_CONNECTION_STACK_SIZE && esp_get_free_heap_size () > HTTP_CONNECTION_STACK_SIZE + sizeof (httpConnection_t)) {
+                    last = millis () - 1000;
+                    return tcpServer_t::accept (); 
+                } else {
+                    if (millis () - last > 1000) {
+                        last = millis ();
+                        return tcpServer_t::accept (); 
+                    }
+                }
+                if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) > HTTP_CONNECTION_STACK_SIZE && esp_get_free_heap_size () > HTTP_CONNECTION_STACK_SIZE + sizeof (httpConnection_t)) 
+                    return tcpServer_t::accept (); 
+                else // do no accept new connection if there is not enough memory left to handle it
+                    return NULL;
+            }
+            */
 
     };
 

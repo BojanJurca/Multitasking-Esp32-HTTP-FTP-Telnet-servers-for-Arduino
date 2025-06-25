@@ -1,58 +1,58 @@
 /*
- * keyValueDatabase.hpp for Arduino (ESP boards with flash disk)
- * 
- * This file is part of Key-value-database-for-Arduino: https://github.com/BojanJurca/Key-value-database-for-Arduino
- *
- * Key-value-database-for-Arduino may be used as a simple database with the following functions (see examples in BasicUsage.ino).
- * The functions are thread-safe:
- *
- *    - Insert (key, value)                                   - inserts a new key-value pair
- *
- *    - FindBlockOffset (key)                                 - searches (memory) Map for key
- *    - FindValue (key, optional block offset)                - searches (memory) Map for blockOffset connected to key and then it reads the value from (disk) data file (it works slightly faster if block offset is already known, such as during iterations)
- *
- *    - Update (key, new value, optional block offset)        - updates the value associated by the key (it works slightly faster if block offset is already known, such as during iterations)
- *    - Update (key, callback function, optional blockoffset) - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
- *
- *    - Upsert (key, new value)                               - update the value if the key already exists, else insert a new one
- *    - Upsert (key, callback function, default value)        - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
- *
- *    - Delete (key)                                          - deletes key-value pair identified by the key
- *    - Truncate                                              - deletes all key-value pairs
- *
- *    - Iterate                                               - iterate (list) through all the keys and their blockOffsets with an Iterator
- *
- *    - Lock                                                  - locks (takes the semaphore) to (temporary) prevent other taska accessing keyValueDatabase
- *    - Unlock                                                - frees the lock
- *
- * Data storage structure used for keyValueDatabase:
- *
- * (disk) keyValueDatabase consists of:
- *    - data file
- *    - (memory) Map that keep keys and pointers (offsets) to data in the data file
- *    - (memory) vector that keeps pointers (offsets) to free blocks in the data file
- *    - semaphore to synchronize (possible) multi-tasking accesses to keyValueDatabase
- *
- *    (disk) data file structure:
- *       - data file consists consecutive of blocks
- *       - Each block starts with int16_t number which denotes the size of the block (in bytes). If the number is positive the block is considered to be used
- *         with useful data, if the number is negative the block is considered to be deleted (free). Positive int16_t numbers can vary from 0 to 32768, so
- *         32768 is the maximum size of a single data block.
- *       - after the block size number, a key and its value are stored in the block (only if the block is beeing used).
- *
- *    (memory) Map structure:
- *       - the key is the same key as used for keyValueDatabase
- *       - the value is an offset to data file block containing the data, keyValueDatabase' value will be fetched from there. Data file offset is
- *         stored in uint32_t so maximum data file offest can theoretically be 4294967296, but ESP32 files can't be that large.
- *
- *    (memory) vector structure:
- *       - a free block list vector contains structures with:
- *            - data file offset (uint16_t) of a free block
- *            - size of a free block (int16_t)
- * 
- * October 10, 2024, Bojan Jurca
- *  
- */
+    keyValueDatabase.hpp for Arduino (ESP boards with flash disk)
+    
+    This file is part of Key-value-database-for-Arduino: https://github.com/BojanJurca/Key-value-database-for-Arduino
+
+    Key-value-database-for-Arduino may be used as a simple database with the following functions (see examples in BasicUsage.ino).
+    The functions are thread-safe:
+
+        - Insert (key, value)                                   - inserts a new key-value pair
+
+        - FindBlockOffset (key)                                 - searches (memory) Map for key
+        - FindValue (key, optional block offset)                - searches (memory) Map for blockOffset connected to key and then it reads the value from (disk) data file (it works slightly faster if block offset is already known, such as during iterations)
+
+        - Update (key, new value, optional block offset)        - updates the value associated by the key (it works slightly faster if block offset is already known, such as during iterations)
+        - Update (key, callback function, optional blockoffset) - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
+
+        - Upsert (key, new value)                               - update the value if the key already exists, else insert a new one
+        - Upsert (key, callback function, default value)        - if the calculation is made with existing value then this is prefered method, since calculation is performed while database is being loceks
+
+        - Delete (key)                                          - deletes key-value pair identified by the key
+        - Truncate                                              - deletes all key-value pairs
+
+        - Iterate                                               - iterate (list) through all the keys and their blockOffsets with an Iterator
+
+        - Lock                                                  - locks (takes the semaphore) to (temporary) prevent other taska accessing keyValueDatabase
+        - Unlock                                                - frees the lock
+
+    Data storage structure used for keyValueDatabase:
+
+    (disk) keyValueDatabase consists of:
+        - data file
+        - (memory) Map that keep keys and pointers (offsets) to data in the data file
+        - (memory) vector that keeps pointers (offsets) to free blocks in the data file
+        - semaphore to synchronize (possible) multi-tasking accesses to keyValueDatabase
+
+    (disk) data file structure:
+        - data file consists consecutive of blocks
+        - Each block starts with int16_t number which denotes the size of the block (in bytes). If the number is positive the block is considered to be used
+          with useful data, if the number is negative the block is considered to be deleted (free). Positive int16_t numbers can vary from 0 to 32768, so
+          32768 is the maximum size of a single data block.
+        - after the block size number, a key and its value are stored in the block (only if the block is beeing used).
+
+    (memory) Map structure:
+        - the key is the same key as used for keyValueDatabase
+        - the value is an offset to data file block containing the data, keyValueDatabase' value will be fetched from there. Data file offset is
+          stored in uint32_t so maximum data file offest can theoretically be 4294967296, but ESP32 files can't be that large.
+
+    (memory) vector structure:
+        - a free block list vector contains structures with:
+        - data file offset (uint16_t) of a free block
+        - size of a free block (int16_t)
+ 
+    May 22, 2025, Bojan Jurca
+  
+*/
 
 
 #ifndef __KEY_VALUE_DATABASE_HPP__
@@ -114,12 +114,8 @@
             
             signed char Open (const char *dataFileName) {
 
-size_t shb = ESP.getFreeHeap ();
-
-                // log_i ("(dataFileName)");
                 Lock ();
                 if (__dataFile__) {
-                    // log_e ("data already loaded error: err_cant_do_it_now");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_cant_do_it_now;
                     #endif
@@ -139,7 +135,6 @@ size_t shb = ESP.getFreeHeap ();
                           __dataFile__ = fileSystem.open (dataFileName, "r+"); // , false);
                     } else {
                         Unlock (); 
-                        // log_e ("error opening the data file: err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -151,7 +146,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (__dataFile__.isDirectory ()) {
                     __dataFile__.close ();
-                    // log_e ("error data file shouldn't be a directory: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -170,7 +164,6 @@ size_t shb = ESP.getFreeHeap ();
 
                     signed char e = __readBlock__ (blockSize, key, value, (uint32_t) blockOffset, true);
                     if (e) { // != OK
-                        // log_e ("error reading the data block: err_file_io");
                         __dataFile__.close ();
                         Unlock (); 
                         return e;
@@ -178,7 +171,6 @@ size_t shb = ESP.getFreeHeap ();
                     if (blockSize > 0) { // block containining the data -> insert into Map
                         signed char e = Map<keyType, uint32_t>::insert (key, (uint32_t) blockOffset);
                         if (e) { // != OK
-                            // log_e ("keyValuePairs.insert failed failed");
                             __dataFile__.close ();
                             __errorFlags__ |= Map<keyType, uint32_t>::errorFlags ();
                             Unlock (); 
@@ -188,7 +180,6 @@ size_t shb = ESP.getFreeHeap ();
                         blockSize = (int16_t) -blockSize;
                         signed char e = __freeBlocksList__.push_back ( {(uint32_t) blockOffset, blockSize} );
                         if (e) { // != OK
-                            // log_e ("freeeBlockList.push_back failed failed");
                             __dataFile__.close ();
                             __errorFlags__ |= __freeBlocksList__.errorFlags ();
                             Unlock (); 
@@ -200,14 +191,12 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 Unlock (); 
-                // log_i ("OK");
+
+                #ifdef __DMESG__
+                    dmesgQueue << (const char *) "[key-value database] " << dataFileName << " opened" << ", free heap left: " << esp_get_free_heap_size ();
+                #endif
 
                 return err_ok;
-            }
-
-            [[deprecated("Use Open (const char *) instead.")]]  
-            signed char loadData (const char *dataFileName) {
-                return Open (dataFileName);
             }
 
             void Close () {
@@ -246,9 +235,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Insert (keyType key, valueType value) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -258,7 +245,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -268,7 +254,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &value) {                                                                                 // ... check if parameter construction is valid
-                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -278,7 +263,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 Lock (); 
                 if (__inIteration__) {
-                    // log_e ("not while iterating, error: err_cant_do_it_now");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_cant_do_it_now;
                     #endif
@@ -289,7 +273,6 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 1. get ready for writting into __dataFile__
-                // log_i ("step 1: calculate block size");
                 size_t dataSize = sizeof (int16_t); // block size information
                 size_t blockSize = dataSize;
                 if (is_same<keyType, String>::value) { // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
@@ -307,7 +290,6 @@ size_t shb = ESP.getFreeHeap ();
                     blockSize += sizeof (valueType);
                 }
                 if (blockSize > 32768) {
-                    // log_e ("block size > 32768, error: err_bad_alloc");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_bad_alloc;
                     #endif
@@ -317,7 +299,6 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 2. search __freeBlocksList__ for most suitable free block, if it exists
-                // log_i ("step 2: find most suitable free block if it already exists");
                 int freeBlockIndex = -1;
                 uint32_t minWaste = 0xFFFFFFFF;
                 for (int i = 0; i < __freeBlocksList__.size (); i ++) {
@@ -328,18 +309,14 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 3. reposition __dataFile__ pointer
-                // log_i ("step 3: reposition data file pointer");
                 uint32_t blockOffset;                
                 if (freeBlockIndex == -1) { // append data to the end of __dataFile__
-                    // log_i ("step 3a: appending new block at the end of data file");
                     blockOffset = __dataFileSize__;
                 } else { // writte data to free block in __dataFile__
-                    // log_i ("step 3b: writing new data to exiisting free block");
                     blockOffset = __freeBlocksList__ [freeBlockIndex].blockOffset;
                     blockSize = __freeBlocksList__ [freeBlockIndex].blockSize;
                 }
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                    // log_e ("seek error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -349,33 +326,26 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 4. update (memory) Map structure 
-                // log_i ("step 4: insert (key, blockOffset) into Map");
                 signed char e = Map<keyType, uint32_t>::insert (key, blockOffset);
                 if (e) { // != OK
-                    // log_e ("keyValuePairs.insert failed failed");
                     __errorFlags__ |= e;
                     Unlock (); 
                     return e;
                 }
 
                 // 5. construct the block to be written
-                // log_i ("step 5: construct data block");
                 byte *block = (byte *) malloc (blockSize);
                 if (!block) {
-                    // log_e ("malloc error, out of memory");
 
                     // 7. (try to) roll-back
-                    // log_i ("step 7: try to roll-back");
                     signed char e = Map<keyType, uint32_t>::erase (key);
                     if (e) { // != OK
-                        // log_e ("keyValuePairs.erase failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         __errorFlags__ |= e;
                         Unlock (); 
                         return e;
                     }
                     // roll-back succeded
-                    // log_e ("roll-back succeeded, returning error: err_bad_alloc");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_bad_alloc;
                     #endif
@@ -401,36 +371,28 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 6. write block to __dataFile__
-                // log_i ("step 6: write block to data file");
                 if (__dataFile__.write (block, blockSize) != blockSize) {
-                    // log_e ("write failed");
                     free (block);
 
                     // 9. (try to) roll-back
-                    // log_i ("step 9: try to roll-back");
                     if (__dataFile__.seek (blockOffset, SeekSet)) {
                         blockSize = (int16_t) -blockSize;
                         if (__dataFile__.write ((byte *) &blockSize, sizeof (blockSize)) != sizeof (blockSize)) { // can't roll-back
-
-                            // log_e ("write error, can't roll-back, critical error, closing data file");
                             __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         }
                     } else { // can't roll-back
-                        // log_e ("seek error, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                     }
                     __dataFile__.flush ();
 
                     signed char e = Map<keyType, uint32_t>::erase (key);
                     if (e) { // != OK
-                        // log_e ("keyValuePairs.erase failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         __errorFlags__ |= Map<keyType, uint32_t>::errorFlags ();
                         Unlock (); 
                         return e;
                     }
                     // roll-back succeded
-                    // log_e ("roll-back succeeded, returning error: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -444,14 +406,12 @@ size_t shb = ESP.getFreeHeap ();
                 free (block);
 
                 // 8. roll-out
-                // log_i ("step 8: roll_out");
                 if (freeBlockIndex == -1) { // data appended to the end of __dataFile__
                     __dataFileSize__ += blockSize;       
                 } else { // data written to free block in __dataFile__
                     __freeBlocksList__.erase (__freeBlocksList__.begin () + freeBlockIndex); // doesn't fail
                 }
                 
-                // log_i ("OK");
                 Unlock (); 
                 return err_ok;
             }
@@ -462,10 +422,8 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char FindBlockOffset (keyType key, uint32_t& blockOffset) {
-                // log_i ("(key, block offset)");
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -479,7 +437,6 @@ size_t shb = ESP.getFreeHeap ();
                 if (p != Map<keyType, uint32_t>::end ()) { // if found
                     blockOffset = p->second;
                     Unlock ();  
-                    // log_i ("OK");
                     return err_ok;
                 } else { // not found or error
                     signed char e = Map<keyType, uint32_t>::errorFlags ();
@@ -501,9 +458,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char FindValue (keyType key, valueType *value, uint32_t blockOffset = 0xFFFFFFFF) { 
-                // log_i ("(key, *value, block offset)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -513,7 +468,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -546,11 +500,9 @@ size_t shb = ESP.getFreeHeap ();
                 int16_t blockSize;
                 if (!__readBlock__ (blockSize, storedKey, *value, blockOffset)) {
                     if (blockSize > 0 && storedKey == key) {
-                        // log_i ("OK");
                         Unlock ();  
                         return err_ok; // success  
                     } else {
-                        // log_e ("error that shouldn't happen: err_data_changed");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_data_changed;
                         #endif
@@ -559,7 +511,6 @@ size_t shb = ESP.getFreeHeap ();
                         return err_data_changed; // shouldn't happen, but check anyway ...
                     }
                 } else {
-                    // log_e ("error reading data block: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -575,9 +526,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Update (keyType key, valueType newValue, uint32_t *pBlockOffset = NULL) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -587,7 +536,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -597,7 +545,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &newValue) {                                                                              // ... check if parameter construction is valid
-                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -609,8 +556,7 @@ size_t shb = ESP.getFreeHeap ();
 
                 // 1. get blockOffset
                 if (!pBlockOffset) { // find block offset if not provided by the calling program
-      
-                    // log_i ("step 1: looking for block offset in Map");
+
                     Map<keyType, uint32_t>::clearErrorFlags ();
                     auto p = Map<keyType, uint32_t>::find (key);
                     if (p == Map<keyType, uint32_t>::end ()) { // if not found
@@ -627,11 +573,10 @@ size_t shb = ESP.getFreeHeap ();
                     }
                     pBlockOffset = &(p->second);
                 } else {
-                    // log_i ("step 1: block offset already profided by the calling program");
+                    ; // step 1: block offset already profided by the calling program
                 }
 
                 // 2. read the block size and stored key
-                // log_i ("step 2: reading block size from data file");
                 int16_t blockSize;
                 size_t newBlockSize;
                 keyType storedKey;
@@ -639,12 +584,10 @@ size_t shb = ESP.getFreeHeap ();
 
                 signed char e  = __readBlock__ (blockSize, storedKey, storedValue, *pBlockOffset, true);
                 if (e) { // != OK
-                    // log_e ("read block error");
                     Unlock ();  
                     return err_file_io;
                 } 
                 if (blockSize <= 0 || storedKey != key) {
-                    // log_e ("error that shouldn't happen: err_data_changed");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_data_changed;
                     #endif
@@ -653,7 +596,6 @@ size_t shb = ESP.getFreeHeap ();
                     return err_data_changed; // shouldn't happen, but check anyway ...
                 }
                 // 3. calculate new block and data size
-                // log_i ("step 3: calculate block size");
                 size_t dataSize = sizeof (int16_t); // block size information
                 newBlockSize = dataSize;
                 if (is_same<keyType, String>::value) { // if value is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
@@ -671,7 +613,6 @@ size_t shb = ESP.getFreeHeap ();
                     newBlockSize += sizeof (valueType);
                 }
                 if (newBlockSize > 32768) {
-                    // log_e ("block size > 32768, error: err_bad_alloc");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_bad_alloc;
                     #endif
@@ -681,9 +622,7 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 4. decide where to write the new value: existing block or a new one
-                // log_i ("step 4: decide where to writte the new value: same or new block?");
                 if (dataSize <= blockSize) { // there is enough space for new data in the existing block - easier case
-                    // log_i ("reuse the same block");
                     uint32_t dataFileOffset = *pBlockOffset + sizeof (int16_t); // skip block size information
                     if (is_same<keyType, String>::value) { // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                         dataFileOffset += (((String *) &key)->length () + 1); // add 1 for closing 0
@@ -692,9 +631,7 @@ size_t shb = ESP.getFreeHeap ();
                     }                
 
                     // 5. write new value to __dataFile__
-                    // log_i ("step 5: write new value");
                     if (!__dataFile__.seek (dataFileOffset, SeekSet)) {
-                        // log_e ("seek error: err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -712,7 +649,6 @@ size_t shb = ESP.getFreeHeap ();
                         bytesWritten = __dataFile__.write ((byte *) &newValue , bytesToWrite);
                     }
                     if (bytesWritten != bytesToWrite) { // file IO error, it is highly unlikely that rolling-back to the old value would succeed
-                        // log_e ("write failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
@@ -725,14 +661,11 @@ size_t shb = ESP.getFreeHeap ();
                     // success
                     __dataFile__.flush ();
                     Unlock ();  
-                    // log_i ("OK");
                     return err_ok;
 
                 } else { // existing block is not big eneugh, we'll need a new block - more difficult case
-                    // log_i ("new block is needed");
 
                     // 6. search __freeBlocksList__ for most suitable free block, if it exists
-                    // log_i ("step 6: searching for the best block on free block list");
                     int freeBlockIndex = -1;
                     uint32_t minWaste = 0xFFFFFFFF;
                     for (int i = 0; i < __freeBlocksList__.size (); i ++) {
@@ -743,18 +676,14 @@ size_t shb = ESP.getFreeHeap ();
                     }
 
                     // 7. reposition __dataFile__ pointer
-                    // log_i ("step 7: reposition data file pointer");
                     uint32_t newBlockOffset;          
                     if (freeBlockIndex == -1) { // append data to the end of __dataFile__
-                        // log_i ("append data to the end of data file");
                         newBlockOffset = __dataFileSize__;
                     } else { // writte data to free block in __dataFile__
-                        // log_i ("found suitabel free data block");
                         newBlockOffset = __freeBlocksList__ [freeBlockIndex].blockOffset;
                         newBlockSize = __freeBlocksList__ [freeBlockIndex].blockSize;
                     }
                     if (!__dataFile__.seek (newBlockOffset, SeekSet)) {
-                        // log_e ("seek error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -764,10 +693,8 @@ size_t shb = ESP.getFreeHeap ();
                     }
 
                     // 8. construct the block to be written
-                    // log_i ("step 8: construct data block");
                     byte *block = (byte *) malloc (newBlockSize);
                     if (!block) {
-                        // log_e ("malloc error, out of memory");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -793,23 +720,18 @@ size_t shb = ESP.getFreeHeap ();
                     }
 
                     // 9. write new block to __dataFile__
-                    // log_i ("step 9: write new block to data file");
                     if (__dataFile__.write (block, dataSize) != dataSize) {
-                        // log_e ("write failed");
                         free (block);
 
                         // 10. (try to) roll-back
-                        // log_i ("step 10: try to roll-back");
                         if (__dataFile__.seek (newBlockOffset, SeekSet)) {
                             newBlockSize = (int16_t) -newBlockSize;
                             if (__dataFile__.write ((byte *) &newBlockSize, sizeof (newBlockSize)) != sizeof (newBlockSize)) { // can't roll-back         
                                 __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                             }
                         } else { // can't roll-back 
-                            // log_e ("seek failed failed, can't roll-back, critical error, closing data file");
                             __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                         }
-                        // log_e ("error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -821,7 +743,6 @@ size_t shb = ESP.getFreeHeap ();
                     __dataFile__.flush ();
 
                     // 11. roll-out
-                    // log_i ("step 11: roll-out");
                     if (freeBlockIndex == -1) { // data appended to the end of __dataFile__
                         __dataFileSize__ += newBlockSize;
                     } else { // data written to free block in __dataFile__
@@ -829,7 +750,6 @@ size_t shb = ESP.getFreeHeap ();
                     }
                     // mark old block as free
                     if (!__dataFile__.seek (*pBlockOffset, SeekSet)) {
-                        // log_e ("seek error: err_file_io");
                         __dataFile__.close (); // data file is corrupt (it contains two entries with the same key) and it is not likely we can roll it back
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
@@ -840,7 +760,6 @@ size_t shb = ESP.getFreeHeap ();
                     }
                     blockSize = (int16_t) -blockSize;
                     if (__dataFile__.write ((byte *) &blockSize, sizeof (blockSize)) != sizeof (blockSize)) {
-                        // log_e ("write error: err_file_io");
                         __dataFile__.close (); // data file is corrupt (it contains two entries with the same key) and it si not likely we can roll it back
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
@@ -851,14 +770,12 @@ size_t shb = ESP.getFreeHeap ();
                     }
                     __dataFile__.flush ();
                     // update __freeBlocklist__
-                    // log_i ("roll-out");
                     if (__freeBlocksList__.push_back ( {*pBlockOffset, (int16_t) -blockSize} )) { // != OK
-                        // log_i ("free block list push_back failed, continuing anyway");
+                        ;
                     }
                     // update Map information
                     *pBlockOffset = newBlockOffset; // there is no reason this would fail
                     Unlock ();  
-                    // log_i ("OK");
                     return err_ok;
                 }
 
@@ -872,9 +789,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Update (keyType key, void (*updateCallback) (valueType &value), uint32_t *pBlockOffset = NULL) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -884,7 +799,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -897,7 +811,6 @@ size_t shb = ESP.getFreeHeap ();
                 valueType value;
                 signed char e = FindValue (key, &value); 
                 if (e) {
-                    // log_e ("FindValue error");
                     __errorFlags__ |= e;
                     Unlock ();  
                     return e;
@@ -907,12 +820,11 @@ size_t shb = ESP.getFreeHeap ();
 
                 e = Update (key, value, pBlockOffset); 
                 if (e) {
-                    // log_e ("Update error");
                     __errorFlags__ |= e;
                     Unlock ();  
                     return e;
                 }                
-                // log_i ("OK");
+
                 Unlock ();
                 return err_ok;
             }
@@ -923,9 +835,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Upsert (keyType key, valueType newValue) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -935,7 +845,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -945,7 +854,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &newValue) {                                                                              // ... check if parameter construction is valid
-                        // log_e ("String value construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -957,15 +865,12 @@ size_t shb = ESP.getFreeHeap ();
                 signed char e;
                 e = Insert (key, newValue);
                 if (e == err_not_unique) {
-                    // DEBUG: Serial.print ("   Upsert ("); Serial.print (key); Serial.print (", "); Serial.print (newValue); Serial.print (" Insert error "); Serial.println (e);
                     e = Update (key, newValue, NULL);
                 }
                 if (e) { // != OK
-                    // log_e ("Update or Insert error");
-                    // DEBUG: Serial.print ("   Upsert ("); Serial.print (key); Serial.print (", "); Serial.print (newValue); Serial.print (" Update error "); Serial.println (e);
                     __errorFlags__ |= e;
                 } else {
-                    // log_i ("OK");
+                    ;
                 } 
                 Unlock ();
                 return e; 
@@ -976,9 +881,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Upsert (keyType key, void (*updateCallback) (valueType &value), valueType defaultValue) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -988,7 +891,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -997,8 +899,7 @@ size_t shb = ESP.getFreeHeap ();
                     }
 
                 if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!*(String *) &defaultValue) {                                                                          // ... check if parameter construction is valid
-                        // log_e ("String value construction error: err_bad_alloc");
+                    if (!*(String *) &defaultValue) {                                                                         // ... check if parameter construction is valid
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -1012,10 +913,9 @@ size_t shb = ESP.getFreeHeap ();
                 if (e) // != OK
                     e = Update (key, updateCallback);
                 if (e) { // != OK
-                    // log_e ("Update or Insert error");
                     __errorFlags__ |= e;
                 } else {
-                    // log_i ("OK");
+                    ;
                 }
                 Unlock ();
                 return e; 
@@ -1026,9 +926,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Upsert (keyType key, void (*upsertCallback) (valueType &value), uint32_t *pBlockOffset = NULL) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1038,7 +936,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
                     if (!*(String *) &key) {                                                                                  // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -1066,12 +963,11 @@ size_t shb = ESP.getFreeHeap ();
                 }
                 
                 if (e) {
-                    // log_e ("Update error");
                     __errorFlags__ |= e;
                     Unlock ();  
                     return e;
                 }                
-                // log_i ("OK");
+
                 Unlock ();
                 return err_ok;
             }
@@ -1082,9 +978,7 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Delete (keyType key) {
-                // log_i ("(key, value)");
                 if (!__dataFile__) { 
-                    // log_e ("error, data file not opened: err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1093,8 +987,7 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                    if (!*(String *) &key) {                                                                                   // ... check if parameter construction is valid
-                        // log_e ("String key construction error: err_bad_alloc");
+                    if (!*(String *) &key) {                                                                                  // ... check if parameter construction is valid
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_bad_alloc;
                         #endif
@@ -1105,7 +998,6 @@ size_t shb = ESP.getFreeHeap ();
                 Lock (); 
 
                 if (__inIteration__) {
-                    // log_e ("not while iterating, error: err_cant_do_it_now");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_cant_do_it_now;
                     #endif
@@ -1115,19 +1007,15 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 1. get blockOffset
-                // log_i ("step 1: get block offset");
                 uint32_t blockOffset;
                 signed char e = FindBlockOffset (key, blockOffset);
                 if (e) { // != OK
-                    // log_e ("FindBlockOffset failed");
                     Unlock (); 
                     return e;
                 }
 
                 // 2. read the block size
-                // log_i ("step 2: reading block size from data file");
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                    // log_e ("seek failed, error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1137,7 +1025,6 @@ size_t shb = ESP.getFreeHeap ();
                 }
                 int16_t blockSize;
                 if (__dataFile__.read ((uint8_t *) &blockSize, sizeof (int16_t)) != sizeof (blockSize)) {
-                    // log_e ("read failed, error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1146,7 +1033,6 @@ size_t shb = ESP.getFreeHeap ();
                     return err_file_io;
                 }
                 if (blockSize < 0) { 
-                    // log_e ("error that shouldn't happen: err_data_changed");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_data_changed;
                     #endif
@@ -1156,28 +1042,21 @@ size_t shb = ESP.getFreeHeap ();
                 }
 
                 // 3. erase the key from Map
-                // log_i ("step 3: erase key from Map");
                 e = Map<keyType, uint32_t>::erase (key);
                 if (e) { // != OK
-                    // log_e ("Map::erase failed");
                     __errorFlags__ |= e;
                     Unlock (); 
                     return e;
                 }
 
                 // 4. write back negative block size designating a free block
-                // log_i ("step 4: mark bloc as free");
                 blockSize = (int16_t) -blockSize;
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                  // log_e ("seek failed, error err_file_io");
 
                     // 5. (try to) roll-back
-                    // log_i ("step 5: try to roll-back");
                     if (Map<keyType, uint32_t>::insert (key, (uint32_t) blockOffset)) { // != OK
-                        // log_e ("Map::insert failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost the file, this would cause all disk related operations from now on to fail
                     }
-                    // log_e ("error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1186,13 +1065,10 @@ size_t shb = ESP.getFreeHeap ();
                     return err_file_io;
                 }
                 if (__dataFile__.write ((byte *) &blockSize, sizeof (blockSize)) != sizeof (blockSize)) {
-                    // log_e ("write failed, try to roll-back");
                      // 5. (try to) roll-back
                     if (Map<keyType, uint32_t>::insert (key, (uint32_t) blockOffset)) { // != OK
-                        // log_e ("Map::insert failed failed, can't roll-back, critical error, closing data file");
                         __dataFile__.close (); // memory key value pairs and disk data file are synchronized any more - it is better to clost he file, this would cause all disk related operations from now on to fail
                     }
-                    // log_e ("error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1203,14 +1079,12 @@ size_t shb = ESP.getFreeHeap ();
                 __dataFile__.flush ();
 
                 // 5. roll-out
-                // log_i ("step 5: roll-out");
                 // add the block to __freeBlockList__
                 blockSize = (int16_t) -blockSize;
                 if (__freeBlocksList__.push_back ( {(uint32_t) blockOffset, blockSize} )) { // != OK
-                    // log_i ("free block list push_back failed, continuing anyway");
                     // it is not really important to return with an error here, keyValueDatabase can continue working with this error
                 }
-                // log_i ("OK");
+
                 Unlock ();  
                 return err_ok;
             }
@@ -1237,8 +1111,7 @@ size_t shb = ESP.getFreeHeap ();
                         __key__ = *key;
 
                         if (is_same<keyType, String>::value)                                                                          // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                            if (!*(String *) &__key__) {                                                                               // ... check if parameter construction is valid
-                                // log_e ("String key construction error: err_bad_alloc");
+                            if (!*(String *) &__key__) {                                                                              // ... check if parameter construction is valid
                                 #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                                     throw err_bad_alloc;
                                 #endif
@@ -1267,15 +1140,13 @@ size_t shb = ESP.getFreeHeap ();
                     Proxy& operator = (valueType value) {
 
                         if (is_same<valueType, String>::value)                                                                        // if key is of type String ... (if anyone knows hot to do this in compile-time a feedback is welcome)
-                            if (!*(String *) &value) {                                                                                 // ... check if parameter construction is valid
-                                // log_e ("String value construction error: err_bad_alloc");
+                            if (!*(String *) &value) {                                                                                // ... check if parameter construction is valid
                                 #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                                     throw err_bad_alloc;
                                 #endif
                                 __parent__->__errorFlags__ |= err_bad_alloc;
                                 return *this;
                             }
-                            // DEBUG: Serial.print ("   assign ["); Serial.print (__key__); Serial.print ("] = "); Serial.println (value);
 
                         __parent__->Upsert (__key__, value);
                         return *this;
@@ -1384,11 +1255,9 @@ size_t shb = ESP.getFreeHeap ();
             */
 
             signed char Truncate () {
-                // log_i ("()");
                 
                 Lock (); 
                     if (__inIteration__) {
-                      // log_e ("not while iterating, error: err_cant_do_it_now");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_cant_do_it_now;
                         #endif
@@ -1403,7 +1272,6 @@ size_t shb = ESP.getFreeHeap ();
                     if (__dataFile__) {
                         __dataFile__.close (); 
                     } else {
-                        // log_e ("truncate failed, error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -1414,7 +1282,6 @@ size_t shb = ESP.getFreeHeap ();
 
                     __dataFile__ = fileSystem.open (__dataFileName__, "r+"); // , false);
                     if (!__dataFile__) {
-                        // log_e ("data file open failed, error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -1426,7 +1293,7 @@ size_t shb = ESP.getFreeHeap ();
                     __dataFileSize__ = 0; 
                     Map<keyType, uint32_t>::clear ();
                     __freeBlocksList__.clear ();
-                // log_i ("OK");
+
                 Unlock ();  
                 return err_ok;
             }
@@ -1574,7 +1441,6 @@ size_t shb = ESP.getFreeHeap ();
             signed char __readBlock__ (int16_t& blockSize, keyType& key, valueType& value, uint32_t blockOffset, bool skipReadingValue = false) {
                 // reposition file pointer to the beginning of a block
                 if (!__dataFile__.seek (blockOffset, SeekSet)) {
-                    // log_e ("seek error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1584,7 +1450,6 @@ size_t shb = ESP.getFreeHeap ();
 
                 // read block size
                 if (__dataFile__.read ((uint8_t *) &blockSize, sizeof (int16_t)) != sizeof (blockSize)) {
-                    // log_e ("read block size error err_file_io");
                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                         throw err_file_io;
                     #endif
@@ -1593,7 +1458,6 @@ size_t shb = ESP.getFreeHeap ();
                 }
                 // if block is free the reading is already done
                 if (blockSize < 0) { 
-                    // log_i ("OK");
                     return err_ok;
                 }
 
@@ -1604,7 +1468,6 @@ size_t shb = ESP.getFreeHeap ();
                             char c = (char) __dataFile__.read (); 
                             if (!c) break;
                             if (!((String *) &key)->concat (c)) {
-                                // log_e ("String key construction error err_bad_alloc");
                                 #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                                     throw err_bad_alloc;
                                 #endif
@@ -1615,7 +1478,6 @@ size_t shb = ESP.getFreeHeap ();
                 } else {
                     // fixed size key                
                     if (__dataFile__.read ((uint8_t *) &key, sizeof (key)) != sizeof (key)) {
-                        // log_e ("read key error err_file_io");
                         #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                             throw err_file_io;
                         #endif
@@ -1632,7 +1494,6 @@ size_t shb = ESP.getFreeHeap ();
                                 char c = (char) __dataFile__.read (); 
                                 if (!c) break;
                                 if (!((String *) &value)->concat (c)) {
-                                    // log_e ("String value construction error err_bad_alloc");
                                     #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                                         throw err_bad_alloc;
                                     #endif
@@ -1643,7 +1504,6 @@ size_t shb = ESP.getFreeHeap ();
                     } else {
                         // fixed size value               
                         if (__dataFile__.read ((uint8_t *) &value, sizeof (value)) != sizeof (value)) {
-                            // log_e ("read value error err_file_io");
                             #ifdef __USE_KEY_VALUE_DATABASE_EXCEPTIONS__
                                 throw err_file_io;
                             #endif
@@ -1652,7 +1512,7 @@ size_t shb = ESP.getFreeHeap ();
                         }                                
                     }
                 }
-                // log_i ("OK");            
+
                 return err_ok;
             }
 

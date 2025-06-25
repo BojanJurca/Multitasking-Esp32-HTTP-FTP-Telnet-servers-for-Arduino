@@ -1324,7 +1324,38 @@
                             return;
               }
 
-          // #elif CONFIG_IDF_TARGET_ESP32C6
+          #elif CONFIG_IDF_TARGET_ESP32C6
+              // ESP32 C6 board: https://docs.espressif.com/projects/esp-idf/en/stable/esp32c6/api-reference/peripherals/gpio.html
+              switch (sharedMemory->gpio1) {
+                  // ADC1
+                  case  0: sharedMemory->adcchannel1 = ADC1_CHANNEL_0; break;
+                  case  1: sharedMemory->adcchannel1 = ADC1_CHANNEL_1; break;
+                  case  2: sharedMemory->adcchannel1 = ADC1_CHANNEL_2; break;
+                  case  3: sharedMemory->adcchannel1 = ADC1_CHANNEL_3; break;
+                  case  4: sharedMemory->adcchannel1 = ADC1_CHANNEL_4; break;
+                  case  5: sharedMemory->adcchannel1 = ADC1_CHANNEL_5; break;
+                  case  6: sharedMemory->adcchannel1 = ADC1_CHANNEL_6; break;
+                  // ESP32 C5 does not have ADC2
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio1) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
+              }
+              switch (sharedMemory->gpio2) {
+                  // ADC1
+                  case  0: sharedMemory->adcchannel2 = ADC1_CHANNEL_0; break;
+                  case  1: sharedMemory->adcchannel2 = ADC1_CHANNEL_1; break;
+                  case  2: sharedMemory->adcchannel2 = ADC1_CHANNEL_2; break;
+                  case  3: sharedMemory->adcchannel2 = ADC1_CHANNEL_3; break;
+                  case  4: sharedMemory->adcchannel2 = ADC1_CHANNEL_4; break;
+                  case  5: sharedMemory->adcchannel2 = ADC1_CHANNEL_5; break;
+                  case  6: sharedMemory->adcchannel2 = ADC1_CHANNEL_6; break;
+                  // not used
+                  case 255: break;
+                  // ESP32 C5 does not have ADC2
+                  default:  webSck->sendString (cstring ("[oscilloscope] can't analogRead GPIO ") + cstring (sharedMemory->gpio2) + "."); // send error also to javascript client
+                            free (sharedMemory);
+                            return;
+              }
 
           // #elif CONFIG_IDF_TARGET_ESP32H2
             

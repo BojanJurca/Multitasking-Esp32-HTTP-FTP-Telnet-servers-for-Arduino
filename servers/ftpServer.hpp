@@ -4,7 +4,7 @@
  
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
     
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
 
     Classes implemented/used in this module:
@@ -14,7 +14,7 @@
         tcpClient_t for active data connection
         tcpServer_t, tcpConnection_t for pasive data connection
 
-    Inheritance diagram:    
+    Inheritance diagram:
 
              ┌─────────────┐
              │ tcpServer_t ┼┐
@@ -92,13 +92,11 @@
 
     // TUNNING PARAMETERS
 
-    #define FTP_CONTROL_CONNECTION_STACK_SIZE (6 * 1024)        // TCP connection
+    #define FTP_CONTROL_CONNECTION_STACK_SIZE (6 * 1024 + 512)  // a good first estimate how to set this parameter would be to always leave at least 1 KB of each ftpControlConnection stack unused
     #define FTP_CMDLINE_BUFFER_SIZE 300                         // reading and temporary keeping FTP command lines
     #define FTP_SESSION_MAX_ARGC 5                              // max number of arguments in command line    
     #define FTP_CONTROL_CONNECTION_TIME_OUT 300                 // 300 s = 5 min, 0 for infinite
     #define FTP_DATA_CONNECTION_TIME_OUT 3                      // 3 s, 0 for infinite 
-
-    #define ftpServiceUnavailableReply (char *) "421 FTP service is currently unavailable\r\n"
 
     #ifndef HOSTNAME
         #define "MyESP32Server"                                 // use default if not defined previously
@@ -245,11 +243,11 @@
                                     if (s != "") {
                                         // DEBUG: cout << s;
                                         if (sendString (s) <= 0)
-                                            return;
+                                            goto endConnection;
                                     }
 
                                     if (strstr ((char *) s, "221") == (char *) s) // 221 closing control connection
-                                        return;
+                                        goto endConnection;
                                 }
 
 
@@ -268,7 +266,7 @@
                     endConnection:
                             ;
                             #ifdef __DMESG__
-                                dmesgQueue << "[ftpCtrlConn] user logged out: " << __userName__;
+                                dmesgQueue << "[ftpCtrlConn] " << __userName__ << " logged out";
                             #endif
 
                         // ----- this is where FTP connection ends, the socket will be closed upon return -----
@@ -360,7 +358,7 @@
                             if (!s [0]) s = "/"; 
 
                             #ifdef __DMESG__
-                                dmesgQueue << "[ftpCtrlConn] user logged in: " << __userName__;
+                                dmesgQueue << "[ftpCtrlConn] " << __userName__ << " logged in";
                             #endif
                             return cstring ("230 logged on, your home directory is \"") + s + "\"\r\n";
                         } else { 
@@ -529,7 +527,7 @@
                         p1 = pasiveDataPort / 256;
 
                         // set up a new server for data connection and send connection information to the FTP client so it can connect to it
-                        __passiveDataServer__ = new tcpServer_t (pasiveDataPort, NULL, FTP_DATA_CONNECTION_TIME_OUT); // run tcpServer in singl-task mode
+                        __passiveDataServer__ = new tcpServer_t (pasiveDataPort, NULL, false, FTP_DATA_CONNECTION_TIME_OUT); // run tcpServer in singl-task mode
                         if (__passiveDataServer__ && *__passiveDataServer__) {
                             // notify FTP client about data connection IP and port
                             cstring s;
@@ -538,14 +536,16 @@
                                 return "";  // if control connection is closed
                             // DEBUG: cout << s;
                             __dataConnection__ = __passiveDataServer__->accept ();
-                            if (__dataConnection__->setTimeout (FTP_DATA_CONNECTION_TIME_OUT) == -1) {
+                            // DEBUG: cout << (__dataConnection__ ? "acceted\n" : "not accepted\n");
+                            if (__dataConnection__ && __dataConnection__->setTimeout (FTP_DATA_CONNECTION_TIME_OUT) > -1) {
+                                return "";
+                            } else {
                                 delete __dataConnection__;
                                 delete __passiveDataServer__;
                                 __dataConnection__ = NULL;
                                 __passiveDataServer__ = NULL;
-                                return "425 can't set passive data connection timeout\r\n";
+                                return "425 can't open passive data connection\r\n";
                             }
-                            return "";
                         }
                         return "425 can't open passive data connection\r\n";
                     }
@@ -561,7 +561,7 @@
                         int pasiveDataPort = __pasiveDataPort__ ();
 
                         // set up a new server for data connection and send connection information to the FTP client so it can connect to it
-                        __passiveDataServer__ = new tcpServer_t (pasiveDataPort, NULL, FTP_DATA_CONNECTION_TIME_OUT); // run tcpServer in singl-task mode
+                        __passiveDataServer__ = new tcpServer_t (pasiveDataPort, NULL, FTP_DATA_CONNECTION_TIME_OUT, false); // run tcpServer in singl-task mode
                         if (__passiveDataServer__ && *__passiveDataServer__) {
                             // notify FTP client about data connection IP and port
                             cstring s;
@@ -701,7 +701,7 @@
                                                         if (bytesReadThisTime == 0)
                                                             break; // finished, success
 
-                                                        __diskTraffic__.bytesRead += bytesReadThisTime;
+                                                        fileSystem.diskTraffic.bytesRead += bytesReadThisTime;
 
                                                         bytesReadTotal += bytesReadThisTime;
                                                         int bytesSentThisTime = __dataConnection__->sendBlock (buff, bytesReadThisTime);
@@ -770,7 +770,7 @@
                                                             break;
                                                         } 
 
-                                                        __diskTraffic__.bytesWritten += bytesWrittenThisTime;
+                                                        fileSystem.diskTraffic.bytesWritten += bytesWrittenThisTime;
 
                                                     } while (true);
                                                     f.close ();
@@ -796,9 +796,10 @@
 
         public:
 
-            ftpServer_t (int serverPort = 21,                                                                              // FTP server port
-                         bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL                                  // a reference to callback function that will be celled when new connection arrives 
-                        ) : tcpServer_t (serverPort, firewallCallback) {
+            ftpServer_t (int serverPort = 21,                                                                    // FTP server port
+                         bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL,                       // a reference to callback function that will be celled when new connection arrives 
+                         bool runListenerInItsOwnTask = true                                                     // a calling program may repeatedly call accept itself to save some memory tat listener task would use
+                        ) : tcpServer_t (serverPort, firewallCallback, runListenerInItsOwnTask) {
 
                 #ifdef USE_mDNS
                     // register mDNS servise
@@ -808,14 +809,17 @@
             }
 
             tcpConnection_t *__createConnectionInstance__ (int connectionSocket, char *clientIP, char *serverIP) override {
+                #define ftpServiceUnavailableReply (const char *) "421 FTP service is currently unavailable. Free heap: %u bytes. Free heap in one piece: %u bytes.\r\n"
 
                 ftpControlConnection_t *connection = new (std::nothrow) ftpControlConnection_t (connectionSocket, clientIP, serverIP);
 
                 if (!connection) {
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[ftpServer] can't create connection instance, out of memory?";
+                        dmesgQueue << (const char *) "[ftpServer] " << "can't create connection instance, out of memory";
                     #endif
-                    send (connectionSocket, ftpServiceUnavailableReply, strlen (ftpServiceUnavailableReply), 0);
+                    char s [128];
+                    sprintf (s, ftpServiceUnavailableReply, esp_get_free_heap_size (), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
+                    send (connectionSocket, s, strlen (s), 0);
                     close (connectionSocket); // normally tcpConnection would do this but if it is not created we have to do it here since the connection was not created
                     return NULL;
                 } 
@@ -824,7 +828,9 @@
                     #ifdef __DMESG__
                         dmesgQueue << "[ftpCtrlConn] setsockopt error: " << errno << strerror (errno);
                     #endif
-                    connection->sendString (ftpServiceUnavailableReply);
+                    char s [128];
+                    sprintf (s, ftpServiceUnavailableReply, esp_get_free_heap_size (), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
+                    connection->sendString (s);
                     delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
                     return NULL;
                 } 
@@ -847,9 +853,11 @@
                                                                     }
                                             , "ftpCtrlConn", FTP_CONTROL_CONNECTION_STACK_SIZE, connection, tskNORMAL_PRIORITY, NULL)) {
                     #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[ftpServer] can't create connection task, out of memory?";
+                        dmesgQueue << (const char *) "[ftpServer] " << "can't create connection task, out of memory";
                     #endif
-                    connection->sendString (ftpServiceUnavailableReply);
+                    char s [128];
+                    sprintf (s, ftpServiceUnavailableReply, esp_get_free_heap_size (), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
+                    connection->sendString (s);
                     delete (connection); // normally tcpConnection would do this but if it is not running we have to do it here
                     return NULL;
                 }
@@ -857,9 +865,21 @@
                 return NULL; // success, but don't return connection, since it may already been closed and destructed by now
             }
 
+            // accept any connection, the client will get notified in __createConnectionInstance__ if there arn't enough resources
+            inline tcpConnection_t *accept () __attribute__((always_inline)) { return tcpServer_t::accept (); }
+            /*
+            tcpConnection_t *accept () { 
+                if (heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT) > FTP_CONTROL_CONNECTION_STACK_SIZE && esp_get_free_heap_size () > FTP_CONTROL_CONNECTION_STACK_SIZE + sizeof (ftpControlConnection_t)) 
+                    return tcpServer_t::accept (); 
+                else // do no accept new connection if there is not enough memory left to handle it
+                    return NULL;
+            }
+            */
+
     };
 
     // declare static member outside of class definition
     UBaseType_t ftpServer_t::ftpControlConnection_t::__lastHighWaterMark__ = FTP_CONTROL_CONNECTION_STACK_SIZE;
+
 
 #endif

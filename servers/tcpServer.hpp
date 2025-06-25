@@ -4,7 +4,7 @@
 
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
   
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
 
     Classes implemented/used in this module:
@@ -58,14 +58,14 @@
 
 
 // TUNNING PARAMETERS
-#define LISTENER_STACK_SIZE (2 * 1024 + 512)
+#define LISTENER_STACK_SIZE (2 * 1024 + 512 + 256)
 
 
 #ifndef __TCP_SERVER__
     #define __TCP_SERVER__
 
 
-    static SemaphoreHandle_t __tcpServerSemaphore__ = xSemaphoreCreateMutex ();  // control tcpServer and tcpConnection critical sections - initialize it while still in single-task mode
+    SemaphoreHandle_t __tcpServerSemaphore__ = xSemaphoreCreateRecursiveMutex ();  // control tcpServer and tcpConnection critical sections - initialize it while still in single-task mode
 
     static int __runningTcpConnections__ = 0; // run time statistics
 
@@ -74,11 +74,12 @@
 
         public:
     
-            tcpServer_t (int serverPort, bool (*firewallCallback) (char *clientIP, char *serverIP), time_t serverTimeout = 0) { 
+            tcpServer_t (int serverPort, bool (*firewallCallback) (char *clientIP, char *serverIP), bool runListenerInItsOwnTask = true, time_t serverTimeout = 0) { 
                 // create a local copy of parameters for later use
                 __serverPort__ = serverPort;
                 __firewallCallback__ = firewallCallback;
                 __serverTimeout__ = serverTimeout;
+                __runListenerInItsOwnTask__ = runListenerInItsOwnTask;
 
                 // create listening socket
                 __listeningSocket__ = socket (AF_INET6, SOCK_STREAM, 0);
@@ -135,74 +136,94 @@
                     close (__listeningSocket__);
                     return;
                 } 
-                
+
                 // set timeout on listening socket
-                struct timeval tv = { __serverTimeout__, 0 };
-                if (setsockopt (__listeningSocket__, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tv, sizeof (tv)) < 0) {
-                    #ifdef __DMESG__
-                        dmesgQueue << (const char *) "[tcpServer] setsockopt error: " << errno << " " << strerror (errno);
-                    #endif
-                    // DEBUG: Serial.print ((const char *) "[tcpServer] setsockopt error: "); Serial.print (errno); Serial.println (strerror (errno));
-                    close (__listeningSocket__);
-                    return;
+                if (__serverTimeout__) {
+                    struct timeval tv = { __serverTimeout__, 0 };
+                    if (setsockopt (__listeningSocket__, SOL_SOCKET, SO_RCVTIMEO, (const char *) &tv, sizeof (tv)) < 0) {
+                        #ifdef __DMESG__
+                            dmesgQueue << (const char *) "[tcpServer] setsockopt error: " << errno << " " << strerror (errno);
+                        #endif
+                        // DEBUG: Serial.print ((const char *) "[tcpServer] setsockopt error: "); Serial.print (errno); Serial.println (strerror (errno));
+                        close (__listeningSocket__);
+                        return;
+                    }
+                }
+
+                // make listening socekt non-blocking if listener is not going to run in its own task and the time-out is not exlicitly set
+                if (!__runListenerInItsOwnTask__ && !__serverTimeout__) {
+                    if (fcntl (__listeningSocket__, F_SETFL, O_NONBLOCK) < 0) {
+                        #ifdef __DMESG__
+                            dmesgQueue << (const char *) "[tcpServer] fcntl error: " << errno << " " << strerror (errno);
+                        #endif
+                        // DEBUG: Serial.print ((const char *) "[tcpServer] fcntl error: "); Serial.print (errno); Serial.println (strerror (errno));
+                        close (__listeningSocket__);
+                        return;
+                    }
                 }
 
                 // listener is ready to start accepting connections now
-                #ifdef __DMESG__
-                    dmesgQueue << (const char *) "[tcpServer] listener on port " << __serverPort__ << (const char *) " is running on core " << xPortGetCoreID ();
-                #endif
                 __state__ = RUNNING;
 
                 // if in multi-task mode start a new task that would listen for incoming connections
-                if (!__serverTimeout__) { // start listener task in its own task
+                if (runListenerInItsOwnTask) { // start listener task in its own task
                     #define tskNORMAL_PRIORITY 1
-                    BaseType_t taskCreated = xTaskCreate ([] (void *thisInstance) {
-                                                                                      tcpServer_t *ths = (tcpServer_t *) thisInstance;
+                    BaseType_t taskCreated = xTaskCreate ([] (void *thisInstance)   {
+                                                                                        tcpServer_t *ths = (tcpServer_t *) thisInstance;
 
-                                                                                      // accept and handle incoming connections
-                                                                                      while (ths->__listeningSocket__ > -1) { // while listening socket is opened
+                                                                                        #ifdef __DMESG__
+                                                                                            dmesgQueue << (const char *) "[tcpServer] listener on port " << ths->__serverPort__ << (const char *) " started on core " << xPortGetCoreID ();
+                                                                                        #endif
 
-                                                                                          // accept new connection then we can loose reference to it - tcpConnection will close and free memory itself when it ends
-                                                                                          ths->accept ();
+                                                                                        // accept and handle incoming connections
+                                                                                        while (ths->__listeningSocket__ > -1) { // while listening socket is opened
 
-                                                                                          // check how much stack did we use
-                                                                                          static UBaseType_t lastHighWaterMark = LISTENER_STACK_SIZE;
-                                                                                          UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark (NULL);
-                                                                                          if (lastHighWaterMark > highWaterMark) {
-                                                                                              #ifdef __DMESG__
-                                                                                                  dmesgQueue << (const char *) "[tcpServer new listener's stack high water mark reached: " << highWaterMark << (const char *) " bytes not used";
-                                                                                              #endif
-                                                                                              // DEBUG: 
-                                                                                              Serial.print ((const char *) "[tcpServer] new listener's stack high water mark reached: "); Serial.print (highWaterMark); Serial.println ((const char *) " bytes not used");
-                                                                                              lastHighWaterMark = highWaterMark;
-                                                                                          }
+                                                                                            // accept new connection then we can loose reference to it - tcpConnection will close and free memory itself when it ends
+                                                                                            ths->accept ();
 
-                                                                                      } // while accepting connections
+                                                                                            // check how much stack did we use
+                                                                                            static UBaseType_t lastHighWaterMark = LISTENER_STACK_SIZE;
+                                                                                            UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark (NULL);
+                                                                                            if (lastHighWaterMark > highWaterMark) {
+                                                                                                #ifdef __DMESG__
+                                                                                                    dmesgQueue << (const char *) "[tcpServer] new listener's stack high water mark reached: " << highWaterMark << (const char *) " bytes not used";
+                                                                                                #endif
+                                                                                                // DEBUG: Serial.print ((const char *) "[tcpServer] new listener's stack high water mark reached: "); Serial.print (highWaterMark); Serial.println ((const char *) " bytes not used");
+                                                                                                lastHighWaterMark = highWaterMark;
+                                                                                            }
 
-                                                                                      #ifdef __DMESG__
-                                                                                          dmesgQueue << (const char *) "[tcpServer] on port " << ths->__serverPort__ << (const char *) " stopped";
-                                                                                      #endif
+                                                                                        } // while accepting connections
 
-                                                                                      // close listening socket
-                                                                                      int tmpListeningSocket;
-                                                                                      xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
-                                                                                          tmpListeningSocket = ths->__listeningSocket__;
-                                                                                          ths->__listeningSocket__ = -1;
-                                                                                      xSemaphoreGive (__tcpServerSemaphore__);
-                                                                                      if (tmpListeningSocket > -1) 
-                                                                                          close (tmpListeningSocket);
+                                                                                        #ifdef __DMESG__
+                                                                                            dmesgQueue << (const char *) "[tcpServer] on port " << ths->__serverPort__ << (const char *) " stopped";
+                                                                                        #endif
 
-                                                                                      // stop the listening task
-                                                                                      ths->__state__ = NOT_RUNNING;
-                                                                                      vTaskDelete (NULL); // it is listener's responsibility to close itself
+                                                                                        // close listening socket
+                                                                                        int tmpListeningSocket;
+                                                                                        xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
+                                                                                            tmpListeningSocket = ths->__listeningSocket__;
+                                                                                            ths->__listeningSocket__ = -1;
+                                                                                        xSemaphoreGiveRecursive (__tcpServerSemaphore__);
+                                                                                        if (tmpListeningSocket > -1) 
+                                                                                            close (tmpListeningSocket);
 
-                                                                                  }, "tcpListener", LISTENER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
+                                                                                        // stop the listening task
+                                                                                        ths->__state__ = NOT_RUNNING;
+                                                                                        vTaskDelete (NULL); // it is listener's responsibility to close itself
+
+                                                                                    }, "tcpListener", LISTENER_STACK_SIZE, this, tskNORMAL_PRIORITY, NULL);
                     if (pdPASS != taskCreated) {
                         __state__ == NOT_RUNNING;
                         #ifdef __DMESG__
                             dmesgQueue << (const char *) "[tcpServer] xTaskCreate error";
                         #endif
                     }
+                } else {
+
+                    #ifdef __DMESG__
+                        // dmesgQueue << (const char *) "[tcpServer] listener on port " << __serverPort__ << (const char *) " does not run in its own task";
+                    #endif
+
                 }
 
                 // when the constructor returns __state__ could be eighter RUNNING (in case of success) or NOT_RUNNING (in case of error)
@@ -212,14 +233,14 @@
         ~tcpServer_t () {
             // close listening socket
             int listeningSocket;
-            xSemaphoreTake (__tcpServerSemaphore__, portMAX_DELAY);
+            xSemaphoreTakeRecursive (__tcpServerSemaphore__, portMAX_DELAY);
                 listeningSocket = __listeningSocket__;
                 __listeningSocket__ = -1;
-            xSemaphoreGive (__tcpServerSemaphore__);
+            xSemaphoreGiveRecursive (__tcpServerSemaphore__);
             if (listeningSocket > -1)
                 close (listeningSocket);
 
-            // wait until listener task finishes before unloading so that memory variables are still there while it is running
+            // wait until listener task finishes before unloading so that variables are still in the memory while it is running
             if (!__serverTimeout__) 
                 while (__state__ != NOT_RUNNING) 
                     delay (1);
@@ -231,18 +252,36 @@
 
 
         // accepts incoming connection
-        tcpConnection_t *accept () {
+        virtual tcpConnection_t *accept () {
+            if (__listeningSocket__ == -1) // if the socket is (already) closed
+                return NULL;
+
+            #ifdef MODEST_ESP32_MODEL // care must be taken not to put too much burden on such ESP32 
+                static unsigned long lastAccepted =  millis ();
+                unsigned long thisCall = millis ();
+                if (thisCall - lastAccepted < 100)
+                    return NULL;
+                if (thisCall - lastAccepted > 10000)
+                    lastAccepted = thisCall - 100;
+            #endif
+
             int connectionSocket;
             char clientIP [INET6_ADDRSTRLEN]; 
             struct sockaddr_storage connectingAddress;
             socklen_t connectingAddressSize = sizeof (connectingAddress); 
             connectionSocket = ::accept (__listeningSocket__, (struct sockaddr *) &connectingAddress, &connectingAddressSize);
+
             if (connectionSocket == -1) {
                 #ifdef __DMESG__
-                    if (__listeningSocket__ > -1) 
+                    if (__listeningSocket__ > -1 && !(errno == EAGAIN || errno == ENAVAIL)) // listening socket is opened and if it is running in non-blocking mode ignore EAGAIN and ENAVAIL errors
                         dmesgQueue << (const char *) "[tcpServer] accept error: " << errno << " " << strerror (errno);
                 #endif
+                xSemaphoreGiveRecursive (__tcpServerSemaphore__);
             } else { // accept OK
+
+                #ifdef MODEST_ESP32_MODEL // care must be taken not to put too much burden on such ESP32 
+                    lastAccepted = thisCall;
+                #endif
 
                 // get client's IP address, determine if connecting address is IPv4 or IPv6 first
                 if (connectingAddress.ss_family == AF_INET) { 
@@ -282,10 +321,12 @@
                     close (connectionSocket);
                 } else { // firewall OK   
 
-                    return __createConnectionInstance__ (connectionSocket, clientIP, serverIP);
+                    tcpConnection_t *connection = __createConnectionInstance__ (connectionSocket, clientIP, serverIP);    
+                    return connection;
 
                 } // firewall
             } // accept
+
             return NULL;
         }
 
@@ -300,6 +341,8 @@
         int __listeningSocket__ = -1;
         
         time_t __serverTimeout__;                                       // will be initialized in constructor
+
+        bool __runListenerInItsOwnTask__;                               // will be initialized in constructor
 
         virtual tcpConnection_t *__createConnectionInstance__ (int connectionSocket, char *clientIP, char *serverIP) { // to be overridded by derived classes
             // DEBUG: Serial.println ("creating tcpConnection");

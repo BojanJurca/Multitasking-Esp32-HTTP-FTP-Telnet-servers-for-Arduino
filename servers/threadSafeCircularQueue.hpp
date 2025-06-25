@@ -1,11 +1,11 @@
 /*
- * theadSafeCircularQueue.hpp
- * 
- * This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
- * 
- *  October 10, 2024, Bojan Jurca
- * 
- */
+    theadSafeCircularQueue.hpp
+ 
+    This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
+ 
+    May 22, 2022, Bojan Jurca
+
+*/
 
 
 #include "std/queue.hpp"
@@ -75,5 +75,6 @@
             SemaphoreHandle_t __semaphore__ = xSemaphoreCreateRecursiveMutex (); 
 
     };
+
 
 #endif

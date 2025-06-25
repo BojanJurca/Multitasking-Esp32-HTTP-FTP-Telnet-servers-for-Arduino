@@ -4,7 +4,7 @@
     
     This file is part of Multitasking Esp32 HTTP FTP Telnet servers for Arduino project: https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino
     
-    Jul 18, 2024, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
     LittleFS or FFAT (and/or SD) for ESP32 built-in flash disk
 
@@ -113,17 +113,17 @@
     // ----- CODE -----
 
 
-    // log disk Traffic information
-    struct diskTraffic_t {
-        unsigned long bytesRead;
-        unsigned long bytesWritten;
-    };
-    diskTraffic_t __diskTraffic__ = {}; // measure disk Traffic on ESP32 level
-
-
     class fileSystem_t { 
 
         public:
+
+            // log disk Traffic information
+            struct diskTraffic_t {
+                unsigned long bytesRead;
+                unsigned long bytesWritten;
+            };
+            diskTraffic_t diskTraffic = {}; // measure disk Traffic on ESP32 level
+
 
             fileSystem_t () {} // constructor
 
@@ -164,7 +164,7 @@
                     if (mounted ()) {
                         cout << "[fileSystem] FAT mounted\n";
                         #ifdef __DMESG__
-                            dmesgQueue << "[fileSystem] FAT mounted"; 
+                            dmesgQueue << "[fileSystem] FAT mounted, free heap left: " << esp_get_free_heap_size ();
                         #endif
                         return true;
                     } else { 
@@ -202,7 +202,7 @@
                     if (mounted ()) {
                         cout << "[fileSystem] LittleFS mounted\n";
                         #ifdef __DMESG__
-                            dmesgQueue << "[fileSystem] LittleFS mounted"; 
+                            dmesgQueue << "[fileSystem] LittleFS mounted, free heap left: " << esp_get_free_heap_size ();
                         #endif
                         return true;
                     } else {
@@ -274,7 +274,7 @@
 
                     cout << "[fileSystem] SD card mounted to " << mountPoint << endl;
                     #ifdef __DMESG__
-                        dmesgQueue << "[fileSystem] SD card mounted to " << mountPoint; 
+                        dmesgQueue << "[fileSystem] SD card mounted to " << mountPoint << ", free heap left: " << esp_get_free_heap_size ();
                     #endif
 
                     return true;
@@ -633,5 +633,6 @@
 
     // create a working instance before including time_functions.h, time_functions.h will use the fileSystem instance
     fileSystem_t fileSystem;
+
 
 #endif

@@ -15,7 +15,7 @@
             - https://www.cyberciti.biz/faq/understanding-etcpasswd-file-format/
             - https://www.cyberciti.biz/faq/understanding-etcshadow-file/          
 
-    February 6, 2025, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
    Nomenclature used in userManagement.hpp - for easier understaning of the code:
 
@@ -26,28 +26,26 @@
       - "max length" is the number of characters that can be placed in a variable.
 
                   In case of C 0-terminated strings the terminating 0 character is not included so the buffer should be at least 1 byte larger.
- */
+*/
 
 
-    // ----- includes, definitions and supporting functions -----
-
-    #include "std/console.hpp"
+#include "std/console.hpp"
 
 
 #ifndef __USER_MANAGEMENT__
-  #define __USER_MANAGEMENT__
+    #define __USER_MANAGEMENT__
 
     #ifdef SHOW_COMPILE_TIME_INFORMATION
         #pragma message "__USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__ __USER_MANAGEMENT__"
     #endif
 
-  
+
     // TUNNING PARAMETERS
 
     // choose the way ESP32 server is going to handle users
-          #define NO_USER_MANAGEMENT        1   // everyone is allowed to use FTP anf Telnet
-          #define HARDCODED_USER_MANAGEMENT 2   // define user name nad password that will be hard coded into program
-          #define UNIX_LIKE_USER_MANAGEMENT 3   // user names and passwords will be stored in UNIX like configuration files and checked by userManagement.hpp functions
+        #define NO_USER_MANAGEMENT        1   // everyone is allowed to use FTP anf Telnet
+        #define HARDCODED_USER_MANAGEMENT 2   // define user name nad password that will be hard coded into program
+        #define UNIX_LIKE_USER_MANAGEMENT 3   // user names and passwords will be stored in UNIX like configuration files and checked by userManagement.hpp functions
     // one of the above
     #ifndef USER_MANAGEMENT
         #ifdef SHOW_COMPILE_TIME_INFORMATION
@@ -62,7 +60,7 @@
 
     #ifndef DEFAULT_ROOT_PASSWORD
         #ifdef SHOW_COMPILE_TIME_INFORMATION
-           #pragma message "DEFAULT_ROOT_PASSWORD was not defined previously, #defining the default rootpassword in userManagement.hpp"
+        #pragma message "DEFAULT_ROOT_PASSWORD was not defined previously, #defining the default rootpassword in userManagement.hpp"
         #endif
         #define DEFAULT_ROOT_PASSWORD "rootpassword"
     #endif
@@ -80,14 +78,14 @@
     #endif
 
 
-    // ----- usrMgmt class -----
+    // ----- userManagement_t class -----
 
     #if USER_MANAGEMENT == NO_USER_MANAGEMENT // no user management at all, everybody can login
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Compiling userManagement.hpp for NO_USER_MANAGEMENT. Everyone will be allowed to login to the servers"
         #endif
 
-        class usrMgmt {
+        class userManagement_t {
 
             public:
 
@@ -95,7 +93,7 @@
                 bool checkUserNameAndPassword (char *userName, char *password) { return true; } // everyone can logg in
                 bool getHomeDirectory (char *buffer, size_t bufferSize, char *userName) {       // must always end with '/'    
                                                                                             if (bufferSize) {
-                                                                                              *buffer = 0; strcpy (buffer, "/"); return true; 
+                                                                                            *buffer = 0; strcpy (buffer, "/"); return true; 
                                                                                             }
                                                                                             return false;
                                                                                         }
@@ -112,7 +110,7 @@
             #pragma message "Compiling userManagement.hpp for HARDCODED_USER_MANAGEMENT. Only root user will be allowed do login with password defined in DEFAULT_USER_PASSWORD"
         #endif
 
-        class usrMgmt {
+        class userManagement_t {
 
             public:
 
@@ -120,7 +118,7 @@
                 bool checkUserNameAndPassword (char *userName, char *password) { return (!strcmp (userName, "root") && !strcmp (password, DEFAULT_ROOT_PASSWORD)); }
                 bool getHomeDirectory (char *buffer, size_t bufferSize, char *userName) {       // must always end with '/'    
                                                                                             if (bufferSize) {
-                                                                                              *buffer = 0; strcpy (buffer, "/"); return true; 
+                                                                                            *buffer = 0; strcpy (buffer, "/"); return true; 
                                                                                             }
                                                                                             return false;
                                                                                         }
@@ -140,11 +138,11 @@
         #ifdef SHOW_COMPILE_TIME_INFORMATION
             #pragma message "Compiling userManagement.hpp for UNIX_LIKE_USER_MANAGEMENT. userManagement.hpp will use /etc/passwd and /etc/shadow files to store users' credentials"
         #endif
-      
+    
         // needed for storing sha of passwords
         #include <mbedtls/md.h>
 
-        class usrMgmt {
+        class userManagement_t {
 
             public:
 
@@ -167,7 +165,7 @@
                                 created = (f.printf (defaultContent) == strlen (defaultContent));                                
                                 f.close ();
 
-                                __diskTraffic__.bytesWritten += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                fileSystem.diskTraffic.bytesWritten += strlen (defaultContent); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
                             cout << (created ? "created\n" : "error\n");
@@ -187,7 +185,7 @@
                                 created = f.printf (defaultPasswords) == strlen (defaultPasswords);
                                 f.close ();
 
-                                __diskTraffic__.bytesWritten += strlen (defaultPasswords); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                fileSystem.diskTraffic.bytesWritten += strlen (defaultPasswords); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
                             cout << (created ? "created\n" : "error\n");
@@ -210,7 +208,7 @@
                         while (f.available ()) {
                             char c = f.read ();
 
-                            __diskTraffic__.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            fileSystem.diskTraffic.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             if (c >= ' ' && i < sizeof (line) - 1) line [i++] = c; // append line 
                             else {
@@ -240,7 +238,7 @@
                         while (f.available ()) {
                             char c = f.read ();
 
-                            __diskTraffic__.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            fileSystem.diskTraffic.bytesRead += 1; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             if (c >= ' ' && i < sizeof (line) - 1) line [i++] = c; 
                             else {
@@ -309,7 +307,7 @@
                                     return false; // can't write /etc/shadow - this is bad because we have already corrupted it :/
                                 } 
 
-                                __diskTraffic__.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                fileSystem.diskTraffic.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }
                             lineBeginning = lineEnd + 1;
@@ -323,7 +321,7 @@
                                 return false; // can't write /etc/shadow - this is bad because we have already corrupted it :/
                             }
 
-                            __diskTraffic__.bytesWritten += strlen (buffer) + 9; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            fileSystem.diskTraffic.bytesWritten += strlen (buffer) + 9; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                         }     
                         f.close (); 
@@ -392,7 +390,7 @@
                                         return (const char *) "Can't write /etc/passwd"; // this is bad because we have already corrupted it :/
                                     } 
 
-                                    __diskTraffic__.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                    fileSystem.diskTraffic.bytesWritten += strlen (lineBeginning) + 2; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                                 }
                                 lineBeginning = lineEnd + 1;
@@ -405,7 +403,7 @@
                                     return (const char *) "Can't write /etc/passwd"; // this is bad because we have already corrupted it :/
                                 }
 
-                                __diskTraffic__.bytesWritten += strlen (buffer) + 9; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                                fileSystem.diskTraffic.bytesWritten += strlen (buffer) + 9; // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
 
                             }         
                             f.close (); 
@@ -438,7 +436,7 @@
                 // char *userDel (userName) deletes userName from /etc/passwd and /etc/shadow, deletes home directory and returns success or error message
                 const char *userDel (char *userName) {
                     if (!fileSystem.mounted ()) return (const char *) "File system not mounted";
-                  
+                
                     // delete user's password from /etc/shadow file
                     if (!passwd (userName, (char *) "", true, true)) return (const char *) "Can't write /etc/shadow";
 
@@ -491,7 +489,9 @@
 
     #endif
 
+
     // create a working instance
-    usrMgmt userManagement;
+    userManagement_t userManagement;
+
 
 #endif

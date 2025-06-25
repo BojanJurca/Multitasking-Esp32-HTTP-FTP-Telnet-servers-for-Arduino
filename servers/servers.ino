@@ -11,12 +11,13 @@
 #define DEFAULT_AP_PASSWORD       "" // "YOUR_AP_PASSWORD"
 #define TZ "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana or choose another (POSIX) time zone from: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
+
 // uncomment one of the tests at a time
 // #define DBG
-// #define TEST_DMESG
+ #define TEST_DMESG
 // #define TEST_FS
-// #define TEST_FTP
- #define TEST_TELNET
+ // #define TEST_FTP
+// #define TEST_TELNET
 // #define TEST_SMTP_CLIENT
 // #define TEST_USER_MANAGEMENT
 // #define TEST_TIME_FUNCTIONS
@@ -47,7 +48,6 @@
 
     #include "dmesg.hpp"
     
-
     void setup () {
         Serial.begin (115200);
         delay (3000);
@@ -66,13 +66,6 @@
         dmesgQueue << String ("abc") << String ("def");
         dmesgQueue << Cstring<15> ("ABC") << Cstring<15> ("DEF");
         dmesgQueue << "[the last entry]";
-
-
-        setlocale (lc_all, "sl_SI.UTF-8");
-        dmesgQueue << (float) 1.2;
-        dmesgQueue << (double) 3.14;
-        dmesgQueue << time (NULL);
-
 
         for (auto e: dmesgQueue) { // use Iterator for scanning the dmesg queue because locking is already implemented here
             Serial.print (e.milliseconds);
@@ -205,86 +198,113 @@ void loop () {
 
 #ifdef TEST_TELNET  // TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET 
 
-  // include all .h files telnet server is using to test the whole functionality
-  
-//      #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD: (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
+    // #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD: (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) 
  
-
-      #define USE_mDNS
-
-      // #include "std/locale.hpp"
-      #include "std/console.hpp"
-      #include "dmesg.hpp"
-      #include "fileSystem.hpp"
-      #include "netwk.h"
-      #include "time_functions.h"
-      // #include "httpClient.h"
-      // #include "smtpClient.h"
-      #define USER_MANAGEMENT   UNIX_LIKE_USER_MANAGEMENT   // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
-      #include "userManagement.hpp"
-      #include "telnetServer.hpp"
+    #define USE_mDNS
+    // #include "std/locale.hpp"
+    #include "std/console.hpp"
+    #include "dmesg.hpp"
+    #include "fileSystem.hpp"
+    #include "netwk.h"
+    #include "time_functions.h"
+    // #include "httpClient.h"
+    // #include "smtpClient.h"
+    #define USER_MANAGEMENT   NO_USER_MANAGEMENT // NO_USER_MANAGEMENT // UNIX_LIKE_USER_MANAGEMENT // HARDCODED_USER_MANAGEMENT
+    #include "userManagement.hpp"
+    #include "telnetServer.hpp"
 
 
-  String telnetCommandHandlerCallback (int argc, char *argv [], telnetServer_t::telnetConnection_t *tcn) {
-
-    #define argv0is(X) (argc > 0 && !strcmp (argv[0], X))  
-    #define argv1is(X) (argc > 1 && !strcmp (argv[1], X))
-    #define argv2is(X) (argc > 2 && !strcmp (argv[2], X))    
-    #ifndef LED_BUILTIN
-        #define LED_BUILTIN 2
+    #if CONFIG_IDF_TARGET_ESP32
+        #define MACHINETYPE             "ESP32"   
+    #elif CONFIG_IDF_TARGET_ESP32S2
+        #define MACHINETYPE             "ESP32-S2"    
+        #define MODEST_ESP32_MODEL      // consideration must be taken not to put too much burden on such ESP32
+    #elif CONFIG_IDF_TARGET_ESP32S3
+        #define MACHINETYPE             "ESP32-S3"
+    #elif CONFIG_IDF_TARGET_ESP32C3
+        #define MACHINETYPE             "ESP32-C3"        
+    #elif CONFIG_IDF_TARGET_ESP32C6
+        #define MACHINETYPE             "ESP32-C6"
+    #elif CONFIG_IDF_TARGET_ESP32H2
+        #define MACHINETYPE             "ESP32-H2"
+    #else
+        #define MACHINETYPE             "ESP32 (other)"
     #endif
-    
-            if (argv0is ("led") && argv1is ("state")) {                  // led state telnet command
-              return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
-    } else if (argv0is ("turn") && argv1is ("led") && argv2is ("on")) {  // turn led on telnet command
-              digitalWrite (LED_BUILTIN, HIGH);
-              return "Led is on.";
-    } else if (argv0is ("turn") && argv1is ("led") && argv2is ("off")) { // turn led off telnet command
-              digitalWrite (LED_BUILTIN, LOW);
-              return "Led is off.";
+
+
+    String telnetCommandHandlerCallback (int argc, char *argv [], telnetServer_t::telnetConnection_t *tcn) {
+
+        #define argv0is(X) (argc > 0 && !strcmp (argv[0], X))  
+        #define argv1is(X) (argc > 1 && !strcmp (argv[1], X))
+        #define argv2is(X) (argc > 2 && !strcmp (argv[2], X))    
+        #ifndef LED_BUILTIN
+            #define LED_BUILTIN 2
+        #endif
+        
+        if (argv0is ("led") && argv1is ("state")) {                             // led state telnet command
+                return "Led is " + String (digitalRead (LED_BUILTIN) ? "on." : "off.");
+        } else if (argv0is ("turn") && argv1is ("led") && argv2is ("on")) {     // turn led on telnet command
+                digitalWrite (LED_BUILTIN, HIGH);
+                return "Led is on.";
+        } else if (argv0is ("turn") && argv1is ("led") && argv2is ("off")) {    // turn led off telnet command
+                digitalWrite (LED_BUILTIN, LOW);
+                return "Led is off.";
+        }
+
+        // let the Telnet server handle command itself
+        return "";
     }
 
-    // let the Telnet server handle command itself
-    return "";
-  }
+    // bool firewall (char *connectingclientIP, char*serverIP) { return true; }
 
-  // bool firewall (char *connectingclientIP, char*serverIP) { return true; }
+    telnetServer_t *myTelnetServer = NULL; 
 
-  telnetServer_t *myTelnetServer; 
+    telnetServer_t *myTelnetServerWithSharedListenerTask = NULL; 
 
-  void setup () {
-    cinit ();
+    void setup () {
+        cinit (true); // true = wait for Serial
 
-    fileSystem.mountLittleFs (true);
-    // fileSystem.formatLittleFs ();
-    // fileSystem.mountSD ("/SD", 5);
-    // fileSystem.mountSD ("/", 5);
+        fileSystem.mountLittleFs (true);
+        // fileSystem.formatLittleFs ();
+        // fileSystem.mountSD ("/SD", 5);
+        // fileSystem.mountSD ("/", 5);
 
-    userManagement.initialize ();
+        userManagement.initialize ();
 
-    // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA-tic credentials
-    startWiFi ();
+        // fileSystem.deleteFile ("/etc/wpa_supplicant/wpa_supplicant.conf"); // STA-tic credentials
+        startWiFi ();
 
-    do {
-        delay (1000);
-        Serial.print (".");
-    } while (WiFi.status () != WL_CONNECTED);
-    Serial.println ();
+        cronDaemon.start (NULL);
 
-    startCronDaemon (NULL);
+        // start fully multitasked telnet server on port 23
+        myTelnetServer = new telnetServer_t (telnetCommandHandlerCallback);
+        if (myTelnetServer && *myTelnetServer) // check if server instance creation succeded && the server is running as it should
+            cout << "Telnet server is running on port 23 :)\n";
+        else
+            cout << "Telnet server is not running on port 23   :(\n";
 
-    myTelnetServer = new telnetServer_t (telnetCommandHandlerCallback);
-    if (myTelnetServer && *myTelnetServer) // check if server instance creation succeded && the server is running as it should
-        cout << "Telnet server is running :)\n";
-    else
-        cout << "Telnet server is not running :(\n";
+        // start telnet server with shared listening tsak (to save some memory that the listener task would use) on port 24
+        myTelnetServerWithSharedListenerTask = new telnetServer_t (telnetCommandHandlerCallback, 24, NULL, false);
+        if (myTelnetServerWithSharedListenerTask && *myTelnetServerWithSharedListenerTask) // check if server instance creation succeded
+            cout << "Telnet server is running on port 24:)\n";
+        else
+            cout << "Telnet server is not running on port 24   :(\n";
 
-    // setlocale (lc_all, "sl_SI.UTF-8");
-  }
+        // setlocale (lc_all, "sl_SI.UTF-8");
 
-  void loop () {
+        while (WiFi.localIP ().toString () == "0.0.0.0") { 
+            delay (1000); 
+            Serial.printf ("   .\n"); 
+        } // wait until we get IP address from the router
 
-  }
+        Serial.println ("--- setup finished ---");
+    }
+
+    void loop () {
+        // if telnet server doesn't have its own listener task call accept in loop periodically
+        if (myTelnetServerWithSharedListenerTask)
+            myTelnetServerWithSharedListenerTask->accept (); // listener is using setup-loop task instead of its own
+    }
 
 #endif // TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET TEST_TELNET 
 
@@ -452,25 +472,43 @@ void loop () {
 
 #ifdef TEST_HTTP_SERVER_AND_CLIENT // TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT 
 
-  // #define SHOW_COMPILE_TIME_INFORMATION
+    // #define SHOW_COMPILE_TIME_INFORMATION
+
+    #if CONFIG_IDF_TARGET_ESP32
+        #define MACHINETYPE             "ESP32"   
+    #elif CONFIG_IDF_TARGET_ESP32S2
+        #define MACHINETYPE             "ESP32-S2"    
+        #define MODEST_ESP32_MODEL      // consideration must be taken not to put too much burden on such ESP32
+    #elif CONFIG_IDF_TARGET_ESP32S3
+        #define MACHINETYPE             "ESP32-S3"
+    #elif CONFIG_IDF_TARGET_ESP32C3
+        #define MACHINETYPE             "ESP32-C3"        
+    #elif CONFIG_IDF_TARGET_ESP32C6
+        #define MACHINETYPE             "ESP32-C6"
+        #define MODEST_ESP32_MODEL // care must be taken not to put too much burden on ESP32-C6 
+    #elif CONFIG_IDF_TARGET_ESP32H2
+        #define MACHINETYPE             "ESP32-H2"
+    #else
+        #define MACHINETYPE             "ESP32 (other)"
+    #endif
+
 
   // #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD) // FILE_SYSTEM_FAT or FILE_SYSTEM_LITTLEFS optionally bitwise combined with FILE_SYSTEM_SD_CARD
   #define FILE_SYSTEM FILE_SYSTEM_LITTLEFS 
 
-  // #define HTTP_SERVER_CORE 0 
-
-  #define WEB_SESSIONS
-  #define USE_mDNS
+  // #define WEB_SESSIONS
+  // #define USE_mDNS
 
   //#include "dmesg.hpp"
   #include "fileSystem.hpp" // include fileSystem.hpp if you want httpServer to server .html and other files as well
   #include "netwk.h"
-  #define USE_WEB_SESSIONS
+  // #define USE_WEB_SESSIONS
   #include "httpServer.hpp"
   #include "httpClient.h"
   #include "oscilloscope.h"
 
-  httpServer_t *myHttpServer;
+  httpServer_t *myHttpServer = NULL;
+  httpServer_t *myHttpServerWithSharedListenerTask = NULL; 
 
   String httpRequestHandlerCallback (char *httpRequest, httpServer_t::httpConnection_t *hcn) { 
     // input: char *httpRequest: the whole HTTP request but without ending \r\n\r\n
@@ -607,7 +645,6 @@ void loop () {
                   case 2:       { // binary data received BINARY_FRAME_TYPE
                                                   byte buffer [256];
                                                   int bytesRead = webSck->recvBlock (buffer, sizeof (buffer)); 
-                                                  // if ... /// bbb
 
                                                   cout << "[example 10] got " << bytesRead << " bytes of binary data from browser over webSocket\n";
                                                   // note that we don't really know anything about format of binary data we have got, we'll just assume here it is array of 16 bit integers
@@ -670,37 +707,38 @@ void loop () {
   bool firewall (char *clientIP, char *serverIP) { return true; }
     
   void setup () {
-      Serial.begin (115200);
+    cinit (true); // true = wait for Serial
 
-      fileSystem.mountLittleFs (true);
-      startWiFi ();
+    fileSystem.mountLittleFs (true);
 
-      myHttpServer = new httpServer_t (httpRequestHandlerCallback, wsRequestHandlerCallback, 80, firewall);
-      if (myHttpServer && *myHttpServer) {
-          Serial.printf (":(\n");
-      } else {
-          Serial.printf (":)\n");
-      }
+    startWiFi ();
 
-      // Serial.printf ("|free heap| 8 bit free  min  max   |32 bit free  min  max   |default free  min  max  |exec free   min   max   |\n");
-      // Serial.printf ("---------------------------------------------------------------------------------------------------------------\n");
-  }
+    ///myHttpServer = new httpServer_t (httpRequestHandlerCallback, wsRequestHandlerCallback, 80, firewall);
+    if (myHttpServer && *myHttpServer) {
+        cout << "HTTP server is running on port 80   :)\n";
+    } else {
+        cout << "HTTP server is not running on port 80   :(\n";
+    }
+
+    // start HTTP server with shared listening tsak (to save some memory that the listener task would use) on port 81
+    myHttpServerWithSharedListenerTask = new httpServer_t (httpRequestHandlerCallback, wsRequestHandlerCallback, 81, NULL, false);
+    if (myHttpServerWithSharedListenerTask && *myHttpServerWithSharedListenerTask) // check if server instance creation succeded
+        cout << "HTTP server is running on port 81   :)\n";
+    else
+        cout << "HTTP server is not running on port 81   :(\n";
+
+
+
+        while (WiFi.localIP ().toString () == "0.0.0.0") { 
+            delay (1000); 
+            Serial.printf ("   .\n"); 
+        } // wait until we get IP address from the router
+    }
 
   void loop () {
-      /*
-      delay (121000); // wait slightly more then 2 minutes so that LwIP memory could recover
-
-              Serial.printf ("|  %6u  ", ESP.getFreeHeap ());
-              Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_8BIT), heap_caps_get_minimum_free_size (MALLOC_CAP_8BIT), heap_caps_get_largest_free_block (MALLOC_CAP_8BIT));
-              Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_32BIT), heap_caps_get_minimum_free_size (MALLOC_CAP_32BIT), heap_caps_get_largest_free_block (MALLOC_CAP_32BIT));
-              Serial.printf ("|  %6u  %6u  %6u", heap_caps_get_free_size (MALLOC_CAP_DEFAULT), heap_caps_get_minimum_free_size (MALLOC_CAP_DEFAULT), heap_caps_get_largest_free_block (MALLOC_CAP_DEFAULT));
-              Serial.printf ("|  %6u  %6u  %6u|\n", heap_caps_get_free_size (MALLOC_CAP_EXEC), heap_caps_get_minimum_free_size (MALLOC_CAP_EXEC), heap_caps_get_largest_free_block (MALLOC_CAP_EXEC));
-
-      {
-          String r1 = httpRequest ((char *) "127.0.0.1", 80, (char *) "/upTime");
-          if (r1.length ()) Serial.printf ("Got a reply from local loopback: %i bytes, %s\n", r1.length (), r1.c_str ());
-      }
-      */
+        // if telnet server doesn't have its own listener task call accept in loop periodically
+        if (myHttpServerWithSharedListenerTask)
+            myHttpServerWithSharedListenerTask->accept (); // listener is using setup-loop task instead of its own
   }
 
 #endif // TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT TEST_HTTP_SERVER_AND_CLIENT

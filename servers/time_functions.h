@@ -6,7 +6,7 @@
 
     Cron daemon synchronizes the time with NTP server accessible from internet once a day.
 
-    December 25, 2024, Bojan Jurca
+    May 22, 2025, Bojan Jurca
 
     Nomenclature used in time_functions.h - for easier understaning of the code:
 
@@ -59,10 +59,14 @@
     time_t getUptime ();
     const char *ntpDate (const char *);
     const char *ntpDate ();
+    [[deprecated("Use cronTab.insert instead.")]]
     bool cronTabAdd (uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, const char *, bool);
+    [[deprecated("Use cronTab.insert instead.")]]
     bool cronTabAdd (const char *, bool);
+    [[deprecated("Use cronTab.erase instead.")]]
     int cronTabDel (const char *);
-    void startCronDaemon (void (* cronHandler) (const char *), size_t);
+    [[deprecated("Use cronDaemon.start instead.")]]
+    void startCronDaemon (void (* cronHandlerCallback) (const char *));
 
 
     // TUNNING PARAMETERS
@@ -87,13 +91,13 @@
         #define DEFAULT_NTP_SERVER_3    "3.si.pool.ntp.org"
     #endif
 
-    #define MAX_ETC_NTP_CONF_SIZE 1 * 1024            // 1 KB will usually do - initialization reads the whole /etc/ntp.conf file in the memory 
+    #define MAX_ETC_NTP_CONF_SIZE 1 * 1024              // 1 KB will usually do - initialization reads the whole /etc/ntp.conf file in the memory 
                                                       
     // crontab definitions
-    #define CRON_DAEMON_STACK_SIZE 8 * 1024
-    #define CRONTAB_MAX_ENTRIES 32                    // this defines the size of cron table - increase this number if you going to handle more cron events
-    #define CRON_COMMAND_MAX_LENGTH 48                // the number of characters in the longest cron command
-    #define ANY 255                                   // byte value that corresponds to * in cron table entries (should be >= 60 so it can be distinguished from seconds, minutes, ...)
+    #define CRON_DAEMON_STACK_SIZE 9 * 1024             // a good first estimate how to set this parameter would be to always leave at least 1 KB of cronDaemon stack unused 
+    #define CRONTAB_MAX_ENTRIES 32                      // this defines the size of cron table - increase this number if you going to handle more cron events
+    #define CRON_COMMAND_MAX_LENGTH 48                  // the number of characters in the longest cron command
+    #define ANY 255                                     // byte value that corresponds to * in cron table entries (should be >= 60 so it can be distinguished from seconds, minutes, ...)
     #define MAX_TZ_ETC_NTP_CONF_SIZE CRONTAB_MAX_ENTRIES * (20 + CRON_COMMAND_MAX_LENGTH) // this should do
   
 
@@ -101,13 +105,13 @@
 
     bool __timeHasBeenSet__ = false;
     RTC_DATA_ATTR time_t __startupTime__;
-  
-    static SemaphoreHandle_t __cronSemaphore__ = xSemaphoreCreateRecursiveMutex (); // controls access to cronDaemon's variables
 
     char __ntpServer1__ [255] = DEFAULT_NTP_SERVER_1; // DNS host name may have max 253 characters
     char __ntpServer2__ [255] = DEFAULT_NTP_SERVER_2; // DNS host name may have max 253 characters
     char __ntpServer3__ [255] = DEFAULT_NTP_SERVER_3; // DNS host name may have max 253 characters 
 
+
+    // ----- NTP CLIENT -----
 
     // synchronizes time with NTP server, returns error message
     const char *ntpDate (const char *ntpServer) {
@@ -381,392 +385,502 @@
         cout << (const char *) "[time] " << s << endl;
         return (const char *) "NTP servers are not available.";
     }
-  
-    int __cronTabEntries__ = 0;
-  
-    struct cronEntryType {
-        bool readFromFile;                              // true, if this entry is read from /etc/crontab file, false if it is inserted by program code
-        bool markForExecution;                          // falg if the command is to be executed
-        bool executed;                                  // flag if the command is beeing executed
-        uint8_t second;                                 // 0-59, ANY (255) means *
-        uint8_t minute;                                 // 0-59, ANY (255) means *
-        uint8_t hour;                                   // 0-23, ANY (255) means *
-        uint8_t day;                                    // 1-31, ANY (255) means *
-        uint8_t month;                                  // 1-12, ANY (255) means *
-        uint8_t day_of_week;                            // 0-6 and 7, Sunday to Saturday, 7 is also Sunday, ANY (255) means *
-        char cronCommand [CRON_COMMAND_MAX_LENGTH + 1]; // cronCommand to be passed to cronHandler when time condition is met - it is reponsibility of cronHandler to do with it what is needed
-        time_t lastExecuted;                            // the time cronCommand has been executed
-    } __cronEntry__ [CRONTAB_MAX_ENTRIES];
-  
-    // adds new entry into crontab table
-    bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, const char *cronCommand, bool readFromFile = false) {
-        bool b = false;    
-        xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
-            if (__cronTabEntries__ < CRONTAB_MAX_ENTRIES - 1) {
-                __cronEntry__ [__cronTabEntries__] = {readFromFile, false, false, second, minute, hour, day, month, day_of_week, {}, 0};
-                strncpy (__cronEntry__ [__cronTabEntries__].cronCommand, cronCommand, CRON_COMMAND_MAX_LENGTH);
-                __cronEntry__ [__cronTabEntries__].cronCommand [CRON_COMMAND_MAX_LENGTH] = 0;
-                __cronTabEntries__ ++;
-            }
-            b = true;
-        xSemaphoreGiveRecursive (__cronSemaphore__);
-        if (b) return true;
-        #ifdef __DMESG__
-            dmesgQueue << (const char *) "[time][cronDaemon][cronTabAdd] can't add cronCommand, cron table is full: " << cronCommand;
-        #endif
-        cout << (const char *) "[time][cronDaemon][cronTabAdd] can't add cronCommand, cron table is full: " << cronCommand << endl;
-        return false;
-    }
-    
-    // adds new entry into crontab table
-    bool cronTabAdd (const char *cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
-        char second [3]; char minute [3]; char hour [3]; char day [3]; char month [3]; char day_of_week [3]; char cronCommand [65];
-        if (sscanf (cronTabLine, "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
-            int8_t se = strcmp (second, "*")      ? atoi (second)      : ANY; if ((!se && *second != '0')      || se > 59)  { 
-                                                                                                                                #ifdef __DMESG__
-                                                                                                                                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid second: " << second; 
-                                                                                                                                #endif
-                                                                                                                                cout << (const char *) "[time][cronDaemon][cronAdd] invalid second: " << second << endl;  
-                                                                                                                                return false; 
-                                                                                                                            }
-            int8_t mi = strcmp (minute, "*")      ? atoi (minute)      : ANY; if ((!mi && *minute != '0')      || mi > 59)  { 
-                                                                                                                                #ifdef __DMESG__
-                                                                                                                                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid minute: " << minute; 
-                                                                                                                                #endif
-                                                                                                                                cout << (const char *) "[time][cronDaemon][cronAdd] invalid minute: " << minute << endl;  
-                                                                                                                                return false; 
-                                                                                                                            }
-            int8_t hr = strcmp (hour, "*")        ? atoi (hour)        : ANY; if ((!hr && *hour != '0')        || hr > 23)  {
-                                                                                                                                #ifdef __DMESG__
-                                                                                                                                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid hour: " << hour; 
-                                                                                                                                #endif
-                                                                                                                                cout << (const char *) "[time][cronDaemon][cronAdd] invalid hour: " << hour << endl;  
-                                                                                                                                return false; 
-                                                                                                                            }
-            int8_t dm = strcmp (day, "*")         ? atoi (day)         : ANY; if (!dm                          || dm > 31)  { 
-                                                                                                                                #ifdef __DMESG__
-                                                                                                                                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid day: " << day; 
-                                                                                                                                #endif
-                                                                                                                                cout << (const char *) "[time][cronDaemon][cronAdd] invalid day: " << day << endl;
-                                                                                                                                return false; 
-                                                                                                                            }
-            int8_t mn = strcmp (month, "*")       ? atoi (month)       : ANY; if (!mn                          || mn > 12)  { 
-                                                                                                                                #ifdef __DMESG__
-                                                                                                                                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid month: " << month; 
-                                                                                                                                #endif
-                                                                                                                                cout << (const char *) "[time][cronDaemon][cronAdd] invalid month: " << month << endl;  
-                                                                                                                                return false; 
-                                                                                                                            }
-            int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : ANY; if ((!dw && *day_of_week != '0') || dw > 7)   {
-                                                                                                                                #ifdef __DMESG__
-                                                                                                                                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid day of week: " << day_of_week; 
-                                                                                                                                #endif
-                                                                                                                                cout << (const char *) "[time][cronDaemon][cronAdd] invalid day of week: " << day_of_week << endl;
-                                                                                                                                return false; 
-                                                                                                                            }
-            if (!*cronCommand) { 
+
+
+    // ----- CRONTAB -----
+
+    template <int N, int L> class cronTab_t {
+
+        private:
+
+            struct cronTabEntry_t {
+                bool readFromFile;                              // true, if this entry is read from /etc/crontab file, false if it is inserted by program code
+                bool markForExecution;                          // falg if the command is to be executed
+                bool executed;                                  // flag if the command is beeing executed
+                uint8_t second;                                 // 0-59, ANY (255) means *
+                uint8_t minute;                                 // 0-59, ANY (255) means *
+                uint8_t hour;                                   // 0-23, ANY (255) means *
+                uint8_t day;                                    // 1-31, ANY (255) means *
+                uint8_t month;                                  // 1-12, ANY (255) means *
+                uint8_t day_of_week;                            // 0-6 and 7, Sunday to Saturday, 7 is also Sunday, ANY (255) means *
+                char cronCommand [L + 1];                       // cronCommand to be passed to cronHandler when time condition is met - it is reponsibility of cronHandler to do with it what is needed
+                time_t lastExecuted;                            // the time cronCommand has been executed
+            } __cronTabEntry__ [N];        
+
+            int __cronTabSize__ = 0;
+
+            SemaphoreHandle_t __cronTabSemaphore__ = xSemaphoreCreateRecursiveMutex (); // controls access to cronDaemon's variables
+
+
+        public:
+
+            // inserts new entry into crontab table
+            bool insert (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, const char *cronCommand, bool readFromFile = false) {
+                bool b = false;    
+                lock ();
+                    if (__cronTabSize__ < N - 1) {
+                        __cronTabEntry__ [__cronTabSize__] = {readFromFile, false, false, second, minute, hour, day, month, day_of_week, {}, 0};
+                        strncpy (__cronTabEntry__ [__cronTabSize__].cronCommand, cronCommand, L);
+                        __cronTabEntry__ [__cronTabSize__].cronCommand [L] = 0;
+                        __cronTabSize__ ++;
+                    }
+                    b = true;
+                unlock ();
+                if (b) 
+                    return true;
+                
                 #ifdef __DMESG__
-                    dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] missing cron command";
+                    dmesgQueue << (const char *) "[cronTab] can't insert cronCommand, cron table is full: " << cronCommand;
                 #endif
-                cout << (const char *) "[time][cronDaemon][cronAdd] missing cron command" << endl;  
+                cout << (const char *) "[cronTab] can't insert cronCommand, cron table is full: " << cronCommand << endl;
                 return false;
             }
-            return cronTabAdd (se, mi, hr, dm, mn, dw, cronCommand, readFromFile);
-        } else {
-            #ifdef __DMESG__
-                dmesgQueue << (const char *) "[time][cronDaemon][cronAdd] invalid cronTabLine: " << cronTabLine;
-            #endif
-            cout << (const char *) "[time][cronDaemon][cronAdd] invalid cronTabLine: " << cronTabLine << endl;
-            return false;
-        }
-    }
-    
-    // deletes entry(es) from crontam table
-    int cronTabDel (const char *cronCommand) { // returns the number of cron commands being deleted
-        int cnt = 0;
-        xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
-            int i = 0;
-            while (i < __cronTabEntries__) {
-                if (!strcmp (__cronEntry__ [i].cronCommand, cronCommand)) {        
-                    for (int j = i; j < __cronTabEntries__ - 1; j ++) { __cronEntry__ [j] = __cronEntry__ [j + 1]; }
-                    __cronTabEntries__ --;
-                    cnt ++;
+
+            // inserts new entry into crontab table
+            bool insert (const char *cronTabLine, bool readFromFile = false) { // parse cronTabLine and then call the function above
+                char second [3]; char minute [3]; char hour [3]; char day [3]; char month [3]; char day_of_week [3]; char cronCommand [65];
+                if (sscanf (cronTabLine, "%2s %2s %2s %2s %2s %2s %64s", second, minute, hour, day, month, day_of_week, cronCommand) == 7) {
+                    int8_t se = strcmp (second, "*")      ? atoi (second)      : ANY; if ((!se && *second != '0')      || se > 59)  { 
+                                                                                                                                        #ifdef __DMESG__
+                                                                                                                                            dmesgQueue << (const char *) "[cronTab] invalid second: " << second; 
+                                                                                                                                        #endif
+                                                                                                                                        cout << (const char *) "[cronTab] invalid second: " << second << endl;  
+                                                                                                                                        return false; 
+                                                                                                                                    }
+                    int8_t mi = strcmp (minute, "*")      ? atoi (minute)      : ANY; if ((!mi && *minute != '0')      || mi > 59)  { 
+                                                                                                                                        #ifdef __DMESG__
+                                                                                                                                            dmesgQueue << (const char *) "[cronTab] invalid minute: " << minute; 
+                                                                                                                                        #endif
+                                                                                                                                        cout << (const char *) "[cronTab] invalid minute: " << minute << endl;  
+                                                                                                                                        return false; 
+                                                                                                                                    }
+                    int8_t hr = strcmp (hour, "*")        ? atoi (hour)        : ANY; if ((!hr && *hour != '0')        || hr > 23)  {
+                                                                                                                                        #ifdef __DMESG__
+                                                                                                                                            dmesgQueue << (const char *) "[cronTab] invalid hour: " << hour; 
+                                                                                                                                        #endif
+                                                                                                                                        cout << (const char *) "[cronTab] invalid hour: " << hour << endl;  
+                                                                                                                                        return false; 
+                                                                                                                                    }
+                    int8_t dm = strcmp (day, "*")         ? atoi (day)         : ANY; if (!dm                          || dm > 31)  { 
+                                                                                                                                        #ifdef __DMESG__
+                                                                                                                                            dmesgQueue << (const char *) "[cronTab] invalid day: " << day; 
+                                                                                                                                        #endif
+                                                                                                                                        cout << (const char *) "[cronTab] invalid day: " << day << endl;
+                                                                                                                                        return false; 
+                                                                                                                                    }
+                    int8_t mn = strcmp (month, "*")       ? atoi (month)       : ANY; if (!mn                          || mn > 12)  { 
+                                                                                                                                        #ifdef __DMESG__
+                                                                                                                                            dmesgQueue << (const char *) "[cronTab] invalid month: " << month; 
+                                                                                                                                        #endif
+                                                                                                                                        cout << (const char *) "[cronTab] invalid month: " << month << endl;  
+                                                                                                                                        return false; 
+                                                                                                                                    }
+                    int8_t dw = strcmp (day_of_week, "*") ? atoi (day_of_week) : ANY; if ((!dw && *day_of_week != '0') || dw > 7)   {
+                                                                                                                                        #ifdef __DMESG__
+                                                                                                                                            dmesgQueue << (const char *) "[cronTab] invalid day of week: " << day_of_week; 
+                                                                                                                                        #endif
+                                                                                                                                        cout << (const char *) "[cronTab] invalid day of week: " << day_of_week << endl;
+                                                                                                                                        return false; 
+                                                                                                                                    }
+                    if (!*cronCommand) { 
+                        #ifdef __DMESG__
+                            dmesgQueue << (const char *) "[cronTab] missing cron command";
+                        #endif
+                        cout << (const char *) "[cronTab] missing cron command" << endl;  
+                        return false;
+                    }
+                    return cronTabAdd (se, mi, hr, dm, mn, dw, cronCommand, readFromFile);
                 } else {
-                    i ++;
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[cronTab] invalid cronTabLine: " << cronTabLine;
+                    #endif
+                    cout << (const char *) "[cronTab] invalid cronTabLine: " << cronTabLine << endl;
+                    return false;
                 }
             }
-        xSemaphoreGiveRecursive (__cronSemaphore__);
-        if (!cnt) {
-            #ifdef __DMESG__
-                dmesgQueue << (const char *) "[time][cronDaemon][cronTabDel] cronCommand not found: " << cronCommand;
-            #endif
-            cout << (const char *) "[time][cronDaemon][cronTabDel] cronCommand not found: " << cronCommand << endl;
-        }
-        return cnt;
+
+            // erases entry(es) from cronTab
+            int erase (const char *cronCommand) { // returns the number of cron commands being erased
+                int cnt = 0;
+                lock ();
+                    int i = 0;
+                    while (i < __cronTabSize__) {
+                        if (!strcmp (__cronTabEntry__ [i].cronCommand, cronCommand)) {        
+                            for (int j = i; j < __cronTabSize__ - 1; j ++) { 
+                                __cronTabEntry__ [j] = __cronTabEntry__ [j + 1]; 
+                            }
+                            __cronTabSize__ --;
+                            cnt ++;
+                        } else {
+                            i ++;
+                        }
+                    }
+                unlock ();
+                if (!cnt) {
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[cronTab] erase: cronCommand not found: " << cronCommand;
+                    #endif
+                    cout << (const char *) "[cronTab] erase: cronCommand not found: " << cronCommand << endl;
+                }
+                return cnt;
+            }
+
+            inline int size () __attribute__((always_inline)) { return __cronTabSize__; }
+
+            void lock () { xSemaphoreTakeRecursive (__cronTabSemaphore__, portMAX_DELAY); }
+
+            void unlock () { xSemaphoreGiveRecursive (__cronTabSemaphore__); }
+
+            // [] operator - returns cronTabEntry
+            inline cronTabEntry_t &operator [] (int i) __attribute__((always_inline)) { return __cronTabEntry__ [i]; }
+
+    };
+
+    // create a working instance
+    cronTab_t<CRONTAB_MAX_ENTRIES, CRON_COMMAND_MAX_LENGTH> cronTab;
+
+    [[deprecated("Use cronTab.insert instead.")]]
+    bool cronTabAdd (uint8_t second, uint8_t minute, uint8_t hour, uint8_t day, uint8_t month, uint8_t day_of_week, const char *cronCommand, bool readFromFile = false) {
+        return cronTab.insert (second, minute, hour, day, month, day_of_week, cronCommand, readFromFile);
+    }
+    
+    [[deprecated("Use cronTab.insert instead.")]]
+    bool cronTabAdd (const char *cronTabLine, bool readFromFile = false) { 
+        return cronTab.insert (cronTabLine, readFromFile);
     }
 
-    // startCronDaemon functions runs __cronDaemon__ as a separate task. It does two things: 
-    // 1. - it executes cron commands from cron table when the time is right
-    // 2. - it synchronizes time with NTP servers once a day
-    void __cronDaemon__ (void *ptrCronHandler) { 
-        #ifdef __DMESG__
-            dmesgQueue << (const char *) "[time][cronDaemon] is running on core " << xPortGetCoreID ();
-        #endif
-        cout << (const char *) "[time][cronDaemon] started\n";
-        do {     // try to set/synchronize the time, retry after 1 minute if unsuccessfull 
-            delay (15000);
-            if (!*ntpDate ()) break; // success
-            delay (45000);
-        } while (!time ());
+    [[deprecated("Use cronTab.erase instead.")]]
+    int cronTabDel (const char *cronCommand) { 
+        return cronTab.erase (cronCommand);
+    }
 
-        void (* cronHandler) (const char *) = (void (*) (const char *)) ptrCronHandler;  
-        unsigned long lastMinuteCheckMillis = millis ();
-        unsigned long lastHourCheckMillis = millis ();
-        unsigned long lastDayCheckMillis = millis ();
 
-        while (true) {
-            delay (10);
+    // ----- CRON DAEMON -----
 
-            // trigger "EVERY_MINUTE" built in event? (triggers regardles wether real time is known or not)
-            if (millis () - lastMinuteCheckMillis >= 60000) { 
-                lastMinuteCheckMillis = millis ();
-                if (cronHandler != NULL) cronHandler ("ONCE_A_MINUTE");
-            }
+    // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default one
+    class cronDaemon_t {
 
-            // trigger "EVERY_HOUR" built in event? (triggers regardles wether real time is known or not)
-            if (millis () - lastHourCheckMillis >= 3600000) { 
-                lastHourCheckMillis = millis ();
-                if (cronHandler != NULL) cronHandler ("ONCE_AN_HOUR");
-            }
+        private:
 
-            // trigger "EVERY_DAY" built in event? (triggers regardles wether real time is known or not)
-            if (millis () - lastDayCheckMillis >= 86400000) { 
-                lastDayCheckMillis = millis ();
-                if (cronHandler != NULL) cronHandler ("ONCE_A_DAY");
+            void (* __cronHandler__) (const char *);
+            bool __runDaemonInItsOwnTask__;
 
-                // 2. synchronize time with NTP servers
-                ntpDate ();  
-            } 
+            enum STATE_TYPE { STARTING = 0, FIRST_SYNC = 1, STARTED = 2 } __state__ = STARTING;
 
-            // 3. execute cron commands from cron table
-            time_t now = time (NULL);
-            if (!now) continue; // if the time is not known cronDaemon can't do anythig
-            static time_t previous = now;
-            for (time_t l = previous + 1; l <= now; l++) {
-                delay (1);
-                struct tm slt; localtime_r (&l, &slt); 
-                //scan through cron entries and find commands that needs to be executed (at time l)
-                xSemaphoreTakeRecursive (__cronSemaphore__, portMAX_DELAY);
-                    // mark cron commands for execution
-                    for (int i = 0; i < __cronTabEntries__; i ++) {
-                        if ((__cronEntry__ [i].second == ANY      || __cronEntry__ [i].second == slt.tm_sec) && 
-                            (__cronEntry__ [i].minute == ANY      || __cronEntry__ [i].minute == slt.tm_min) &&
-                            (__cronEntry__ [i].hour == ANY        || __cronEntry__ [i].hour == slt.tm_hour) &&
-                            (__cronEntry__ [i].day == ANY         || __cronEntry__ [i].day == slt.tm_mday) &&
-                            (__cronEntry__ [i].month == ANY       || __cronEntry__ [i].month == slt.tm_mon + 1) &&
-                            (__cronEntry__ [i].day_of_week == ANY || __cronEntry__ [i].day_of_week == slt.tm_wday || __cronEntry__ [i].day_of_week == slt.tm_wday + 7) ) {
+            unsigned long __lastNtpSync__ = 0;
+            unsigned long __lastMinuteCheck__ = 0;
+            unsigned long __lastHourCheck__ = 0;
+            unsigned long __lastDayCheck__ = 0;
 
-                                if (!__cronEntry__ [i].executed) {
-                                  __cronEntry__ [i].markForExecution = true;
-                                }
-                                                
-                        } else {
+            time_t __previousRun__;
 
-                                __cronEntry__ [i].executed = false;
-              
+
+        public:
+
+            void start (void (* cronHandler) (const char *) = NULL,            // a callback function that would get notified when cron event accurs
+                        bool runDaemonInItsOwnTask = true                      // a calling program may repeatedly call run itself to save some memory that cronDaemon task would use
+                       ) { 
+
+                // create local copy of the arguments
+                __cronHandler__ = cronHandler;
+                __runDaemonInItsOwnTask__ = runDaemonInItsOwnTask;
+
+                // create and read configuration files
+                #ifdef __FILE_SYSTEM__
+                    if (fileSystem.mounted ()) {
+
+                        // read TZ (timezone) configuration from /usr/share/zoneinfo, create a new one if it doesn't exist
+                        if (!fileSystem.isFile ("/usr/share/zoneinfo")) {
+                            // create directory structure
+                            if (!fileSystem.isDirectory ("/usr/share")) {
+                                fileSystem.makeDirectory ("/usr"); 
+                                fileSystem.makeDirectory ("/usr/share"); 
+                            }
+                            cout << "[cronDaemon] /usr/share/zoneinfo does not exist, creating default one ... ";
+                            bool created = false;
+                            File f = fileSystem.open ("/usr/share/zoneinfo", "w");
+                            if (f) {
+                                String defaultContent = F ( "# timezone configuration - reboot for changes to take effect\r\n"
+                                                            "# choose one of available (POSIX) timezones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv\r\n\r\n"
+                                                            "TZ " TZ "\r\n");
+                                created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
+                                f.close ();
+                                fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            }
+                            cout << (created ? "created\n" : "error\n");
                         }
-                    }          
-                    // execute marked cron commands
-                    int execCnt = 1;
-                    while (execCnt) { // if a command during execution deletes other commands we have to repeat this step
-                        execCnt = 0;
-                        for (int i = 0; i < __cronTabEntries__; i ++) {
-                            if ( __cronEntry__ [i].markForExecution ) {
-
-                                if (__cronEntry__ [i].markForExecution) {
-                                    __cronEntry__ [i].executed = true;
-                                    __cronEntry__ [i].lastExecuted = now;
-                                    __cronEntry__ [i].markForExecution = false;
-                                    if (cronHandler != NULL) cronHandler (__cronEntry__ [i].cronCommand); // this should be called last in case cronHandler calls croTabAdd or cronTabDel itself                        
-                                    execCnt ++; 
-                                    delay (1);
-                                }
-
-                                __cronEntry__ [i].markForExecution = false;
+                        {
+                            cout << "[cronDaemon] reading /usr/share/zoneinfo ... ";
+                            // parse configuration file if it exists
+                            char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
+                            if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/usr/share/zoneinfo")) {
+                                strcat (buffer, "\n");
+                                char __TZ__ [100] = TZ;
+                                char *p;
+                                if ((p = stristr (buffer, "\nTZ"))) 
+                                    sscanf (p + 3, "%*[ =]%98[!-~]", __TZ__);                      
+                                setenv ("TZ", __TZ__, 1);
+                                tzset ();
+                                #ifdef __DMESG__
+                                    dmesgQueue << (const char *) "[cronDaemon] TZ set to " << __TZ__;
+                                #endif
+                                // cout << "OK, TZ set to " << __TZ__ << endl;
+                            } else {
+                                cout << (const char *) "error\n";
                             }
                         }
-                    }
-                xSemaphoreGiveRecursive (__cronSemaphore__);
-            }
-            previous = now;
-        }
-    }
 
-    // Runs __cronDaemon__ as a separate task. The first time it is called it also creates default configuration files /etc/ntp.conf and /etc/crontab
-    void startCronDaemon (void (* cronHandler) (const char *)) { // synchronizes time with NTP servers from /etc/ntp.conf, reads /etc/crontab, returns error message. If /etc/ntp.conf or /etc/crontab don't exist (yet) creates the default one
-
-        #ifdef __FILE_SYSTEM__
-            if (fileSystem.mounted ()) {
-              // read TZ (timezone) configuration from /usr/share/zoneinfo, create a new one if it doesn't exist
-              if (!fileSystem.isFile ("/usr/share/zoneinfo")) {
-                  // create directory structure
-                  if (!fileSystem.isDirectory ("/usr/share")) { fileSystem.makeDirectory ("/usr"); fileSystem.makeDirectory ("/usr/share"); }
-                  cout << "[time][cronDaemon] /usr/share/zoneinfo does not exist, creating default one ... ";
-                  bool created = false;
-                  File f = fileSystem.open ("/usr/share/zoneinfo", "w");
-                  if (f) {
-                      String defaultContent = F ( "# timezone configuration - reboot for changes to take effect\r\n"
-                                                  "# choose one of available (POSIX) timezones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv\r\n\r\n"
-                                                  "TZ " TZ "\r\n");
-                    created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
-                    f.close ();
-
-                    __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-
-                  }
-                  cout << (created ? "created\n" : "error\n");
-              
-              }
-              {
-                  cout << "[time][cronDaemon] reading /usr/share/zoneinfo ... ";
-                  // parse configuration file if it exists
-                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/usr/share/zoneinfo")) {
-                      strcat (buffer, "\n");
-                      // cout << buffer << "\n";
-
-                      char __TZ__ [100] = TZ;
-                      char *p;
-                      if ((p = stristr (buffer, "\nTZ"))) sscanf (p + 3, "%*[ =]%98[!-~]", __TZ__);                      
-
-                      setenv ("TZ", __TZ__, 1);
-                      tzset ();
-                      #ifdef __DMESG__
-                          dmesgQueue << (const char *) "[time][cronDaemon] TZ set to " << __TZ__;
-                      #endif
-                      // cout << "OK, TZ set to " << __TZ__ << endl;
-                  } else {
-                      cout << (const char *) "error\n";
-                  }
-              }
-
-              // read NTP configuration from /etc/ntp.conf, create a new one if it doesn't exist
-              if (!fileSystem.isFile ((char *) "/etc/ntp.conf")) {
-                  // create directory structure
-                  if (!fileSystem.isDirectory ((char *) "/etc")) { fileSystem.makeDirectory ((char *) "/etc"); }
-                  cout << "[time][cronDaemon] /etc/ntp.conf does not exist, creating default one ... ";
-                  bool created = false;
-                  File f = fileSystem.open ((char *) "/etc/ntp.conf", "w");
-                  if (f) {
-                      String defaultContent = F ( "# configuration for NTP - reboot for changes to take effect\r\n\r\n"
-                                                  "server1 " DEFAULT_NTP_SERVER_1 "\r\n"
-                                                  "server2 " DEFAULT_NTP_SERVER_2 "\r\n"
-                                                  "server3 " DEFAULT_NTP_SERVER_3 "\r\n");
-                      created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
-                      f.close ();
-
-                      __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-
-                  }
-                  cout << (created ? "created\n" : "error\n");
-              }
-              {
-                  cout << "[time][cronDaemon] reading /etc/ntp.conf ... ";
-                  // parse configuration file if it exists
-                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/ntp.conf")) {
-                      strcat (buffer, "\n");
-                      // cout << buffer;
-
-                      *__ntpServer1__ = *__ntpServer2__ = *__ntpServer3__ = 0; 
-                      char *p;                    
-                      if ((p = stristr (buffer, "\nserver1"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer1__);
-                      if ((p = stristr (buffer, "\nserver2"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer2__);
-                      if ((p = stristr (buffer, "\nserver3"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer3__);
-
-                      // cout << __ntpServer1__ << ", " << __ntpServer1__ << ", " << __ntpServer1__ << endl;
-                      // cout << "OK\n";
-                  } else {
-                      cout << "error\n";
-                  }
-              }
-
-              // read scheduled tasks from /etc/crontab
-              if (!fileSystem.isFile ((char *) "/etc/crontab")) {
-                  // create directory structure
-                  if (!fileSystem.isDirectory ((char *) "/etc")) { fileSystem.makeDirectory ((char *) "/etc"); }          
-                  cout << "[time][cronDaemon] /etc/crontab does not exist, creating default one ... ";
-                  bool created = false;
-                  File f = fileSystem.open ((char *) "/etc/crontab", "w");
-                  if (f) {
-                      String defaultContent = F("# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
-                                                "#\r\n"
-                                                "# .------------------- second (0 - 59 or *)\r\n"
-                                                "# |  .---------------- minute (0 - 59 or *)\r\n"
-                                                "# |  |  .------------- hour (0 - 23 or *)\r\n"
-                                                "# |  |  |  .---------- day of month (1 - 31 or *)\r\n"
-                                                "# |  |  |  |  .------- month (1 - 12 or *)\r\n"
-                                                "# |  |  |  |  |  .---- day of week (0 - 7 or *; Sunday=0 and also 7)\r\n"
-                                                "# |  |  |  |  |  |\r\n"
-                                                "# *  *  *  *  *  * cronCommand to be executed\r\n"
-                                                "# * 15  *  *  *  * exampleThatRunsQuaterPastEachHour\r\n");
-
-                    created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
-                    f.close ();
-
-                    __diskTraffic__.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
-
-                  }
-                  cout << (created ? "created\n" : "error\n");
-              }
-              {
-                  cout << "[time][cronDaemon] reading /etc/crontab ... ";
-                  // parse scheduled tasks if /etc/crontab exists
-                  char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
-                  if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/crontab")) {
-                      strcat (buffer, "\n");
-                      // cout << buffer;
-
-                      char *p, *q;
-                      p = buffer + 1;
-                      while (*p) {
-                          if ((q = strstr (p, "\n"))) {
-                              *q = 0;
-                              if (*p) cronTabAdd (p, true);
-                              p = q + 1;
-                          }
+                        // read NTP configuration from /etc/ntp.conf, create a new one if it doesn't exist
+                        if (!fileSystem.isFile ((char *) "/etc/ntp.conf")) {
+                            // create directory structure
+                            if (!fileSystem.isDirectory ((char *) "/etc")) 
+                                fileSystem.makeDirectory ((char *) "/etc");
+                            cout << "[cronDaemon] /etc/ntp.conf does not exist, creating default one ... ";
+                            bool created = false;
+                            File f = fileSystem.open ((char *) "/etc/ntp.conf", "w");
+                            if (f) {
+                                String defaultContent = F ( "# configuration for NTP - reboot for changes to take effect\r\n\r\n"
+                                                            "server1 " DEFAULT_NTP_SERVER_1 "\r\n"
+                                                            "server2 " DEFAULT_NTP_SERVER_2 "\r\n"
+                                                            "server3 " DEFAULT_NTP_SERVER_3 "\r\n");
+                                created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
+                                f.close ();
+                                fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            }
+                            cout << (created ? "created\n" : "error\n");
+                        }
+                        {
+                            cout << "[cronDaemon] reading /etc/ntp.conf ... ";
+                            // parse configuration file if it exists
+                            char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
+                            if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/ntp.conf")) {
+                                strcat (buffer, "\n");
+                                *__ntpServer1__ = *__ntpServer2__ = *__ntpServer3__ = 0; 
+                                char *p;                    
+                                if ((p = stristr (buffer, "\nserver1"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer1__);
+                                if ((p = stristr (buffer, "\nserver2"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer2__);
+                                if ((p = stristr (buffer, "\nserver3"))) sscanf (p + 8, "%*[ =]%253[0-9A-Za-z.-]", __ntpServer3__);
+                                // cout << "OK\n";
+                            } else {
+                                cout << "error\n";
+                            }
                         }
 
-                        // cout << "OK, " << __cronTabEntries__ << " entries\n";
+                        // read scheduled tasks from /etc/crontab
+                        if (!fileSystem.isFile ((char *) "/etc/crontab")) {
+                            // create directory structure
+                            if (!fileSystem.isDirectory ((char *) "/etc"))
+                                fileSystem.makeDirectory ((char *) "/etc");
+                            cout << "[cronDaemon] /etc/crontab does not exist, creating default one ... ";
+                            bool created = false;
+                            File f = fileSystem.open ((char *) "/etc/crontab", "w");
+                            if (f) {
+                                String defaultContent = F ("# scheduled tasks (in local time) - reboot for changes to take effect\r\n"
+                                                           "#\r\n"
+                                                           "# .------------------- second (0 - 59 or *)\r\n"
+                                                           "# |  .---------------- minute (0 - 59 or *)\r\n"
+                                                           "# |  |  .------------- hour (0 - 23 or *)\r\n"
+                                                           "# |  |  |  .---------- day of month (1 - 31 or *)\r\n"
+                                                           "# |  |  |  |  .------- month (1 - 12 or *)\r\n"
+                                                           "# |  |  |  |  |  .---- day of week (0 - 7 or *; Sunday=0 and also 7)\r\n"
+                                                           "# |  |  |  |  |  |\r\n"
+                                                           "# *  *  *  *  *  * cronCommand to be executed\r\n"
+                                                           "# * 15  *  *  *  * exampleThatRunsQuaterPastEachHour\r\n");
+                                created = (f.printf (defaultContent.c_str ()) == defaultContent.length ());
+                                f.close ();
+                                fileSystem.diskTraffic.bytesWritten += defaultContent.length (); // update performance counter without semaphore - values may not be perfectly exact but we won't loose time this way
+                            }
+                            cout << (created ? "created\n" : "error\n");
+                        }
+                        {
+                            cout << "[cronDaemon] reading /etc/crontab ... ";
+                            // parse scheduled tasks if /etc/crontab exists
+                            char buffer [MAX_TZ_ETC_NTP_CONF_SIZE] = "\n";
+                            if (fileSystem.readConfigurationFile (buffer + 1, sizeof (buffer) - 3, "/etc/crontab")) {
+                                strcat (buffer, "\n");
+                                char *p, *q;
+                                p = buffer + 1;
+                                while (*p) {
+                                    if ((q = strstr (p, "\n"))) {
+                                        *q = 0;
+                                        if (*p) cronTabAdd (p, true);
+                                        p = q + 1;
+                                    }
+                                }
+                            } else {
+                                cout << "error\n";
+                            }
+                        }
+
                     } else {
-                        cout << "error\n";
+                        cout << "[cronDaemon] file system not mounted, can't read or write configuration files\n";
                     }
-              }
-            } else {
-                cout << "[time][cronDaemon] file system not mounted, can't read or write configuration files\n";
+                #else
+                    // set the default timezone
+                    setenv ("TZ", (char *) TZ, 1);
+                    tzset ();
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[cronDaemon] TZ set to " << TZ;
+                    #endif
+                    cout << (const char *) "[cronDaemon] TZ set to " << TZ << endl;
+
+                    cout << (const char *) "[cronDaemon] is starting without a file system\n";
+                #endif
+
+
+                if (__runDaemonInItsOwnTask__) {
+                    // run periodic synchronization with NTP servers and execute cron commands in a separate task
+                    #define tskNORMAL_PRIORITY 1
+                    if (pdPASS != xTaskCreate ([] (void *ths) {
+                                                                while (true) {
+                                                                    delay (100);
+                                                                    ((cronDaemon_t *) ths)->nextRun ();
+                                                                }
+                                                              }, "cronDaemon", CRON_DAEMON_STACK_SIZE, (void *) this, tskNORMAL_PRIORITY, NULL)) {
+                        #ifdef __DMESG__
+                            dmesgQueue << (const char *) "[cronDaemon] xTaskCreate error, could not start";
+                        #endif
+                        cout << (const char *) "[cronDaemon] xTaskCreate error, could not start" << endl;
+                    }
+                }
+
             }
-        #else
 
-            // set the default timezone
-            setenv ("TZ", (char *) TZ, 1);
-            tzset ();
-            #ifdef __DMESG__
-                dmesgQueue << (const char *) "[time][cronDaemon] TZ set to " << TZ;
-            #endif
-            cout << (const char *) "[time][cronDaemon] TZ set to " << TZ << endl;
 
-            cout << (const char *) "[time][cronDaemon] is starting without a file system\n";
-        #endif    
-        
-        // run periodic synchronization with NTP servers and execute cron commands in a separate thread
-        #define tskNORMAL_PRIORITY 1
-        if (pdPASS != xTaskCreate (__cronDaemon__, "cronDaemon", CRON_DAEMON_STACK_SIZE, (void *) cronHandler, tskNORMAL_PRIORITY, NULL)) {
-            #ifdef __DMESG__
-                dmesgQueue << (const char *) "[time][cronDaemon] xTaskCreate error, could not start cronDaemon";
-            #endif
-            cout << (const char *) "[time][cronDaemon] xTaskCreate error, could not start cronDaemon" << endl;
-        }
+            // (periodic calls to) nextRun functions scans cronTab and executes what needed
+            // 1. - it executes cron commands from cron table when the time is right
+            // 2. - it synchronizes time with NTP servers once a day
+            void nextRun () { 
+
+                // trigger 3 cron events that can be triggerd even if the time is not known (yet) 
+                if (__cronHandler__) {
+                    if (millis () - __lastMinuteCheck__ >= 60000) { 
+                        __lastMinuteCheck__ = millis ();
+                        __cronHandler__ ("ONCE_A_MINUTE");
+
+                        if (millis () - __lastHourCheck__ >= 3600000) { 
+                            __lastHourCheck__ = millis ();
+                            __cronHandler__ ("ONCE_AN_HOUR");
+
+                            if (millis () - __lastDayCheck__ >= 86400000) { 
+                                __lastDayCheck__ = millis ();
+                                __cronHandler__ ("ONCE_A_DAY");
+                            } 
+                        }
+                    }
+                }
+
+                // continue processing depending on the state
+                switch (__state__) {
+                    case STARTING:      // log success       
+                                        #ifdef __DMESG__
+                                            dmesgQueue << (const char *) "[cronDaemon] started on core " << xPortGetCoreID () << ", free heap left: " << esp_get_free_heap_size ();
+                                        #endif
+                                        cout << (const char *) "[cronDaemon] started\n";
+                                        __state__ = FIRST_SYNC;
+                                        return;
+
+                    case FIRST_SYNC:    // is it time for NTP sync? Try every 15 seconds until first time synchronized
+                                        if (millis () - __lastNtpSync__ >= 15000) {
+                                            __lastNtpSync__ = millis ();
+                                            if (!*ntpDate ()) // success
+                                                __state__ = STARTED;
+                                        }
+                                        if (!__previousRun__)
+                                            __previousRun__ = time ();
+                                        if (__previousRun__) // if the time is known
+                                            goto processCronTab;
+                                        return;
+
+                    case STARTED:       // NTP sync once a day and process cronTab
+                                        if (millis () - __lastNtpSync__ >= 86400000) {
+                                            __lastNtpSync__ = millis ();
+                                            ntpDate ();
+                                        }
+                                        break; // continue with processCronTab;
+                }
+
+            processCronTab:
+                if (__cronHandler__) {
+
+                    // process cronTab
+                    time_t now = time ();
+                    if (!now) 
+                        return; // should't happen but check anyway
+                    for (time_t l = __previousRun__ + 1; l <= now; l++) {
+                        delay (1);
+                        struct tm slt; 
+                        localtime_r (&l, &slt); 
+                        //scan through cron entries and find commands that needs to be executed (at time l)
+                        cronTab.lock ();
+                            // mark cron commands for execution
+                            for (int i = 0; i < cronTab.size (); i ++) {
+                                if ((cronTab [i].second == ANY      || cronTab [i].second == slt.tm_sec) && 
+                                    (cronTab [i].minute == ANY      || cronTab [i].minute == slt.tm_min) &&
+                                    (cronTab [i].hour == ANY        || cronTab [i].hour == slt.tm_hour) &&
+                                    (cronTab [i].day == ANY         || cronTab [i].day == slt.tm_mday) &&
+                                    (cronTab [i].month == ANY       || cronTab [i].month == slt.tm_mon + 1) &&
+                                    (cronTab [i].day_of_week == ANY || cronTab [i].day_of_week == slt.tm_wday || cronTab [i].day_of_week == slt.tm_wday + 7) ) {
+
+                                        if (!cronTab [i].executed) {
+                                            cronTab [i].markForExecution = true;
+                                        }
+                                                        
+                                } else {
+
+                                        cronTab [i].executed = false;
+                    
+                                }
+                            }          
+                            // execute marked cron commands
+                            int execCnt = 1;
+                            while (execCnt) { // if a command during execution deletes other commands we have to repeat this step
+                                execCnt = 0;
+                                for (int i = 0; i < cronTab.size (); i ++) {
+                                    if (cronTab [i].markForExecution ) {
+
+                                        if (cronTab [i].markForExecution) {
+                                            cronTab [i].executed = true;
+                                            cronTab [i].lastExecuted = now;
+                                            cronTab [i].markForExecution = false;
+                                            __cronHandler__ (cronTab [i].cronCommand); // this should be called last in case cronHandler calls insert or erase itself
+                                            execCnt ++; 
+                                            delay (1);
+                                        }
+
+                                        cronTab [i].markForExecution = false;
+                                    }
+                                }
+                            }
+                        cronTab.unlock ();
+                    }
+                    __previousRun__ = now;
+
+                } // if (__cronHandler__)
+
+                // check how much stack did we use
+                static UBaseType_t lastHighWaterMark = CRON_DAEMON_STACK_SIZE;
+                UBaseType_t highWaterMark = uxTaskGetStackHighWaterMark (NULL);
+                if (lastHighWaterMark > highWaterMark) {
+                    #ifdef __DMESG__
+                        dmesgQueue << (const char *) "[cronDaemon] new stack high water mark reached: " << highWaterMark << (const char *) " bytes not used";
+                    #endif
+                    // DEBUG: 
+                    Serial.print ((const char *) "[cronDaemon] new stack high water mark reached: "); Serial.print (highWaterMark); Serial.println ((const char *) " bytes not used");
+                    lastHighWaterMark = highWaterMark;
+                }
+            }
+
+    };
+
+    // create a working instance
+    cronDaemon_t cronDaemon;
+
+    [[deprecated("Use cronDaemon.start instead.")]]
+    void startCronDaemon (void (* cronHandlerCallback) (const char *) = NULL) {
+        cronDaemon.start (cronHandlerCallback);
     }
+
   
     // a more convinient version of time function: returns GMT or 0 if the time is not set
     time_t time () {
@@ -780,12 +894,12 @@
         time_t t = time (NULL);
         return __timeHasBeenSet__ ? t - __startupTime__ :  millis () / 1000; // if the time has already been set, 2023/06/22 21:12:34 is the time when I'm writing this code, any valid time should be greater than this
     }
-  
+
     // sets internal clock, also sets/corrects __startupTime__ internal variable
-    void setTimeOfDay (time_t t) {         
+    void setTimeOfDay (time_t t) {
         time_t oldTime = time (NULL);
         struct timeval newTime = {t, 0};
-        settimeofday (&newTime, NULL); 
+        settimeofday (&newTime, NULL);
 
         // char buf [100];
         if (__timeHasBeenSet__) {
@@ -822,7 +936,8 @@
     // a more convinient version of thread safe asctime_r function: converts struct tm to array of chars, buff should have at least 26 bytes
     char *ascTime (const struct tm st, char *buf, size_t len) {
         strftime (buf, len, "%Y/%m/%d %T", &st);
-        return buf; 
+        return buf;
     }
+
 
 #endif
