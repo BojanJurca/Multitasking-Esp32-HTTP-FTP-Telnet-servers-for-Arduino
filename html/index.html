@@ -1,399 +1,606 @@
 <!DOCTYPE html>
 <html lang='en'>
-<head>
-	<title>Esp32_web_ftp_telnet_server_template</title>
+	<head>
+		<title>Multitasking Esp32 HTTP, FTP and Telnet server for ESP32 (Arduino)</title>
 
-	<meta charset='UTF-8'>
-	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
-	<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+		<meta charset='UTF-8'>
+    	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    	<meta name='viewport' content='width=device-width, initial-scale=1.0'>
 
-	<link rel='shortcut icon' type='image/x-icon' sizes='192x192' href='/android-192.png'>
-	<link rel='icon' type='image/png' sizes='192x192' href='/android-192.png'>
-	<link rel='apple-touch-icon' sizes='180x180' href='/apple-180.png'>
+		<!-- don't cache - at least during development -->
+		<meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate, max-age=0'>
+		<meta http-equiv='Pragma' content='no-cache'>
+		<meta http-equiv='Expires' content='0'>
 
-	<style>
-		/* nice page framework */
-		hr {border: 0; border-top: 1px solid lightgray; border-bottom: 1px solid lightgray}
+    	<link rel='icon' type='image/png' sizes='192x192' href='android-192.png'>
+    	<link rel='apple-touch-icon' sizes='180x180' href='apple-180.png'>
 
-		h1 {font-family: verdana; font-size: 40px; text-align: center}
+		<style>
 
-		/* define grid for controls - we'll use d2 + d5 or d3 + d4 + d5 */
-		div.d1 {position: relative; height: 65px; width: 100%; font-family: verdana; font-size: 30px; color: hsl(207, 90%, 30%);}
-		div.d2 {position: relative; float: left;  width:  60%; font-family: verdana; font-size: 30px; color: gray;}
-		div.d3 {position: relative; float: left;  width:  40%; font-family: verdana; font-size: 30px; color: gray;}
-		div.d4 {position: relative; float: left;  width:  20%; font-family: verdana; font-size: 30px; color: black;}
-		div.d5 {position: relative; float: left;  width:  40%; font-family: verdana; font-size: 30px; color: black;}
+			h1 {font-family: verdana; font-size: 32px; text-align: center}
 
-		/* nice switch control */
-		.switch {position: relative; display: inline-block; width: 60px; height: 34px}
-		.slider {position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; -webkit-transition: .4s; transition: .4s}
-		.slider:before {position: absolute; content: ''; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; -webkit-transition: .4s; transition: .4s}
-		input:checked+.slider {background-color: hsl(207, 90%, 30%) }
-		input:focus+.slider {box-shadow: 0 0 1px hsl(207, 90%, 30%) }
-		input:checked+.slider:before {-webkit-transform: translateX(26px); -ms-transform: translateX(26px); transform: translateX(26px)}
-		.switch input {display: none}
-		.slider.round {border-radius: 34px}
-		.slider.round:before {border-radius: 50%}
-		input:disabled+.slider {background-color: #aaa}
+			div.d1 {
+				position: relative;
+				height: 90px;
+				width: 100%;
+				font-family: verdana;
+				font-size: 30px;
+				color: hsl(207, 90%, 30%);
+			}
+			div.d2 {
+				position: relative;
+				float: left;
+				width:  60%;
+				font-family: verdana;
+				font-size: 28px;
+				color: gray;
+			}
 
-		a:link, a:visited {color: gray; text-decoration: none; cursor: auto;}
-		a:hover {color: hsl(207, 90%, 30%); cursor:pointer; }
-		a:link:active, a:visited:active {color: gray;}
+			.switch {
+				position: relative;
+				display: inline-block;
+				width: 86px;
+				height: 46px
+			}
+			.slider {
+				position: absolute;
+				cursor: pointer;
+				top: 0;
+				left: 0;
+				right: 0;
+				bottom: 0;
+				background-color: #ccc;
+				-webkit-transition: .4s;
+				transition: .4s
+			}
+			.slider:before {
+				position: absolute;
+				content: '';
+				height: 38px;
+				width: 38px;
+				left: 4px;
+				bottom: 4px;
+				background-color: white;
+				-webkit-transition: .4s;
+				transition: .4s
+			}
+			input:checked+.slider {
+				background-color: hsl(207, 90%, 30%)
+			}
+			input:focus+.slider {
+				box-shadow: 0 0 1px hsl(207, 90%, 30%)
+			}
+			input:checked+.slider:before {
+				-webkit-transform: translateX(40px);
+				-ms-transform: translateX(40px);
+				transform: translateX(40px)
+			}
+			.switch input {
+				display: none
+			}
+			.slider.round {
+				border-radius: 30px
+			}
+			.slider.round:before {
+				border-radius: 50%
+			}
+			input:disabled+.slider {
+				background-color: #aaa
+			}
 
-		dialog[open] {
-			font-family: verdana; 
-			font-size: 28px; 
-			color: white;
-			background-color:rgb(200 0 0 / 0.90);
-			border: solid rgb(200 0 0 / 0.90) 0px;
-			border-radius: 12px;
-  		}
+			a:link, a:visited {
+				color: gray;
+				text-decoration: none;
+				cursor: auto;
+			}
+			a:hover {
+				color: hsl(207, 90%, 40%);
+				cursor:pointer;
+			}
+			a:link:active, a:visited:active {
+				color: gray;
+			}
 
-	</style>
-</head>
-
-<body>
-		
-	<br><h1><small>A brief demonstration of Esp32_web_ftp_telnet_server_template web user interface capabilities</small></h1>
-
-	<!-- error message -->
-	<dialog id="errDialog"></dialog>
-
-	<div class='d1'>
-		<b>HTML/REST/JSON <small>bi-directional communication with ESP32</small></b>
-	</div>
-	<hr />
-	<div class='d1'>
-		<div class='d2'>&nbsp;Built-in LED<br>&nbsp;<small><small>Use of nice controls.</small></small></div>
-		<div class='d5'>
-			<label class='switch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLED (this.checked)'><div class='slider round'></div></label>
-		</div>
-	</div>
-	<hr />
-	<div class='d1'>
-		<div class='d2'>&nbsp;Up time<br>&nbsp;<small><small>Test stability of the code.</small></small></div>
-		<div class='d5' id='upTime'>...</div>
-	</div>
-	<hr />
-	<div class='d1'>
-		<div class='d3'>&nbsp;Free heap<br>&nbsp;<small><small>Find memory leaks.</small></small></div>
-		<div class='d4' id='freeHeap'>...</div>
-		<div class='d5'><canvas id='freeHeapGraph' height='62'></canvas></div>
-	</div>
-	<hr />
-	<div class='d1'>
-		<div class='d3'>&nbsp;Max free heap block<br>&nbsp;<small><small>Find heap related problems.</small></small></div>
-		<div class='d4' id='freeBlock'>...</div>
-		<div class='d5'><canvas id='freeBlockGraph' height='62'></canvas></div>
-	</div>
-	<hr />
-	<div class='d1'>
-		<div class='d3'>&nbsp;HTTP requests<br>&nbsp;<small><small>Measurements.</small></small></div>
-		<div class='d4' id='httpRequestCount'>...</div>
-		<div class='d5'><canvas id='httpRequestCountGraph' height='62'></canvas></div>	
-	</div>
-	<hr />
-
-	<br><br>
-	<div class='d1'>
-		<b>HTML/WebSocket <small>data streaming from ESP32</small></b>
-	</div>
-	<hr />
-	<div class='d1'>
-		<div class='d3'>&nbsp;RSSI<br>&nbsp;<small><small>Find connectivity problems.</small></small></div>
-		<div class='d4' id='rssi'>...</div>
-		<div class='d5'><canvas id='rssiGraph' height='62'></canvas></div>	
-	</div>
-	<hr /> 
-
-	<script type='text/javascript'>
-
-		var TO;
-
-		// correct canvas scaling and sizes
-		function resizeCanvases () {
-			var canvasWidth = document.getElementById ('upTime').clientWidth;
-			var canvasScaleWidth = canvasWidth / document.getElementById ('httpRequestCountGraph').clientWidth;
-						
-			document.getElementById ('freeHeapGraph').width = canvasWidth;
-			document.getElementById ('freeBlockGraph').width = canvasWidth;
-			document.getElementById ('httpRequestCountGraph').width = canvasWidth;
-			document.getElementById ('rssiGraph').width = canvasWidth;
-			document.getElementById ('freeHeapGraph').getContext ('2d').scale (canvasScaleWidth, 1);
-			document.getElementById ('freeBlockGraph').getContext ('2d').scale (canvasScaleWidth, 1);
-			document.getElementById ('httpRequestCountGraph').getContext ('2d').scale (canvasScaleWidth, 1);
-			document.getElementById ('rssiGraph').getContext ('2d').scale (canvasScaleWidth, 1);
-
-			// schedule REST calls with small delays so that all requests would not be sent to ESP32 at the same time
-			clearTimeout (TO);
-			TO = setTimeout (function () {
-				refreshAllGraphs ();
-			}, 300);
-		}
-		resizeCanvases ();
-		window.addEventListener ('resize', (e) => {         
-			resizeCanvases ();
-		});
-
-		// mechanism that makes REST calls and get their replies
-		var httpClient = function () {
-			this.request = function (url, method, callback) {
-				var httpRequest = new XMLHttpRequest ();
-				var httpRequestTimeout = null;
-				
-				httpRequest.onreadystatechange = function () {
-					// console.log (httpRequest.readyState);
-					if (httpRequest.readyState == 1) { // 1 = OPENED, start timing
-						clearTimeout (httpRequestTimeout);
-						httpRequestTimeout = setTimeout (function () { 
-							// alert ('Server did not reply (in time).'); 
-							errorMessage ('Server did not reply (in time).');
-						}, 5000);
-					}
-					if (httpRequest.readyState == 4) { // 4 = DONE, call callback function with responseText
-						clearTimeout (httpRequestTimeout);
-						switch (httpRequest.status) {
-							case 200: 	callback (httpRequest.responseText); // 200 = OK
-										break;
-							case 0:		break;
-							default: 	// alert ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText); // some other reply status, like 404, 503, ...
-										errorMessage ('Server reported error ' + httpRequest.status + ' ' + httpRequest.responseText);
-										break;
-						}
-					}
+			dialog[open] {
+				font-family: Verdana, sans-serif;
+				font-size: 32px;
+				color: white;
+				background-color: rgba(200, 0, 0, 0.92);
+				border: none;
+				border-radius: 12px;
+				padding: 18px 26px;
+				box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+				position: fixed;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				animation: fadeInScale 0.18s ease-out;
+			}
+			@keyframes fadeInScale {
+				from {
+					opacity: 0;
+					transform: translate(-50%, -50%) scale(0.92);
 				}
-				httpRequest.open (method, url, true);
-				httpRequest.send (null);
+				to {
+					opacity: 1;
+					transform: translate(-50%, -50%) scale(1);
+				}
 			}
-		}
 
-		var client = new httpClient ();
+			body {
+				font-family: Verdana, sans-serif;
+				margin: 10px;
+				overflow-wrap: break-word;
+			}
 
-		// error message
-		var errorMessageTimeout = null;
-		function errorMessage (msg) {
-			clearTimeout (errorMessageTimeout);
-			document.getElementById ('errDialog').textContent = msg;
-			document.getElementById ('errDialog').showModal ();
-			errorMessageTimeout = setTimeout (function () {
-				document.getElementById ('errDialog').close ();
-			}, 3000);				
-		}
+			.card {
+				background: #fafafa;
+				border: 1px solid #ccc;
+				border-radius: 10px;
+				padding: 12px;
+				margin-bottom: 14px;
+			}
+			.title {
+				font-size: 26px;
+				font-weight: bold;
+				color: hsl(207, 90%, 30%);
+				margin-bottom: 8px;
+			}
+			.row {
+				display: flex;
+				flex-wrap: wrap;
+				width: 100%;
+				margin-bottom: 6px;
+			}
+			.label {
+				flex: 1 1 60%;
+				font-size: 22px;
+				color: gray;
+			}
+			.value {
+				flex: 1 1 40%;
+				font-size: 24px;
+				color: black;
+				text-align: right;
+			}
 
-		function refreshLED () { // read led state from ESP and refresh GUI
-			let client = new httpClient ();
-			client.request ('/builtInLed','GET',function (json) {
-				var obj=JSON.parse (json);
-				document.getElementById ('ledSwitch').disabled = false; 
-				document.getElementById ('ledSwitch').checked = (obj.builtInLed == 'on');
+			/* smartphones - one row */
+			@media (max-width: 480px) {
+				.label, .value {
+					flex: 1 1 100%;
+					text-align: left;
+					margin-top: 4px;
+				}
+			}
+
+			canvas {
+				width: 100% !important;
+				height: auto !important;
+				max-width: 100%;
+				display: block;
+			}
+
+		</style>
+	</head>
+
+	<body>
+		
+		<div class='d2' style='width: 100%;'>&nbsp;<small><small>Get free source code at: <a href='https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino'>https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino</a></small></small></div>
+
+		<br><br>
+
+		<!-- error message -->
+		<dialog id='errDialog'></dialog>
+
+		<br><h1>A brief demonstration of Multitasking Esp32 HTTP, FTP and Telnet server for ESP32 (Arduino)</h1>
+		<br>
+		<div class='d1'>
+			<b>HTML/REST/JSON bi-directional communication with ESP32</b>
+		</div>
+
+
+		<br><br>
+
+
+		<div class='card'>
+			<div class='title'>Toggle built-in LED</div>
+			<div class='row'>
+				<div class='label'>Use good-looking controls</div>
+				<div class='value'>   <label class='switch' for='ledSwitch'><input type='checkbox' disabled id='ledSwitch' onClick='turnLED (this.checked)'><div class='slider round'></div></label>   </div>
+			</div>
+		</div>
+
+		<div class='card'>
+			<div class='title'>Up time</div>
+			<div class='row'>
+				<div class='label'>Test stability of the code</div>
+				<div class='value' id='upTime'>...</div>
+			</div>
+		</div>
+
+		<div class='card'>
+			<div class='title'>HTTP requests (minute interval)</div>
+			<div class='row'>
+				<div class='label' id='httpRequestCount'>Measure HTTP traffic</div>
+				<div class='value'> <canvas id='httpRequestCountGraph' width='480' height='80'></canvas> </div>
+			</div>
+		</div>
+
+		<div class='card'>
+			<div class='title'>Free heap (minute interval)</div>
+			<div class='row'>
+				<div class='label' id='freeHeap60'>Find memory leaks</div>
+				<div class='value'> <canvas id='freeHeapGraph60' width='480' height='80'></canvas> </div>
+			</div>
+		</div>
+	
+		<div class='card'>
+			<div class='title'>Free heap (hourly interval)</div>
+			<div class='row'>
+				<div class='label' id='freeHeap24'>Find memory leaks</div>
+				<div class='value'> <canvas id='freeHeapGraph24' width='480' height='80'></canvas> </div>
+			</div>
+		</div>
+
+		<div class='card'>
+			<div class='title'>Max free memory block (hourly interval)</div>
+			<div class='row'>
+				<div class='label' id='freeBlock24'>Find problems with heap</div>
+				<div class='value'> <canvas id='freeBlockGraph24' width='480' height='80'></canvas> </div>
+			</div>
+		</div>	
+
+
+		<br><br><br>
+
+
+		<div class='d1'>
+			<b>HTML/WebSocket data streaming</b>
+		</div>
+
+
+		<div class='card'>
+			<div class='title'>RSSI</div>
+			<div class='row'>
+				<div class='label' id='rssi'>Find problems with conn.</div>
+				<div class='value'> <canvas id='rssiGraph' width='480' height='80'></canvas> </div>
+			</div>
+		</div>	
+
+
+	
+		<br><br><br>
+
+
+		<div class='d1'>
+			<b>Use cases</b>
+		</div>
+
+		<a href="oscilloscope.html" style="text-decoration:none; color:inherit;">
+			<div class="card">
+				<div class="title">Oscilloscope</div>
+
+				<div class="row">
+					<div class="label">Signal viewer</div>
+					<div class="value">Open</div>
+				</div>
+			</div>
+		</a>
+
+		
+		<script type='text/javascript'>
+
+			// -------------------------------------------------------------
+			// Canvas resize
+			// -------------------------------------------------------------
+			let TO;
+
+			function resizeCanvases() {
+				let c = document.getElementById('httpRequestCountGraph');
+				c.width = c.clientWidth;
+
+				c = document.getElementById('freeHeapGraph60');
+				c.width = c.clientWidth;
+
+				c = document.getElementById('freeHeapGraph24');
+				c.width = c.clientWidth;
+
+				c = document.getElementById('freeBlockGraph24');
+				c.width = c.clientWidth;
+
+				c = document.getElementById('rssiGraph');
+				c.width = c.clientWidth;
+
+				clearTimeout(TO);
+				TO = setTimeout(() => refresh(), 250);
+			}
+
+			resizeCanvases();
+			window.addEventListener('resize', resizeCanvases);
+
+
+			// -------------------------------------------------------------
+			// Page restored from cache / user returns to tab
+			// -------------------------------------------------------------
+			window.addEventListener('pageshow', () => {
+				if (performance.getEntriesByType('navigation')[0].type === 'back_forward') {
+					setTimeout(() => {
+						clearTimeout(errorMessageTimeout);
+						errDialog.close();
+						refreshLED();
+						refresh();
+					}, 50);
+				}
 			});
-		}
 
-		refreshLED (); // GUI initialization at load
-
-		function turnLED (switchIsOn) { // send desired led state to ESP and refresh GUI
-			let client = new httpClient ();
-			client.request (switchIsOn ? '/builtInLed/on' : '/builtInLed/off', 'PUT', function (json){
-				var obj = JSON.parse (json);
-				document.getElementById ('ledSwitch').disabled = false; 
-				document.getElementById ('ledSwitch').checked= (obj.builtInLed == 'on');
+			document.addEventListener('visibilitychange', () => {
+				if (document.visibilityState === 'visible') {
+					setTimeout(() => {
+						clearTimeout(errorMessageTimeout);
+						errDialog.close();
+						refreshLED();
+						refresh();
+					}, 50);
+				}
 			});
-		}
 
-		setInterval (function () {
-			refresh ();
-		}, 1000);
 
-		function refresh () { 
-			client.request ('/state', 'GET', function (json) {
-				let obj = JSON.parse (json);
-				document.getElementById ('upTime').innerText = obj.upTime;
-				document.getElementById ('httpRequestCount').innerText = lineGraph (obj.httpRequestCount, 'httpRequestCountGraph','#2597f4', 5) + ' / min';
-				document.getElementById ('freeHeap').innerText = lineGraph (obj.freeHeap, 'freeHeapGraph','#0961aa', 5) + ' KB';
-				document.getElementById ('freeBlock').innerText = lineGraph (obj.freeBlock, 'freeBlockGraph','#0961aa', 5) + ' KB';
-			});
-		}
+			// -------------------------------------------------------------
+			// ERROR MESSAGE
+			// -------------------------------------------------------------
+			let errorMessageTimeout = null;
 
-		function lineGraph (obj, contextId, graphColour, scaleModule) {
-			// var obj=JSON.parse (json);
-			if (obj.value.length == 0) return '';
-			var retVal = obj.value [0];
-			var minVal = parseInt (obj.value [0]);
-			var maxVal = parseInt (obj.value [0]);
-			for (i = 1; i < obj.value.length; i++){
-				var m = parseInt (obj.value [i]);
-				if (minVal > m) minVal = m;
-				if (maxVal < m) maxVal = m;
-			}
-			var midVal;
-			if (minVal == maxVal){
-				minVal --;
-				midVal = maxVal;
-				maxVal ++;
-			} else {
-				if ((maxVal - minVal) % 2 == 1) maxVal ++;
-				midVal=(minVal + maxVal) / 2;
-			}
-			var c = document.getElementById (contextId);
-			var ctx = c.getContext ('2d');
-
-			var ox = 30;
-			var fx;
-			if (obj.value.length <= 24) {
-				fx = (c.width - ox - 15) / 24;
-			} else {
-				fx = (c.width - ox - 15) / 60;
+			function errorMessage(msg) {
+				clearTimeout(errorMessageTimeout);
+				errDialog.textContent = msg;
+				errDialog.showModal();
+				errorMessageTimeout = setTimeout(() => errDialog.close(), 3000);
 			}
 
-			var fy = (c.height - 20) / (minVal - maxVal);
-			oy = c.height - 20 + 2 - fy * minVal; // leave 2 * text height free, 2 is half of linegraph width
-			ctx.clearRect (0, 0, c.width, c.height);
-			ctx.font = '10px Verdana';
-			ctx.fillText (maxVal, 10, 10);
-			ctx.fillText (midVal, 10, c.height / 2);
-			ctx.fillText (minVal, 10, c.height - 10);
-			for (i = 0; i < obj.scale.length; i++) {
-				if (obj.scale [i] % scaleModule == 0)
-					ctx.fillText (obj.scale [i], ox + fx * (i + 1) - 5, c.height);
+
+			// -------------------------------------------------------------
+			// GLOBAL FETCH CLIENT WITH TIMEOUT
+			// -------------------------------------------------------------
+			async function httpRequest(url, method = 'GET') {
+				const controller = new AbortController();
+				const t = setTimeout(() => controller.abort(), 5000);
+
+				try {
+					const response = await fetch(url, {
+						method,
+						signal: controller.signal
+					});
+
+					clearTimeout(t);
+
+					if (!response.ok)
+						throw new Error('Server reported error ' + response.status);
+
+					return await response.text();
+
+				} catch (err) {
+					if (err.name === 'AbortError')
+						errorMessage('Server did not reply in time.');
+					else
+						errorMessage(err.message);
+
+					throw err;
+				}
 			}
 
-			ctx.beginPath ();
-			ctx.setLineDash ([]);
-			ctx.lineWidth = 5;
-			ctx.strokeStyle = graphColour;
-			let avg = parseFloat (obj.value [0]);
-			ctx.moveTo (ox + fx,oy + fy * parseInt (obj.value [0]));
-			for(i = 1; i < obj.value.length; i++){
-				avg += parseFloat (obj.value [i]);
-				ctx.lineTo (ox + fx * (i + 1), oy + fy * parseInt (obj.value [i]));
-				retVal = obj.value [i];
+
+			// -------------------------------------------------------------
+			// LED HANDLING
+			// -------------------------------------------------------------
+			async function refreshLED() {
+				try {
+					const json = await httpRequest('/builtInLed');
+					const obj = JSON.parse(json);
+
+					ledSwitch.disabled = false;
+					ledSwitch.checked = (obj.builtInLed === 'on');
+				} catch (_) {}
 			}
-			ctx.stroke ();
-			avg /= obj.value.length;
 
-			// average
-			ctx.beginPath ();
-			ctx.setLineDash ([5, 3]); // dashes are 5px and spaces are 3px
-			ctx.lineWidth = 1;
-			ctx.moveTo (ox + fx * i, oy + fy * avg); // parseInt (obj.average));
-			ctx.lineTo (ox + fx, oy + fy * avg); // parseInt (obj.average));
-			ctx.stroke ();				
+			async function turnLED(isOn) {
+				try {
+					const json = await httpRequest(isOn ? '/builtInLed/on' : '/builtInLed/off', 'PUT');
+					const obj = JSON.parse(json);
 
-			return retVal;
-		}
+					ledSwitch.disabled = false;
+					ledSwitch.checked = (obj.builtInLed === 'on');
+				} catch (_) {}
+			}
+
+			refreshLED();  // initial LED sync
 
 
-		// WebSocket streaming:
-		// we should have a circular queue od measurements here but since we already have
-		// a function that dispalys nice graphs from JSON let's just keep all the data in 
-		// JSON
+			// -------------------------------------------------------------
+			// REFRESH /state
+			// -------------------------------------------------------------
+			let refreshRunning = false;
 
-		var rssiSamples = 0;
-		var rssiSeconds = 0;
-		var rssiScaleJson = '';
-		var rssiValueJson = '';
+			async function refresh() {
+				if (refreshRunning) return;
+				refreshRunning = true;
 
-			if ('WebSocket' in window) {
-				var ws = new WebSocket ('ws://' + self.location.host + '/rssiReader'); // open webSocket connection
-				ws.onopen = function () {;};
-				ws.onmessage = function (evt) { 
-					if (evt.data instanceof Blob) { // RSSI readings as 1 byte binary data
-						// receive binary data as blob and then convert it into array
-						var myByteArray = null;
-						var myArrayBuffer = null;
-						var myFileReader = new FileReader ();
-						myFileReader.onload = function (event) 	{
-							myArrayBuffer = event.target.result;
-							myByteArray = new Int8Array (myArrayBuffer); // <= RSSI information is now in the array of size 1
-							// document.getElementById('rssi').innerText = myByteArray [0].toString () + ' dBm';
-							// insert new data into JSON and display graph from it
-							if (rssiSamples == 0) {
-								rssiSamples = 1;
-								rssiScaleJson = '"|"';
-								rssiValueJson = '"' + myByteArray [0].toString () + '"';
-							} else {
-								rssiSamples ++;
-								if (++ rssiSeconds == 9) {
-									rssiScaleJson += ',"|"';
-									rssiSeconds = 0;
+				try {
+					const json = await httpRequest('/state');
+					const obj = JSON.parse(json);
+
+					upTime.innerText =
+						obj.upTime;
+
+					httpRequestCount.innerText =
+						'Measure HTTP traffic: ' +
+						lineGraph(obj.httpRequestCount, 'httpRequestCountGraph', '#2597f4', 5) +
+						' / min';
+
+					freeHeap60.innerText =
+						'Find memory leaks: ' +
+						lineGraph(obj.freeHeap60, 'freeHeapGraph60', '#0961aa', 5) +
+						' KB';
+
+					freeHeap24.innerText =
+						'Find memory leaks: ' +
+						lineGraph(obj.freeHeap24, 'freeHeapGraph24', '#0961aa', 1) +
+						' KB';
+
+					freeBlock24.innerText =
+						'Find problems with heap: ' +
+						lineGraph(obj.freeBlock24, 'freeBlockGraph24', '#0961aa', 1) +
+						' KB';
+
+				} finally {
+					refreshRunning = false;
+				}
+			}
+
+
+			// -------------------------------------------------------------
+			// MAIN INTERVAL
+			// -------------------------------------------------------------
+			setTimeout (function () {
+				clearTimeout(TO);
+				TO = setTimeout(() => refresh(), 1000);			
+			}, 250);	
+
+			// -------------------------------------------------------------
+			// lineGraph()
+			// -------------------------------------------------------------
+			function lineGraph(obj, contextId, graphColour, scaleModule) {
+				if (obj.value.length === 0) return '';
+
+				let retVal = obj.value[0];
+				let minVal = parseInt(obj.value[0]);
+				let maxVal = parseInt(obj.value[0]);
+
+				for (let i = 1; i < obj.value.length; i++) {
+					let m = parseInt(obj.value[i]);
+					if (minVal > m) minVal = m;
+					if (maxVal < m) maxVal = m;
+				}
+
+				let midVal;
+				if (minVal === maxVal) {
+					minVal--;
+					midVal = maxVal;
+					maxVal++;
+				} else {
+					if ((maxVal - minVal) % 2 === 1) maxVal++;
+					midVal = (minVal + maxVal) / 2;
+				}
+
+				const c = document.getElementById(contextId);
+				const ctx = c.getContext('2d');
+
+				const ox = 30;
+				const fx = (c.width - ox - 15) / (obj.value.length <= 24 ? 24 : 60);
+				const fy = (c.height - 20) / (minVal - maxVal);
+				const oy = c.height - 20 + 2 - fy * minVal;
+
+				ctx.clearRect(0, 0, c.width, c.height);
+				ctx.font = '10px Verdana';
+
+				ctx.fillText(maxVal, 10, 10);
+				ctx.fillText(midVal, 10, c.height / 2);
+				ctx.fillText(minVal, 10, c.height - 10);
+
+				for (let i = 0; i < obj.scale.length; i++) {
+					if (obj.scale[i] % scaleModule === 0)
+						ctx.fillText(obj.scale[i], ox + fx * (i + 1) - 5, c.height);
+				}
+
+				ctx.beginPath();
+				ctx.setLineDash([]);
+				ctx.lineWidth = 5;
+				ctx.strokeStyle = graphColour;
+
+				let avg = parseFloat(obj.value[0]);
+				ctx.moveTo(ox + fx, oy + fy * parseInt(obj.value[0]));
+
+				for (let i = 1; i < obj.value.length; i++) {
+					avg += parseFloat(obj.value[i]);
+					ctx.lineTo(ox + fx * (i + 1), oy + fy * parseInt(obj.value[i]));
+					retVal = obj.value[i];
+				}
+
+				ctx.stroke();
+				avg /= obj.value.length;
+
+				ctx.beginPath();
+				ctx.setLineDash([5, 3]);
+				ctx.lineWidth = 1;
+				ctx.moveTo(ox + fx * obj.value.length, oy + fy * avg);
+				ctx.lineTo(ox + fx, oy + fy * avg);
+				ctx.stroke();
+
+				return retVal;
+			}
+
+
+			// -------------------------------------------------------------
+			// WebSocket part
+			// -------------------------------------------------------------
+			let rssiSamples = 0;
+			let rssiScaleJson = '';
+			let rssiValueJson = '';
+
+			setTimeout (function () {
+
+				if ('WebSocket' in window) {
+					const ws = new WebSocket('ws://' + self.location.host + '/rssiReader');
+
+					ws.onmessage = evt => {
+
+						if (typeof evt.data === 'string') {
+							alert('Server reported: ' + evt.data);
+							return;
+						}
+
+						if (evt.data instanceof Blob) {
+							const reader = new FileReader();
+							reader.onload = ev => {
+								const arr = new Int8Array(ev.target.result);
+								const rssi = arr[0];
+
+								if (rssiSamples === 0) {
+									rssiSamples = 1;
+									rssiScaleJson = '""';
+									rssiValueJson = '"' + rssi + '"';
 								} else {
+									rssiSamples++;
 									rssiScaleJson += ',""';
+									rssiValueJson += ',"' + rssi + '"';
+
+									if (rssiSamples >= 60) {
+										rssiSamples--;
+										rssiScaleJson = rssiScaleJson.substring(rssiScaleJson.indexOf(',') + 1);
+										rssiValueJson = rssiValueJson.substring(rssiValueJson.indexOf(',') + 1);
+									}
 								}
-								rssiValueJson += ',"' + myByteArray [0].toString () + '"';
-								if (rssiSamples >= 60) {
-									rssiSamples --;
-									var i;
-									i = rssiScaleJson.indexOf (','); rssiScaleJson = rssiScaleJson.substring (i + 1);
-									i = rssiValueJson.indexOf (','); rssiValueJson = rssiValueJson.substring (i + 1);
-								}
-							}
 
-							document.getElementById ('rssi').innerText=lineGraph (JSON.parse ('{"scale":[' + rssiScaleJson + '],"value":[' + rssiValueJson + ']}'), 'rssiGraph','#ff8533') + ' dBm';
+								rssi.innerText =
+									'Find problems with conn.: ' +
+									lineGraph(
+										JSON.parse('{"scale":[' + rssiScaleJson + '],"value":[' + rssiValueJson + ']}'),
+										'rssiGraph',
+										'#ff8533',
+										61
+									) +
+									' dBm';
+							};
 
-						};
-						myFileReader.readAsArrayBuffer (evt.data);
-					}
-				};
-			} else {
-				alert ('WebSockets are not supported by your browser.');
-			}
+							reader.readAsArrayBuffer(evt.data);
+						}
+					};
+				} else {
+					alert('WebSockets are not supported by your browser.');
+				}
 
-	</script>
+			}, 500);			
 
-	<br><br><h1><small>Web server examples</small></h1><br>
-
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example01.html">example01.html</a></div>
-		<div class='d2'><small><small>Dynamically generated HTML page.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example02.html">example02.html</a></div>
-		<div class='d2'><small><small>Static HTML page (.html file) calling REST functions.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example03.html">example03.html</a></div>
-		<div class='d2'><small><small>Checkbox calling REST functions.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example04.html">example04.html</a></div>
-		<div class='d2'><small><small>Stylish checkbox calling REST functions.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example05.html">example05.html</a></div>
-		<div class='d2'><small><small>Nice web GUI controls.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example07.html">example07.html</a></div>
-		<div class='d2'><small><small>Example of cookie set by web server.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/example10.html">example10.html</a></div>
-		<div class='d2'><small><small>The use of websockets.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/login.html">login.html</a></div>
-		<div class='d2'><small><small>Web session login example.</small></small></div>
-	</div>
-
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/protectedPage.html">protectedPage.html</a></div>
-		<div class='d2'><small><small>Only loggedin users can access this page.</small></small></div>
-	</div>
-	<hr />
-	<div class='d1' style='height: 42px;'>
-		<div class='d3'>&nbsp;<a href="/oscilloscope.html">oscilloscope.html</a></div>
-		<div class='d2'><small><small>See what is going on within your ESP32 project.</small></small></div>
-	</div>
-	<hr />
-	<br>
-
-</body>
+		</script>
+				
+	</body>
 </html>
