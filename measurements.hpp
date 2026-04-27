@@ -6,12 +6,12 @@
   
     Measurements.hpp include circular queue for storing measurements data set.
   
-    May 1, 2024, Bojan Jurca
+    April 27, 2026, Bojan Jurca
 
 */
 
 
-#include "servers/threadSafeCircularqueue.hpp"
+#include <threadSafeCircularqueue.hpp>
 
 
 #ifndef __MEASUREMENTS__
@@ -19,7 +19,7 @@
     
     struct measurement_t {
         unsigned char scale;
-        int           value;
+        int16_t       value;
     };
 
 
@@ -49,7 +49,8 @@
 
             String toJson () {
                 bool first = true;
-                String s1 = "{\"scale\":[";
+                String s1 = "{\"average\":" + (threadSafeCircularQueue<measurement_t, maxSize>::size () == 0 ? "null" : String (average ())) + 
+                             ",\"scale\":[";
                 String s2 = "],\"value\":[";
 
                 for (auto e = threadSafeCircularQueue<measurement_t, maxSize>::begin (); e != threadSafeCircularQueue<measurement_t, maxSize>::end (); ++ e) { // scan measurements with iterator where the locking mechanism is already implemented
@@ -58,17 +59,33 @@
                         s2 += ",";
                     }
                     first = false;
-                    s1 += "\"" + String ((*e).scale) + "\"";
-                    s2 += "\"" + String ((*e).value) + "\"";
+                    s1 += String ((*e).scale);
+                    s2 += String ((*e).value);
                 }
 
                 s2 += "]}\r\n";
                 return s1 + s2;
             }
 
+            virtual void pushed_back (measurement_t& element) { __sum__ += element.value; }
+            virtual void popped_front (measurement_t& element) { __sum__ -= element.value; }
+
+            inline long sum () __attribute__((always_inline)) { 
+                return __sum__;
+            }
+
+            float average () { 
+                threadSafeCircularQueue<measurement_t, maxSize>::Lock ();
+                    float a = (float) __sum__ / (float) threadSafeCircularQueue<measurement_t, maxSize>::size ();
+                threadSafeCircularQueue<measurement_t, maxSize>::Unlock ();
+                return a;
+            }  
+
         private:
 
-            int __valueCounter__ = 0; // in case measurements will be entered by counting
+            int16_t __valueCounter__ = 0; // in case measurements will be entered by counting
+
+            long __sum__ =  {};
     
     };
 

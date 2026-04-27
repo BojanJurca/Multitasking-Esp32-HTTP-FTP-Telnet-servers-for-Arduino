@@ -247,6 +247,61 @@ At this point, you can already test if everything is going on as planned by http
 7. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
 
 
+## The ways to reduce memory usage
+
+When all the features are included (OTA, mDNS for example) some smaller ESP32 models, like S2 for example may start running low on memory. Some memory can be spared if the TCP server listeners and cronDaemon would not run as stand-alone tasks that need their own stack memory but reather would host in the loop () task.
+
+
+### Hosting TCP listeners in the loop () task
+
+
+Two things need to be done. First set runListenerInItsOwnTask TCP server constructor parameter to false and second periodically call accept () in the loop () function. Roughly 3 KB of memory can be spared per each listener this way. Needless to say that the loop function should block in this case by putting in it different delays. Instead running the server's listener in its own task:
+
+```C++
+        telnetServer_t *telnetServer = new (std::nothrow) telnetServer_t (telnetCommandHandlerCallback, // (optional) a callback function that will handle Telnet commands that are not handled by telnetServer itself
+                                                                          23,                           // (optional) default Telnet port
+                                                                          firewallCallback              // (optional) let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES ONLY
+                                                                         );            
+```
+
+The hosting of the listener in the loop () task would look something like:
+
+```C++
+        telnetServer_t *telnetServer = new (std::nothrow) telnetServer_t (telnetCommandHandlerCallback, // (optional) a callback function that will handle Telnet commands that are not handled by telnetServer itself
+                                                                          23,                           // (optional) default Telnet port
+                                                                          firewallCallback,             // (optional) let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES ONLY
+                                                                          false                         // (optional) runListenerInItsOwnTask = false
+                                                                         );            
+
+void loop () {
+    if (telnetServer)
+        telnetServer->accept ();
+    // please note that loop function shouldn't block with delays for example in this case
+}                                                                        
+```
+
+
+### Hosting cronDaemon in the loop () task
+
+Running cronDaemon in the loop () task looks almost exactly the same. First set runDaemonInItsOwnTask parameter to false and second periodically call nextRun () in the loop () function. Roughly 9 KB of memory can be spared this way. Instead running cronDaemon in its own task:
+
+```C++
+    cronDaemon.start (cronHandlerCallback); // (optional) a callback function that will handle cronDaemon commands
+```
+
+The hosting of cronDaemon task in the loop () task would look something like:
+
+```C++
+    cronDaemon.start (cronHandlerCallback,  // (optional) a callback function that will handle cronDaemon commands
+                      false);               // (optional) runDaemonInItsOwnTask = false
+
+void loop () {
+    cronDaemon.nextRun ();
+    // please note that loop function shouldn't block with delays for example in this case
+}                                                                        
+```
+
+
 ## Debugging the code 
 
 
