@@ -1,45 +1,74 @@
-# ESP32 with HTTP server, Telnet server, file system, FTP server FTP client, SMTP client, cron daemon and user management.
+# ESP32 server
+
+This template provides a fully multitasking IPv4 (and IPv6‑ready) ESP32 server with built‑in HTTP, Telnet, and FTP services. It includes a suite of essential tools for managing, monitoring, and programming your IoT device, such as ping, ifconfig, crontab, dmesg, a web‑based oscilloscope, and more.
+
+Designed as a flexible starting point, the template can be easily customized to fit your project. Any unused features can be removed to reduce memory usage and improve performance.
+
+With this template, you can quickly build a clean web interface or a Telnet‑based command‑line interface for your prototype—without relying on physical buttons, LEDs, or displays.
 
 
-This template is a multitasking, dual-stack (IPv4 and IPv6) ESP32 server featuring HTTP, Telnet, and FTP protocols. It includes a suite of built-in tools essential for managing, monitoring, and programming the IoT server, such as ping, ifconfig, crontab, dmesg, a web-based oscilloscope, and more.
+ - To create a custom Telnet interface, extend the telnetCommandHandlerCallback() function.
 
-As a flexible starting point, the template can be easily customized to suit your project needs. Unused features can be removed to conserve memory and optimize performance.
+ - To build a web interface, modify the httpRequestHandler() function. For more advanced UI designs, the integrated FTP server allows you to upload larger HTML files directly.
 
-With this template, you can rapidly build a sleek web-based or Telnet command-line interface for your prototype or project—without the need for physical buttons, LEDs, or displays.
-
-   - To create your own Telnet user interface, simply customize the telnetCommandHandlerCallback() function.
-
-   - To build a web interface, modify the httpRequestHandler() function. If you’re aiming for a more polished, stylish user experience, the integrated FTP server allows you to upload larger HTML files effortlessly.
-
-   - You can also monitor run-time debug messages (even when the ESP32 isn't connected to the serial monitor) using the dmesg command over Telnet.
+ - You can also monitor runtime debug messages—even when the ESP32 is not connected to USB—using the dmesg command over Telnet.
 
 Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.si)
+
+
+## Prerequisites
+
+
+This template depends on the following Arduino libraries (all available on GitHub):
+
+    - ESP32_Multitasking_Network_Suite: https://github.com/BojanJurca/Multitasking-Http-Ftp-Telnet-Ntp-Smtp-Servers-and-clients-for-ESP32-Arduino-Library
+    - ThreadSafePing: https://github.com/BojanJurca/Thread-safe-ping-Arduino-library-for-ESP32
+    - ThreadSafeFS: https://github.com/BojanJurca/Thread-safe-file-sytem-wrapper-Arduino-library-for-ESP32
+    - LightweightSTL: https://github.com/BojanJurca/Lightweight-Standard-Template-Library-STL-for-Arduino
+    - cronDaemon: https://github.com/BojanJurca/Cron-Daemon-for-Arduino
 
 
 ## The latest changes
 
 
+**April 27, 2026**:
+
+ - All major components have been moved into separate Arduino libraries (listed above).
+
+ - Thread‑safe wrappers added around the file system and LwIP.
+
+ - This repository now serves as a complete working server template combining all libraries.
+
+
 **May 22, 2025**: 
-   - support for .html.gz (compressed) files,
-   - OTA support,
-   - stability improvements for smaller ESP32 models, like ESP32-S2, ... 
-   - it is possible now (but not required) to run listeners and cronDaemon in setup-loop task to spare some memory if needed
+
+ - Support for .html.gz (compressed) files.
+
+ - OTA update support.
+
+ - Stability improvements for smaller ESP32 models (e.g., ESP32‑S2).
+
+ - Optional mode to run listeners and the cron daemon inside the main setup()/loop() task to save memory.
 
 
 **February 6, 2025**: 
-   - dual stack (IPv4 and IPv6),
-   - support for Linux Telnet and FTP clients,
-   - mDNS service added (server can be accessed in local network by its hostname),
-   - optimized memory usage,
-   - power saving modes,
-   - support for locale (locales themselves are not implemented (if needed you must do it on your own)),
-   - discontinuation of some less used functionalities.
-Since a lot of the original code has been refactored some data types and functions have changed a bit. If your old code does not compile immediately with the new version of the library please take a look at the examples provided here.
 
+ - Dual‑stack networking (IPv4 + IPv6).
+
+ - Support for Linux Telnet and FTP clients.
+
+ - Added mDNS service (access the server by hostname on the local network).
+
+ - Memory usage optimizations.
+
+ - Power‑saving modes.
+
+ - Locale support (locale files themselves must be provided by the user).
+
+ - Removal of several rarely used features.
 
 
 ![Screenshot](presentation.gif)
-
 
 
 ## Fully multitasking HTTP server
@@ -47,7 +76,9 @@ Since a lot of the original code has been refactored some data types and functio
 
 HTTP server can handle HTTP requests in two different ways. As a programmed response to (for example REST) requests or by sending .html files from /var/www/html directory. Cookies and WebSockets are also supported to certain extent. Since HTTP server is fully multitasking, multiple WebSockets are really easy to implement.
 
+
 **HTTP server performance** 
+
 
 ![HTTP server performance](performance.gif)
 
@@ -70,251 +101,238 @@ FTP server is needed for uploading configuration files, .html files, ... to ESP3
 All the time zones from https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv can be used.
 
 
-## Simple key-value database
-
-
-A simple key-value database is included for the purpose of managing (keeping) web session tokens. Other key-value databases can easily be added using the same technology, for different purposes (such as statistics of visited pages, etc). 
-
-
 ## Configuration files
 
 
 ```C++
-/usr/share/zoneinfo                       - contains (POSIX) timezone information
-/etc/passwd                               - contains users' accounts information
-/etc/shadow                               - contains hashed users' passwords
-/network/interfaces                       - contains WiFi STA(tion) configuration
-/etc/wpa_supplicant/wpa_supplicant.conf   - contains WiFi STA(tion) credentials
-/etc/dhcpcd.conf                          - contains WiFi A(ccess) P(oint) configuration
-/etc/hostapd/hostapd.conf                 - contains WiFi A(ccess) P(oint) credentials
-/etc/ntp.conf                             - contains NTP time servers names
-/etc/crontab                              - contains scheduled tasks
-/etc/mail/sendmail.cf                     - contains sendMail default settings
+/usr/share/zoneinfo        - contains (POSIX) timezone information
+/etc/passwd                - contains users' accounts information
+/etc/shadow                - contains hashed users' passwords
+/network/interfaces        - contains WiFi STA(tion) configuration
+/etc/wpa_supplicant.conf   - contains WiFi STA(tion) credentials
+/etc/dhcpcd.conf           - contains WiFi A(ccess) P(oint) configuration
+/etc/hostapd.conf          - contains WiFi A(ccess) P(oint) credentials
+/etc/ntp.conf              - contains NTP time servers names
+/etc/crontab               - contains scheduled tasks
+/etc/mail/sendmail.cf      - contains sendMail default settings
 ```
 
 
-## Setup instructions
+### Initial Setup
 
 
-1. Copy all files in this package into Esp32_web_ftp_telnet_server_template directory.
-2. Open Esp32_web_ftp_telnet_server_template.ino with Arduino IDE.
-3. modify (some or all) the default #definitions in Esp32_servers_config.h file (that will be later written to configuration files) **before** the sketch is run for the first time:
+Copy all files from this package into the ESP32-servers-LIB directory.
+
+Open ESP32-servers-LIB.ino in the Arduino IDE.
+
+Before running the sketch for the first time, adjust the default #define values in server_config.h.
+These values will be written into configuration files on first boot.
+
+Example configuration options:
+
 
 ```C++
-// Esp32_web_ftp_telnet_server_template configuration
-// you can skip some files #included if you don't need the whole functionality
+    // ----- host name -----
+
+    #define HOSTNAME "Esp32Server"
 
 
-        // Lightweight STL memory settings
-        // #define LIST_MEMORY_TYPE          PSRAM_MEM
-        // #define VECTOR_QUEUE_MEMORY_TYPE  PSRAM_MEM // please note that this also affect keyValueDatabase
-        // #define MAP_MEMORY_TYPE           PSRAM_MEM // please note that this also affect keyValueDatabase
-        // bool psramInitialized = psramInit ();
+    // ----- locale -----
 
-        // locale settings for Cstrings
-        // #include "servers/std/locale.hpp"
-        // bool localeSet = setlocale (lc_all, "sl_SI.UTF-8");
+    #define LOCALE "en_150.UTF-8" // English with European dates and numbers; comment-out if not needed
 
 
-// uncomment the following line to get additional compile-time information about how the project gets compiled
-// #define SHOW_COMPILE_TIME_INFORMATION
+    // ----- WiFi -----
+
+        // ----- STA - define how ESP32 will connecto to WiFi router -----
+
+            // ----- STA credentials -----
+
+            // this information goes to /etc/wpa_supplicant.conf if file system is included
+            // if DEFAULT_STA_SSID is left undefined STA will not be set up
+            #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"
+            #define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"
+
+            // ----- DHCP or static IP address -----
+
+            // this information goes to /network/interfaces
+            // if DEFAULT_STA_IP is left undefined DHCP will be used
+
+            //                                     example:
+            // #define DEFAULT_STA_IP              "172.16.0.6"
+            #define DEFAULT_STA_SUBNET_MASK     "255.255.255.0"
+            #define DEFAULT_STA_GATEWAY         "172.16.0.1"
+            #define DEFAULT_STA_DNS_1           "193.189.160.13"
+            #define DEFAULT_STA_DNS_2           "193.189.160.23"
+
+        // ----- AP - define how ESP32 will serve as access point -----
+
+            // ----- AP credentials -----
+
+            // this information goes to /etc/hostapd.conf if file system is included
+            // if DEFAULT_AP_SSID is left undefined AP will not be set up
+
+            // #define DEFAULT_AP_SSID         HOSTNAME
+            #define DEFAULT_AP_PASSWORD     "YOUR_AP_PASSWORD"
+
+            // ----- AP network configuration -----
+
+            // this information goes to /etc/dhcpcd.conf if file system is included
+
+            //                              example:
+            #define DEFAULT_AP_IP           "192.168.1.1"
+            #define DEFAULT_AP_SUBNET_MASK  "255.255.255.0"
 
 
-// 1. TIME:    #define which time settings, wil be used with time_functions.h - will be included later
-    // define which 3 NTP servers will be called to get current GMT (time) from
-    // this information will be written into /etc/ntp.conf file if file_system.h will be included
-    #define DEFAULT_NTP_SERVER_1                      "1.si.pool.ntp.org"   // <- replace with your information
-    #define DEFAULT_NTP_SERVER_2                      "2.si.pool.ntp.org"   // <- replace with your information
-    #define DEFAULT_NTP_SERVER_3                      "3.si.pool.ntp.org"   // <- replace with your information
-    // define time zone to calculate local time from GMT
-    #define TZ                                        "CET-1CEST,M3.5.0,M10.5.0/3" // default: Europe/Ljubljana, or select another (POSIX) time zones: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+    #define MAX_WIFI_CONF_FILE_SIZE 512 // how much memory is needed to temporary store each WiFi configuration file 
 
 
-// 2. FILE SYSTEM:     #define which file system you want to use 
-    // the file system must correspond to Tools | Partition scheme setting: FILE_SYSTEM_FAT (for FAT partition scheme), FILE_SYSTEM_LITTLEFS (for SPIFFS partition scheme) or FILE_SYSTEM_SD_CARD (if SD card is attached)
-    // FAT file system can be bitwise combined with FILE_SYSTEM_SD_CARD, like #define FILE_SYSTEM (FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD), LITTLEFS uses less memory
+    // ----- time -----
 
-    #define FILE_SYSTEM   FILE_SYSTEM_LITTLEFS // FILE_SYSTEM_LITTLEFS or FILE_SYSTEM_FAT or FILE_SYSTEM_SD_CARD or FILE_SYSTEM_FAT | FILE_SYSTEM_SD_CARD
+    // Define three NTP servers that will be queried for the current time.
+    // This information will be written into /etc/ntp.conf (if file system is included).
+    #define DEFAULT_NTP_SERVER_1 "1.si.pool.ntp.org"
+    #define DEFAULT_NTP_SERVER_2 "2.si.pool.ntp.org"
+    #define DEFAULT_NTP_SERVER_3 "3.si.pool.ntp.org"
 
-
-// 3. NETWORK:     #define how ESP32 will use the network
-    // STA(tion)
-    // #define how ESP32 will connecto to WiFi router
-    // this information will be written into /etc/wpa_supplicant/wpa_supplicant.conf file if file_system.h will be included
-    // if these #definitions are missing STAtion will not be set up
-    #define DEFAULT_STA_SSID                          "YOUR_STA_SSID"       // <- replace with your information
-    #define DEFAULT_STA_PASSWORD                      "YOUR_STA_PASSWORD"   // <- replace with your information
-    // the use of DHCP or static IP address wil be set in /network/interfaces if file_system.h will be included, the following is information needed for static IP configuration
-    // if these #definitions are missing DHCP will be assumed
-    // #define DEFAULT_STA_IP                            "10.18.1.200"      // <- replace with your information
-    // #define DEFAULT_STA_SUBNET_MASK                   "255.255.255.0"    // <- replace with your information
-    // #define DEFAULT_STA_GATEWAY                       "10.18.1.1"        // <- replace with your information
-    // #define DEFAULT_STA_DNS_1                         "193.189.160.13"   // <- replace with your information
-    // #define DEFAULT_STA_DNS_2                         "193.189.160.23"   // <- replace with your information
-
-    // A(ccess) P(oint)
-    // #define how ESP32 will set up its access point
-    // this information will be writte into /etc/dhcpcd.conf and /etc/hostapd/hostapd.conf files if file_system.h will be included
-    // if these #definitions are missing Access Point will not be set up
-    // #define DEFAULT_AP_SSID                           HOSTNAME           // <- replace with your information,
-    // #define DEFAULT_AP_PASSWORD                       "YOUR_AP_PASSWORD" // <- replace with your information, at least 8 characters
-    // #define DEFAULT_AP_IP                             "192.168.0.1"      // <- replace with your information
-    // #define DEFAULT_AP_SUBNET_MASK                    "255.255.255.0"    // <- replace with your information
-
-    // power saving
-    #define POVER_SAVING_MODE   WIFI_PS_NONE // WIFI_PS_NONE or WIFI_PD_MIN_MODEM or WIFI_PS_MAX_MODEM // please check: https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
-
-    // use mDNS so the servers can be accessed in local network by HOSTNAME, but uses some additional memory
-    #define USE_mDNS // comment this line out to save some memory and code space
-
-    // use Over The Air updates
-    // #define USE_OTA // comment this line out if you don't need OTA and want to save some memory and code space - doesn't work together with WiFi power saving modes (you ca swithc WiFi power saving mode off before the upload, for example through a Telnet command)
+    // Define the time zone used to calculate local time from GMT.
+    // This information will be written into /usr/share/zoneinfo (if file system is included).
+    #define DEFAULT_TZ "CET-1CEST,M3.5.0,M10.5.0/3" // or choose another POSIX time zone from: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
 
 
-    // define the name Esp32 will use as its host name, if USE_mDNS is #dfined this is also the name by wich you can address your ESP32 on your local network
-    #define HOSTNAME                                   "MyESP32Server"      // <- replace with your information,  max 32 bytes (ESP_NETIF_HOSTNAME_MAX_SIZE) - if you are using mDNS make sure host name complies also with mDNS requirements
-    // replace MACHINETYPE with your information if you want, it is only used in uname telnet command
-    #if CONFIG_IDF_TARGET_ESP32
-        #define MACHINETYPE "ESP32"
-        // performs OK
-    #elif CONFIG_IDF_TARGET_ESP32S2
-        #define MACHINETYPE "ESP32-S2"
-        #define MODEST_ESP32_MODEL // care must be taken not to put too much burden on ESP32-S2 
-    #elif CONFIG_IDF_TARGET_ESP32S3
-        #define MACHINETYPE "ESP32-S3"
-        // performs OK
-    #elif CONFIG_IDF_TARGET_ESP32C2
-        #define MACHINETYPE "ESP32-C2"
-        // not supported by Arduino
-    #elif CONFIG_IDF_TARGET_ESP32C3
-        #define MACHINETYPE "ESP32-C3"
-        // performs OK
-    #elif CONFIG_IDF_TARGET_ESP32C6
-        #define MACHINETYPE "ESP32-C6"
-        // couldn't get useful network performance
-    #elif CONFIG_IDF_TARGET_ESP32H2
-        #define MACHINETYPE "ESP32-H2"
-        // ???
-    #else
-        #define MACHINETYPE "ESP32 (other)"
-        // ???
-    #endif
+    // ----- Telnet server -----
+
+    // Select which built‑in Telnet commands to include.
+    #define TELNET_CLEAR_COMMAND    1   // 0=exclude, 1=include
+    #define TELNET_UNAME_COMMAND    1
+    #define TELNET_FREE_COMMAND     1
+    #define TELNET_NOHUP_COMMAND    1
+    #define TELNET_REBOOT_COMMAND   1
+    #define TELNET_DMESG_COMMAND    1
+    #define TELNET_QUIT_COMMAND     1
+    #define TELNET_UPTIME_COMMAND   1
+    #define TELNET_DATE_COMMAND     1
+    #define TELNET_NTPDATE_COMMAND  1
+    #define TELNET_CRONTAB_COMMAND  1
+    #define TELNET_PING_COMMAND     1
+    #define TELNET_IFCONFIG_COMMAND 1
+    #define TELNET_IW_COMMAND       1
+    #define TELNET_NETSTAT_COMMAND  1
+    #define TELNET_KILL_COMMAND     1
+    #define TELNET_CURL_COMMAND     1
+    #define TELNET_SENDMAIL_COMMAND 1
+    #define TELNET_LS_COMMAND       1
+    #define TELNET_TREE_COMMAND     1
+    #define TELNET_MKDIR_COMMAND    1
+    #define TELNET_RMDIR_COMMAND    1
+    #define TELNET_CD_COMMAND       1
+    #define TELNET_PWD_COMMAND      1
+    #define TELNET_CAT_COMMAND      1
+    #define TELNET_VI_COMMAND       1
+    #define TELNET_CP_COMMAND       1
+    #define TELNET_RM_COMMAND       1
+    #define TELNET_LSOF_COMMAND     1
+
+    #define SWAP_DEL_AND_BACKSPACE  0   // set to 1 to swap these keys (useful for PuTTY and Linux Telnet clients)
 
 
-// 4. USERS:     #define what kind of user management you want before #including user_management.h
-    #define USER_MANAGEMENT                           UNIX_LIKE_USER_MANAGEMENT // NO_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT or UNIX_LIKE_USER_MANAGEMENT
-    // if UNIX_LIKE_USER_MANAGEMENT is selected you must also include file_system.h to be able to use /etc/passwd and /etc/shadow files
-    #define DEFAULT_ROOT_PASSWORD                     "rootpassword"        // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT or HARDCODED_USER_MANAGEMENT are used
-    #define DEFAULT_WEBADMIN_PASSWORD                 "webadminpassword"    // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
-    #define DEFAULT_USER_PASSWORD                     "changeimmediatelly"  // <- replace with your information if UNIX_LIKE_USER_MANAGEMENT is used
+    // ----- power saving -----
+
+    // Define the default power‑saving mode, or leave undefined.
+    // https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/network/esp_wifi.html
+    //
+    // Power saving can significantly reduce the ESP32's operating temperature
+    // (and overall power consumption), but it may cause the ESP32 to become
+    // unresponsive to UDP packets (for example, during OTA updates).
+    //
+    // The workaround is to use Telnet to disable power saving before uploading
+    // a new sketch via OTA.
+    // #define POWER_SAVING WIFI_PS_MAX_MODEM // or WIFI_PS_MIN_MODEM; WIFI_PS_NONE makes no sense here
 
 
-// 5. #include (or comment-out) the functionalities you want (or don't want) to use
-    #include "./servers/dmesg.hpp"                      // include dmesg_functions.h which is useful for run-time debugging - for dmesg telnet command
-    #include "./servers/fileSystem.hpp"                 // most functionalities can run even without a file system if everything is stored in RAM (smaller web pages, ...)   
-    #include "./servers/time_functions.h"               // fileSystem.hpp is needed prior to #including time_functions.h if you want to store the default parameters
-    #include "./servers/netwk.h"                        // fileSystem.hpp is needed prior to #including network.h if you want to store the default parameters
-    #include "./servers/httpClient.h"                   // support to access web pages from other servers and curl telnet command
-    #include "./servers/smtpClient.h"                   // fileSystem.hpp is needed prior to #including smtpClient.h if you want to store the default parameters
-    #include "./servers/userManagement.hpp"             // fileSystem.hpp is needed prior to #including userManagement.hpp in case of UNIX_LIKE_USER_MANAGEMENT
-    #include "./servers/esp32_ping.hpp"                 // include esp32_ping.hpp to occasioanly ping the router to check if ESP32 is still connected to WiFi
-    #include "./servers/version_of_servers.h"           // include version_of_servers.h to include version information
-    #include "./servers/telnetServer.hpp"               // needs almost all the above files for whole functionality, but can also work without them
-    #include "./servers/ftpServer.hpp"                  // fileSystem.hpp is also necessary to use ftpServer.h
-    #ifdef FILE_SYSTEM
-        #define USE_WEB_SESSIONS // comment this line out to save some memory if you won't use web sessions
-    #endif
-    #ifdef FILE_SYSTEM
-        #define USE_I2S_INTERFACE             // I2S interface improves web based oscilloscope analog sampling (of a single signal) if ESP32 board has one
-        // check INVERT_ADC1_GET_RAW and INVERT_I2S_READ #definitions in oscilloscope.h if the signals are inverted
-        #include "./servers/oscilloscope.h"   // web based oscilloscope: you must #include httpServer.hpp as well to use it
-    #endif
-    #include "./servers/httpServer.hpp"       // fileSystem.hpp is needed prior to #including httpServer.h if you want server also to serve .html and other files from built-in flash disk
-```
+    // ----- OTA -----
 
-4. Select one of SPIFFS partition schemas (Tool | Partition Scheme).
-
-5. Compile the sketch and run it on your ESP32. Doing this the following will happen:
-
-   - ESP32 flash memory will be formatted with the LittleFs file system. FAT file system is supported as well. It is faster but uses (approximately 40 KB) more memory. WARNING: every information you have stored into ESP32's flash memory will be lost.
-   - Configuration files will be created with the default settings.
-   - Two users will be created: **root** with **rootpassword** and **webadmin** with **webadminpassword**.
-
-At this point, you can already test if everything is going on as planned by http, FTP or telnet to your ESP32. Your ESP32 is already working as a server but there are a few minor things yet left to be done.
-
-6. FTP (demo and example: index.html, ...) files from html directory to ESP32's /var/www/html/ directory.
-
-7. Delete all the examples and functionalities that don't need and all the references to them in the code. They are included just to make the development easier for you.
-
-
-## The ways to reduce memory usage
-
-When all the features are included (OTA, mDNS for example) some smaller ESP32 models, like S2 for example may start running low on memory. Some memory can be spared if the TCP server listeners and cronDaemon would not run as stand-alone tasks that need their own stack memory but reather would host in the loop () task.
-
-
-### Hosting TCP listeners in the loop () task
-
-
-Two things need to be done. First set runListenerInItsOwnTask TCP server constructor parameter to false and second periodically call accept () in the loop () function. Roughly 3 KB of memory can be spared per each listener this way. Needless to say that the loop function should block in this case by putting in it different delays. Instead running the server's listener in its own task:
-
-```C++
-        telnetServer_t *telnetServer = new (std::nothrow) telnetServer_t (telnetCommandHandlerCallback, // (optional) a callback function that will handle Telnet commands that are not handled by telnetServer itself
-                                                                          23,                           // (optional) default Telnet port
-                                                                          firewallCallback              // (optional) let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES ONLY
-                                                                         );            
-```
-
-The hosting of the listener in the loop () task would look something like:
-
-```C++
-        telnetServer_t *telnetServer = new (std::nothrow) telnetServer_t (telnetCommandHandlerCallback, // (optional) a callback function that will handle Telnet commands that are not handled by telnetServer itself
-                                                                          23,                           // (optional) default Telnet port
-                                                                          firewallCallback,             // (optional) let's use firewallCallback function for Telnet server FOR DEMONSTRATION PURPOSES ONLY
-                                                                          false                         // (optional) runListenerInItsOwnTask = false
-                                                                         );            
-
-void loop () {
-    if (telnetServer)
-        telnetServer->accept ();
-    // please note that loop function shouldn't block with delays for example in this case
-}                                                                        
+    // #define USE_OTA // comment-out to not use Over The Air updates
 ```
 
 
-### Hosting cronDaemon in the loop () task
+In the Arduino IDE, select one of the SPIFFS partition schemes (Tools → Partition Scheme).
 
-Running cronDaemon in the loop () task looks almost exactly the same. First set runDaemonInItsOwnTask parameter to false and second periodically call nextRun () in the loop () function. Roughly 9 KB of memory can be spared this way. Instead running cronDaemon in its own task:
+Compile and upload the sketch. On the first boot:
 
-```C++
-    cronDaemon.start (cronHandlerCallback); // (optional) a callback function that will handle cronDaemon commands
+The ESP32 flash will be formatted using LittleFS (or FAT, if enabled).
+⚠️ All existing data on flash will be erased.
+
+Configuration files will be created using your default settings.
+
+Two users will be created:
+
+root / rootpassword
+
+webadmin / webadminpassword
+
+At this point the ESP32 is already running as a server (HTTP, FTP, Telnet).
+You can connect and verify that everything works.
+
+Upload the contents of the html/ directory to /var/www/html/ on the ESP32 using FTP.
+
+Remove any example files or features you do not need. They are included only to simplify development.
+
+
+### Reducing Memory Usage
+
+
+On smaller ESP32 variants (e.g., ESP32‑S2), RAM may become tight when all features are enabled.
+You can reduce memory usage in several ways:
+
+Run server listeners and the cron daemon inside loop()  
+Instead of running them as separate FreeRTOS tasks (each requiring its own stack), you can host them in the main task.
+Examples are available in the ESP32_Multitasking_Network_Suite library.
+
+Use an older ESP32 Arduino core (e.g., 3.1.1)  
+This can free up approximately 15 KB of RAM compared to version 3.3.8.
+
+
+## Debugging Your Code
+
+
+The Telnet server includes a Unix/Linux‑style dmesg circular buffer.
+Use dmesgQueue in your C++ code to log important events or state changes.
+
+To view the log, connect via Telnet and type:
+
+
 ```
+# dmesg
 
-The hosting of cronDaemon task in the loop () task would look something like:
-
-```C++
-    cronDaemon.start (cronHandlerCallback,  // (optional) a callback function that will handle cronDaemon commands
-                      false);               // (optional) runDaemonInItsOwnTask = false
-
-void loop () {
-    cronDaemon.nextRun ();
-    // please note that loop function shouldn't block with delays for example in this case
-}                                                                        
+[         1] [ESP32-S2] reset reason: SW_RESET - 3, Software reset via esp_restart
+[         1] [ESP32-S2] wakeup reason: WAKEUP REASON UNKNOWN - wakeup was not caused by deep sleep
+[         1] [ESP32-S2] free heap at startup: 156764 bytes
+[         1] [ESP32-S2] PSRAM not installed
+[         1] [time] internal RTC at startup: 2026/04/27 04:12:29 PM UTC
+[       125] [locale] set to en_150.UTF-8
+[       292] [WiFi][STA] connecting to: *****
+[       292] [WiFi][STA] is using DHCP for IPv4
+[       340] [tcpServer] listener on port 80 started on core 0
+[       354] [httpServer] started
+[       354] [ftpServer] started
+[       355] [telnetServer] started
+[       366] [tcpServer] new listener's stack high water mark: 1912 bytes not used
+[       417] [WiFi][STA] connected
+[       417] [power saving] is on
+[       940] [WiFi][STA] got IP address: 10.18.1.165
+[       982] [NTP] time synchronized with 1.si.pool.ntp.org (46.54.224.12)
+[      7748] [telnetConn] root logged in
 ```
-
-
-## Debugging the code 
-
-
-Telnet server provides Unix/Linux like dmesg circular message queue. You can monitor your ESP32 behaviour even when it is not connected to a computer with a USB cable. In your C++ code use dmesg () function to insert important messages about the state of your code into a circular queue. When you want to view it, connect to your ESP32 with Telnet client and type dmesg command.
-
 
 ![Screenshot](dmesg.png)
 
 
-## Debugging the signals
+## Debugging Signals (Web Oscilloscope)
 
 
-ESP32 oscilloscope is a web-based application included in Esp32_web_ftp_telnet_server_template. It is accessible through a web browser once oscilloscope.html is uploaded to ESP32's /var/www/html directory.
+The project includes a web‑based ESP32 oscilloscope.
+After uploading oscilloscope.html to /var/www/html/, you can open it in a browser and monitor digital signals in real time.
 
 
 ![Screenshot](oscilloscope.png)
