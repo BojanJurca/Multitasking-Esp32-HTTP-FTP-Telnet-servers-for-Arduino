@@ -184,8 +184,6 @@
 	</head>
 
 	<body>
-		
-		<div class='d2' style='width: 100%;'>&nbsp;<small><small>Get free source code at: <a href='https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino'>https://github.com/BojanJurca/Multitasking-Esp32-HTTP-FTP-Telnet-servers-for-Arduino</a></small></small></div>
 
 		<br><br>
 
@@ -460,9 +458,10 @@
 			// -------------------------------------------------------------
 			// MAIN INTERVAL
 			// -------------------------------------------------------------
-			setTimeout (function () {
-				clearTimeout(TO);
-				TO = setTimeout(() => refresh(), 1000);			
+			clearTimeout(TO);
+			TO = setTimeout (function () {
+				refresh();
+				setInterval(() => refresh(), 1000);			
 			}, 250);	
 
 			// -------------------------------------------------------------
