@@ -21,18 +21,22 @@ Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.s
 
 ## Prerequisites
 
+This template requires the following Arduino library and its dependencies (all available through the Arduino IDE or on GitHub):
 
-This template depends on the following Arduino libraries (all available on GitHub):
+- **ESP32_Multitasking_Network_Suite**  
+  https://github.com/BojanJurca/Multitasking-Http-Ftp-Telnet-Ntp-Smtp-Servers-and-clients-for-ESP32-Arduino-Library
 
- - ESP32_Multitasking_Network_Suite: https://github.com/BojanJurca/Multitasking-Http-Ftp-Telnet-Ntp-Smtp-Servers-and-clients-for-ESP32-Arduino-Library
- 
- - ThreadSafePing: https://github.com/BojanJurca/Thread-safe-ping-Arduino-library-for-ESP32
- 
- - ThreadSafeFS: https://github.com/BojanJurca/Thread-safe-file-sytem-wrapper-Arduino-library-for-ESP32
- 
- - LightweightSTL: https://github.com/BojanJurca/Lightweight-Standard-Template-Library-STL-for-Arduino
- 
- - cronDaemon: https://github.com/BojanJurca/Cron-Daemon-for-Arduino
+  - **ThreadSafePing**  
+    https://github.com/BojanJurca/Thread-safe-ping-Arduino-library-for-ESP32
+
+  - **ThreadSafeFS**  
+    https://github.com/BojanJurca/Thread-safe-file-sytem-wrapper-Arduino-library-for-ESP32
+
+  - **LightweightSTL**  
+    https://github.com/BojanJurca/Lightweight-Standard-Template-Library-STL-for-Arduino
+
+  - **cronDaemon**  
+    https://github.com/BojanJurca/Cron-Daemon-for-Arduino
 
 
 ## The latest changes

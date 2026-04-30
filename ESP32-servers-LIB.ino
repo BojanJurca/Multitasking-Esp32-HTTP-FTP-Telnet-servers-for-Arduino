@@ -465,9 +465,16 @@ void setup () {
     userManagement = new (std::nothrow) userManagement_t (TSFS);
 
 
-    // Configure time and insert cronDaemon events into cronTab.
-    setenv ("TZ", zoneinfo (TSFS, DEFAULT_TZ), 1); // if not file system is used skip TSFS argument
+    // Configure time zone prior to inserting events into cronTab for cronDaemon works with local time.
     ntpClient_t (TSFS, DEFAULT_NTP_SERVER_1, DEFAULT_NTP_SERVER_2, DEFAULT_NTP_SERVER_3);
+    setenv ("TZ", zoneinfo (TSFS, DEFAULT_TZ), 1);
+    tzset ();
+    const char* tz = getenv ("TZ");
+    if (tz)
+        cout << ( dmesgQueue << "[time] TZ set to " << tz );
+    else
+        cout << ( dmesgQueue << "[time] TZ not set" );
+
     // ----- Demonstration entries — feel free to remove them -----
     cronTab.insert ("* * * * * * gotTime");   // triggers once — when ESP32 obtains time from NTP for the first time
     cronTab.insert ("0 * * * * * onMinute");  // triggers every minute at second 0
