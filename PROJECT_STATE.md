@@ -1,6 +1,6 @@
 # ESP32 server
 
-This template provides a fully multitasking IPv4 (and IPv6‑ready) ESP32 server with built‑in HTTP, Telnet, and FTP services. It includes a suite of essential tools for managing, monitoring, and programming your IoT device, such as ping, ifconfig, crontab, dmesg, a web‑based oscilloscope, and more.
+This template provides a fully multitasking IPv4 (and IPv6‑ready) ESP32 server with built‑in HTTP, HTTPS (uses WolfSSL), Telnet, and FTP services. It includes a suite of essential tools for managing, monitoring, and programming your IoT device, such as ping, ifconfig, crontab, dmesg, a web‑based oscilloscope, and more.
 
 Designed as a flexible starting point, the template can be easily customized to fit your project. Any unused features can be removed to reduce memory usage and improve performance.
 
@@ -13,7 +13,7 @@ With this template, you can quickly build a clean web interface or a Telnet‑ba
 
  - You can also monitor runtime debug messages—even when the ESP32 is not connected to USB—using the dmesg command over Telnet.
 
-Demo ESP32 server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.si)
+Demo ESP32 HTTP server is available at [http://jurca.dyn.ts.si](http://jurca.dyn.ts.si), demo ESP32 HTTPS server is available at [https://jurca.dyn.ts.si](https://jurca.dyn.ts.si)
 
 
 ![Screenshot](presentation.gif)
@@ -38,8 +38,16 @@ This template requires the following Arduino library and its dependencies (all a
   - **cronDaemon**  
     https://github.com/BojanJurca/Cron-Daemon-for-Arduino
 
+- **WolfSSL (if HTTPS server is beeing used)**  
+  https://github.com/wolfSSL/Arduino-wolfSSL
+
 
 ## The latest changes
+
+
+**May 22, 2026**:
+
+ - HTTPS server (using WolfSSL library) added.
 
 
 **April 27, 2026**:
@@ -89,6 +97,12 @@ HTTP server can handle HTTP requests in two different ways. As a programmed resp
 
 
 ![HTTP server performance](performance.gif)
+
+
+## Fully multitasking HTTPS server
+
+
+HTTPS server integrates WolfSSL to provide a secure TLS transport layer for the HTTP server. It is essential for safely managing and controlling your ESP32 over the internet.
 
 
 ## Fully multitasking Telnet server

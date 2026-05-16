@@ -20,7 +20,7 @@
     the functionalities you don't need. Some parts of the code are provided
     merely for demonstration purposes.
 
-    April 27, 2026, Bojan Jurca
+    May 22, 2026, Bojan Jurca
 
 */
 
@@ -65,7 +65,7 @@ using File = threadSafeFS::File;    // use thread-safe wrapper for all file oper
 // create its own task. This saves approximately 8 KB of RAM, but requires you
 // to manually call cronDaemon.nextRun() from the loop() function.
 void cronHandlerCallback (const char *cronCommand);
-cronDaemon_t cronDaemon (TSFS, cronHandlerCallback, false);
+cronDaemon_t *cronDaemon = NULL;
 
 // Arduino library: ESP32_Multitasking_Network_Suite
 // https://github.com/BojanJurca/Multitasking-Http-Ftp-Telnet-Ntp-Smtp-Servers-and-clients-for-ESP32-Arduino-Library
@@ -77,14 +77,27 @@ cronDaemon_t cronDaemon (TSFS, cronHandlerCallback, false);
 
 // include the servers
 #include <ntpClient.h>
+
 #include <ftpServer.h>
     ftpServer_t *ftpServer = NULL;
+
 #include <httpServer.h>
     httpServer_t *httpServer = NULL;
+
+/*
+#include <httpsServer.h>
+    httpsServer_t *httpsServer = NULL;    
+*/
+
+#include "webSessionTokens.h"
+    webSessionTokens_t *webSessionTokens = NULL;
+
+
 // Include oscilloscope
 // #define USE_I2S_INTERFACE             // I2S interface improves web based oscilloscope analog sampling (of a single signal) if ESP32 board has one
 // check INVERT_ADC1_GET_RAW and INVERT_I2S_READ #definitions in oscilloscope.h if the signals are inverted
 #include "oscilloscope.h"
+
 // Provide help text for Telnet user-defined commands
 #ifdef POWER_SAVING
     #define USER_DEFINED_TELNET_HELP_TEXT   "\r\n  user management:" \
@@ -103,6 +116,12 @@ cronDaemon_t cronDaemon (TSFS, cronHandlerCallback, false);
 #endif
 #include <telnetServer.h>
     telnetServer_t *telnetServer = NULL;
+
+
+#ifdef USE_mDNS
+    #include <ESPmDNS.h>
+#endif
+
 
 #ifdef USE_OTA
     #include <ESPmDNS.h>
@@ -305,6 +324,74 @@ String httpRequestHandlerCallback (const char *httpRequest, httpServer_t::httpCo
                                                                     "}";
                                                         }
 
+    // ----- entering restricted part - check authorization -----
+
+    Cstring<300> token = hcn->getHttpRequestCookie ("session");
+    Cstring<64> userName;
+    const char *cipherName = hcn->cipherName ();
+
+    if (token != "" && webSessionTokens)
+        userName = webSessionTokens->getUserNameFromToken (token);
+
+    // login-logout REST API
+    if (httpRequestIs ("POST /login/"))                 {   // POST login/username/password ...
+                                                            if (*cipherName == 0)
+                                                                return "Login is alowed through secure HTTPS protocol only";
+                                                            // parse URL to get userName and password
+                                                            Cstring<64>userName;
+                                                            Cstring<64>password;
+                                                            if (sscanf (httpRequest + 12, "%64[^/]/%64s", (char *) &userName, (char *) &password) != 2)
+                                                                return "Missing username or password";
+
+                                                            // TO DO: implement your user management
+
+                                                            if (userName != "user" && password != "password")
+                                                                return "Wrong username or password";
+                                                            // create new session token
+                                                            token = "";
+                                                            if (webSessionTokens && time (NULL) > 1600000000) // 1600000000 ~2020
+                                                                token = webSessionTokens->newToken (userName, time (NULL) + 86400); // 86400 = 1 day
+                                                            if (token == "")
+                                                                return "Couldn't create session token";
+                                                            // clean up token store every now and then
+                                                            webSessionTokens->deleteExpiredTokens ();
+                                                            // pass the token to session cookie
+                                                            hcn->setHttpReplyCookie ("session", token, time (NULL) + 86400);
+                                                            return "OK";
+                                                        } 
+    else if (httpRequestIs ("POST /logout "))           {
+                                                            // delete session cookie
+                                                            hcn->setHttpReplyCookie ("session", "", 1); // 0 means that the cookie never expires, 1 will always expire 
+                                                            if (webSessionTokens) {            
+                                                                // delete session token
+                                                                webSessionTokens->deleteToken (token);
+                                                                // clean up token store every now and then
+                                                                webSessionTokens->deleteExpiredTokens ();
+                                                            }
+                                                            return "OK";
+                                                        }
+
+    // ----- protect some pages if userName != "" the token is valid, proceed, if not redirect to login.html -----
+    if (userName == "") {
+      
+        if (httpRequestIs ("GET /administration.html")) {   // do not include space after ...html since users may also pass parameters: ...html?...
+                                                            hcn->setHttpReplyHeaderField ("Location", "/login.html?redirect=/administration.html");
+                                                            hcn->setHttpReplyStatus ("307 Login required"); // 307 = redirect
+                                                            return "Login required"; // whatever
+                                                        }
+
+    } else {
+
+        // ----- restrictes part for logged-in users only -----
+
+        // you may also want to check userName rights at this point
+
+        // TO DO: put your restricted access code here 
+
+    }
+
+    // ----- unrestricted part again - HTTP server will process all requests to files if they were not redirected above -----
+
     return ""; // httpRequestHandler did not handle the request - tell httpServer to handle it internally by returning ""
 }
 
@@ -395,7 +482,7 @@ void cronHandlerCallback (const char *cronCommand) {
                                                     time_t t = time (NULL);
                                                     struct tm st;
                                                     localtime_r (&t, &st);
-                                                    cout << "Got time at " << st << " (local time), do whatever needs to be done the first time the time is known." << endl;
+                                                    cout << "Got time at " << st << " (local time), do whatever needs to be done the first time the time is known" << endl;
                                                 }
     else if (cronCommandIs ("onMinute"))        {
                                                     // "0 * * * * * onMinute" occurs at the beginning of every minute.
@@ -488,6 +575,9 @@ void setup () {
     //               | |___ minute (0 - 59 or *)
     //               |___ second (0 - 59 or *)
 
+    cronDaemon = new (std::nothrow) cronDaemon_t (TSFS, cronHandlerCallback, false);
+    if (!cronDaemon)
+        cout << ( dmesgQueue << "[cronDaemon] " "did not run" );
 
     // Connect to the WiFi router.
     WiFi.onEvent ([] (WiFiEvent_t event, WiFiEventInfo_t info) {
@@ -503,6 +593,17 @@ void setup () {
         } else if (event == ARDUINO_EVENT_WIFI_STA_GOT_IP) {
             cout << ( dmesgQueue << "[WiFi][STA] " "got IP address: " << WiFi.localIP () );
             timeAlreadySynchronized = *(ntpClient_t ().syncTime ()) == 0; // syncTime did not return error message
+
+            #ifdef USE_mDNS
+                if (MDNS.begin (HOSTNAME))
+                    cout << ( dmesgQueue << "[mDNS] started for " << HOSTNAME );
+                else
+                    cout << ( dmesgQueue << "[mDNS] did not start" );
+                MDNS.addService ("ftp", "tcp", 21);            
+                MDNS.addService ("telnet", "tcp", 23);
+                MDNS.addService ("http", "tcp", 80);
+                MDNS.addService ("https", "tcp", 443);
+            #endif            
         }
     });
     // read WiFi settings from configuration files which are stored on TSFS
@@ -523,6 +624,26 @@ void setup () {
         cout << ( dmesgQueue << "[httpServer] " "started" );
     else
         cout << ( dmesgQueue << "[httpServer] " "did not start" );
+
+    // Start HTTPS server. All the arguments are optional.
+/*
+    httpsServer = new (std::nothrow) httpsServer_t (TSFS,                         // threadSafeFS::FS& fileSystem,
+                                                    httpRequestHandlerCallback,   // String httpRequestHandlerCallback (const char *httpRequest, httpServer_t::httpConnection_t *hcn) = NULL,
+                                                    wsRequestHandlerCallback);    // void (*wsRequestHandlerCallback) (const char *httpRequest, httpServer_t::webSocket_t *webSck) = NULL,
+                                                                                  // int serverPort = 443,
+                                                                                  // bool (*firewallCallback) (char *clientIP, char *serverIP) = NULL,
+                                                                                  // bool runListenerInItsOwnTask = true
+
+    if (httpsServer && *httpsServer)
+        cout << ( dmesgQueue << "[httpsServer] " "started" );
+    else
+        cout << ( dmesgQueue << "[httpsServer] " "did not start" );
+*/
+
+    webSessionTokens = new (std::nothrow) webSessionTokens_t (TSFS);
+    if (!webSessionTokens)
+        cout << (dmesgQueue << "[webSessionTokens] " "not created");
+
 
     // Start the FTP server. To save ~3 KB of RAM, the listener can run inside the
     // setup/loop task instead of its own task.
@@ -604,8 +725,8 @@ void loop () {
     if (ftpServer) ftpServer->accept();      // Running without its own listening task, so call accept() here.
     if (telnetServer) telnetServer->accept(); // Same: no dedicated listening task, accept() must be called manually.
     // httpServer has its own listening task, so accept() is not called here.
-
-    cronDaemon.nextRun(); // cronDaemon runs without its own task, so call nextRun() here.
+    // httpsServer has its own listening task, so accept() is not called here.
+    if (cronDaemon) cronDaemon->nextRun (); // we run cronDaemon without its own task so call nextRun () here
 
     // Do not block loop() for too long; otherwise accept() may miss incoming connections.
 

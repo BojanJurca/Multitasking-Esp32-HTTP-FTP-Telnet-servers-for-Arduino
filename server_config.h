@@ -131,9 +131,17 @@
     // #define POWER_SAVING WIFI_PS_MAX_MODEM // or WIFI_PS_MIN_MODEM; WIFI_PS_NONE makes no sense here
 
 
+    // ----- mDNS -----
+
+    // use mDNS so the servers can be accessed in local network by HOSTNAME, but uses some additional memory
+    // mDNS may not work well with power saving mode
+    // #define USE_mDNS // leave undefined to not use mDNS
+
+
     // ----- OTA -----
 
-    // #define USE_OTA // comment-out to not use Over The Air updates
+    // #define USE_OTA // leave undefined to not use Over The Air updates
+
 
 #else
 
