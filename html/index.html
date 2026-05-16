@@ -285,6 +285,17 @@
 			</div>
 		</a>
 
+		<a href="administration.html" style="text-decoration:none; color:inherit;">
+			<div class="card">
+				<div class="title">ESP32 administration</div>
+
+				<div class="row">
+					<div class="label">Implementation of login-logout</div>
+					<div class="value">Open</div>
+				</div>
+			</div>
+		</a>
+
 		
 		<script type='text/javascript'>
 
@@ -419,7 +430,10 @@
 			let refreshRunning = false;
 
 			async function refresh() {
-				if (refreshRunning) return;
+				console.log('refresh');
+
+				if (refreshRunning) 
+					return;
 				refreshRunning = true;
 
 				try {
@@ -548,7 +562,12 @@
 			setTimeout (function () {
 
 				if ('WebSocket' in window) {
-					const ws = new WebSocket('ws://' + self.location.host + '/rssiReader');
+					const ws = new WebSocket(
+						(location.protocol === 'https:' ? 'wss://' : 'ws://') +
+						location.host +
+						'/rssiReader'
+					);
+
 
 					ws.onmessage = evt => {
 

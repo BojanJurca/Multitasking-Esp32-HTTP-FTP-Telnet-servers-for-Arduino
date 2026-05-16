@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang='en'>
+	<head>
+		<title>ESP32 administration</title>
+
+		<meta charset='UTF-8'>
+    	<meta http-equiv='X-UA-Compatible' content='IE=edge'>
+    	<meta name='viewport' content='width=device-width, initial-scale=1.0'>
+
+		<!-- don't cache - at least during development -->
+		<meta http-equiv='Cache-Control' content='no-cache, no-store, must-revalidate, max-age=0'>
+		<meta http-equiv='Pragma' content='no-cache'>
+		<meta http-equiv='Expires' content='0'>
+
+    	<link rel='icon' type='image/png' sizes='192x192' href='android-192.png'>
+    	<link rel='apple-touch-icon' sizes='180x180' href='apple-180.png'>
+
+		<style>
+
+			h1 {font-family: verdana; font-size: 32px; text-align: center}
+
+			div.d1 {
+				position: relative;
+				height: 90px;
+				width: 100%;
+				font-family: verdana;
+				font-size: 30px;
+				color: hsl(207, 90%, 30%);
+			}
+
+            .button {
+                padding: 10px 20px;
+                font-size: 18px;
+                border-radius: 10px;
+                border: none;
+                color: white;
+                cursor: pointer;
+            }
+			.button:active {
+                transform: translateY(3px)
+            }
+            .button:disabled {
+                background-color: #aaa !important;
+            }
+			.button1 {
+                background-color: hsl(207, 90%, 40%)
+            }
+			.button1:hover {
+                background-color: hsl(207, 90%, 30%)
+            }
+			.button1:active {
+                background-color: hsl(207, 90%, 30%);
+            }
+
+			dialog[open] {
+				font-family: Verdana, sans-serif;
+				font-size: 32px;
+				color: white;
+				background-color: rgba(200, 0, 0, 0.92);
+				border: none;
+				border-radius: 12px;
+				padding: 18px 26px;
+				box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+				position: fixed;
+				top: 50%;
+				left: 50%;
+				transform: translate(-50%, -50%);
+				animation: fadeInScale 0.18s ease-out;
+			}
+			@keyframes fadeInScale {
+				from {
+					opacity: 0;
+					transform: translate(-50%, -50%) scale(0.92);
+				}
+				to {
+					opacity: 1;
+					transform: translate(-50%, -50%) scale(1);
+				}
+			}
+
+			body {
+				font-family: Verdana, sans-serif;
+				margin: 10px;
+				overflow-wrap: break-word;
+			}
+
+		</style>
+	</head>
+
+	<body>
+		
+		<br><h1>ESP32 administration</h1>
+		<br>
+		<div class='d1'>
+			<b>Place your own content here</b>
+		</div>
+
+		<div style='width:100%; text-align:right; padding-right:20px; margin-top:20px;'>
+			<button class='button button1' onclick='logout()'>Logout</button>
+		</div>
+
+		<script type='text/javascript'>
+
+			async function logout() {
+				const reply = await httpRequest('/logout', 'POST');
+				if (reply == 'OK')
+					window.location.href = '/index.html';
+				else
+					alert(reply);
+			}
+
+			// -------------------------------------------------------------
+			// ERROR MESSAGE
+			// -------------------------------------------------------------
+			let errorMessageTimeout = null;
+
+			function errorMessage(msg) {
+				clearTimeout(errorMessageTimeout);
+				errDialog.textContent = msg;
+				errDialog.showModal();
+				errorMessageTimeout = setTimeout(() => errDialog.close(), 3000);
+			}
+
+
+			// -------------------------------------------------------------
+			// GLOBAL FETCH CLIENT WITH TIMEOUT
+			// -------------------------------------------------------------
+			async function httpRequest(url, method = 'GET') {
+				const controller = new AbortController();
+				const t = setTimeout(() => controller.abort(), 5000);
+
+				try {
+					const response = await fetch(url, {
+						method,
+						signal: controller.signal
+					});
+
+					clearTimeout(t);
+
+					if (!response.ok)
+						throw new Error('Server reported error ' + response.status);
+
+					return await response.text();
+
+				} catch (err) {
+					if (err.name === 'AbortError')
+						errorMessage('Server did not reply in time.');
+					else
+						errorMessage(err.message);
+
+					throw err;
+				}
+			}
+
+		</script>
+	</body>
+</html>
