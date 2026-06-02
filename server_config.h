@@ -15,12 +15,12 @@
 
     // ----- host name -----
 
-    #define HOSTNAME "Esp32Server"
+    #define HOSTNAME "Oscilloscope"
 
 
     // ----- locale -----
 
-    #define LOCALE "en_150.UTF-8" // English with European dates and numbers; comment-out if not needed
+    // #define LOCALE "en_150.UTF-8" // English with European dates and numbers; exclude if not needed
 
 
     // ----- WiFi -----
@@ -54,7 +54,7 @@
             // if DEFAULT_AP_SSID is left undefined AP will not be set up
 
             // #define DEFAULT_AP_SSID         HOSTNAME
-            #define DEFAULT_AP_PASSWORD     "YOUR_AP_PASSWORD"
+            #define DEFAULT_AP_PASSWORD     ""
 
             // ----- AP network configuration -----
 
@@ -79,6 +79,7 @@
     // Define the time zone used to calculate local time from GMT.
     // This information will be written into /usr/share/zoneinfo (if file system is included).
     #define DEFAULT_TZ "CET-1CEST,M3.5.0,M10.5.0/3" // or choose another POSIX time zone from: https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv
+
 
 
     // ----- Telnet server -----
@@ -128,20 +129,19 @@
     //
     // The workaround is to use Telnet to disable power saving before uploading
     // a new sketch via OTA.
-    // #define POWER_SAVING WIFI_PS_MAX_MODEM // or WIFI_PS_MIN_MODEM; WIFI_PS_NONE makes no sense here
+    #define POWER_SAVING WIFI_PS_MAX_MODEM // or WIFI_PS_MIN_MODEM; WIFI_PS_NONE makes no sense here
 
 
     // ----- mDNS -----
 
     // use mDNS so the servers can be accessed in local network by HOSTNAME, but uses some additional memory
     // mDNS may not work well with power saving mode
-    // #define USE_mDNS // leave undefined to not use mDNS
+    #define USE_mDNS // leave undefined to not use mDNS
 
 
     // ----- OTA -----
 
-    // #define USE_OTA // leave undefined to not use Over The Air updates
-
+    #define USE_OTA // leave undefined to not use Over The Air updates
 
 #else
 
@@ -150,6 +150,7 @@
      * ----- IMPLEMENTATION PART -----
      */
 
+    #include <lwip/inet.h>
     #include <esp_netif.h>
 
 
@@ -409,6 +410,16 @@
                 Serial.println ("[WiFi] error reading /etc/dhcpcd.conf");
             }
 
+            // set WiFi mode
+            if (STA_SSID [0] != '\0') {
+                if (AP_SSID [0] != '\0')
+                    WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
+                else
+                    WiFi.mode (WIFI_STA); // STA mode only
+            } else {
+                if (AP_SSID [0] != '\0')
+                    WiFi.mode (WIFI_AP); // AP mode only
+            }
 
             if (STA_SSID [0] != '\0') {
                 // set up STA
@@ -448,11 +459,11 @@
                 #endif
                 Serial.printf ("[WiFi][AP] setting up access point: %s\n", AP_SSID);
 
-                if (WiFi.softAP (AP_SSID, AP_PASSWORD)) { 
-                    // configure IP addresses
-
+                // configure IP addresses
+                if (AP_IP [0] != '\0')
                     WiFi.softAPConfig (IPAddress (AP_IP), IPAddress (AP_IP), IPAddress (AP_SUBNET_MASK));
-                    WiFi.begin ();
+
+                if (WiFi.softAP (AP_SSID, AP_PASSWORD)) { 
                     #ifdef __DMESG__
                         dmesgQueue << "[WiFi][AP] static IPv4 address: " << WiFi.softAPIP ();
                     #endif
@@ -465,17 +476,6 @@
                     Serial.println ("[WiFi][AP] failed to initialize access point");
                 }
             } 
-
-            // set WiFi mode
-            if (STA_SSID [0] != '\0') {
-                if (AP_SSID [0] != '\0')
-                    WiFi.mode (WIFI_AP_STA); // both, AP and STA modes
-                else
-                    WiFi.mode (WIFI_STA); // STA mode only
-            } else {
-                if (AP_SSID [0] != '\0')
-                    WiFi.mode (WIFI_AP); // AP mode only
-            }
 
             // rename hostname for all adapters
             esp_netif_t *netif = esp_netif_next_unsafe (NULL);
